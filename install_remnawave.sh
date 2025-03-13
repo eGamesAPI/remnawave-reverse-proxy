@@ -264,9 +264,8 @@ show_language() {
 }
 
 show_menu() {
+#    echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     banner
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}"
