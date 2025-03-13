@@ -24,9 +24,11 @@ This script is designed for quick setup of a reverse proxy server based on NGINX
    - Support for automatic configuration updates via subscription and JSON subscription with the ability to convert to formats for popular applications.
 2. NGINX reverse proxy setup in combination with Xray.
 3. Security measures:
+   - Automatic system updates via unattended-upgrades.
    - Configuration of Cloudflare SSL certificates with automatic renewal to secure connections.
    - UFW (Uncomplicated Firewall) setup for access management.
    - Disabling IPv6 to prevent potential vulnerabilities.
+   - Encrypting DNS queries using systemd-resolved (DoT)
    - Selecting a random website template from an array.
 4. Enabling BBR — improving TCP connection performance.
 -----
