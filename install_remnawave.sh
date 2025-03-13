@@ -38,10 +38,9 @@ set_language() {
                 [INVALID_CHOICE]="Invalid choice. Please select 1-4."
                 [EXITING]="Exiting"
                 # Presets
-        [DNS_CHOOSE]="DNS server:"
-                [DNS_1]="Systemd-resolved"
-                [DNS_2]="AdGuard-Home"
-                [DNS_INVALID]="Invalid choice. Please select 1-2."
+        [DNS_CHOOSE]="Configuring DNS..."
+                [DNS_1]="Configuring systemd-resolved..."
+                [DNS_INVALID]="Invalid choice."
                 # Unattended-upgrade
         [UNATTENDED_UPGRADE]="Enabling automatic security updates..."
                 # Remna
@@ -121,10 +120,9 @@ set_language() {
                 [INVALID_CHOICE]="Неверный выбор. Выберите 1-4."
                 [EXITING]="Выход"
                 # Presets
-        [DNS_CHOOSE]="DNS сервер:"
-                [DNS_1]="Systemd-resolved"
-                [DNS_2]="AdGuard-Home"
-                [DNS_INVALID]="Неверный выбор. Выберите 1-2."
+        [DNS_CHOOSE]="Настраиваем DNS..."
+                [DNS_1]="Настраиваем systemd-resolved..."
+                [DNS_INVALID]="Неверный выбор."
                 # Unattended-upgrade
         [UNATTENDED_UPGRADE]="Включаем автоматическое обновление безопаности..."
                 # Remna
@@ -277,40 +275,9 @@ show_menu() {
     echo -e ""
 }
 
-show_dns_menu() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[DNS_CHOOSE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[DNS_1]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[DNS_2]}${COLOR_RESET}"
-    echo -e ""
-}
-
-validate_path() {
-    local VARIABLE_NAME="$1"
-    local PATH_VALUE
-
-    # Проверка на пустое значение
-    while true; do
-        case "$VARIABLE_NAME" in
-            ADGUARDPATH)
-                reading " $(text 25) " PATH_VALUE
-                ;;                                             
-        esac
-
-        if [[ -z "$PATH_VALUE" ]]; then
-            warning " $(text 29) "
-            echo
-        elif [[ $PATH_VALUE =~ ['{}\$/\\'] ]]; then
-            warning " $(text 30) "
-            echo
-        else
-            break
-        fi
-    done
-}
-
 systemd_resolved() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[U]}${COLOR_RESET}"
     tee /etc/systemd/resolved.conf <<EOF
 [Resolve]
 DNS=1.1.1.1 8.8.8.8 8.8.4.4
@@ -320,49 +287,6 @@ DNSSEC=yes
 DNSOverTLS=yes
 EOF
     systemctl restart systemd-resolved.service
-}
-
-adguard_install() {
-    rm -rf AdGuardHome_*
-    while ! wget -q --progress=dot:mega --timeout=30 --tries=10 --retry-connrefused https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz; do
-        warning " $(text 38) "
-        sleep 3
-    done
-    tar xvf AdGuardHome_linux_amd64.tar.gz
-
-    AdGuardHome/AdGuardHome -s install
-    HASH=$(htpasswd -B -C 10 -n -b ${SUPERADMIN_USERNAME} ${SUPERADMIN_PASSWORD} | cut -d ":" -f 2)
-
-    rm -f AdGuardHome/AdGuardHome.yaml
-    while ! wget -q --progress=dot:mega --timeout=30 --tries=10 --retry-connrefused "https://github.com/cortez24rus/xui-reverse-proxy/raw/refs/heads/main/adh/AdGuardHome.yaml" -O AdGuardHome/AdGuardHome.yaml; do
-        warning " $(text 38) "
-        sleep 3
-    done
-
-    sleep 1
-    sed -i \
-    -e "s|username|${SUPERADMIN_USERNAME}|g" \
-    -e "s|hash|${SUPERADMIN_PASSWORD}|g" \
-    AdGuardHome/AdGuardHome.yaml
-
-    AdGuardHome/AdGuardHome -s restart
-}
-
-adguard_dns() {
-    tee /etc/systemd/resolved.conf <<EOF
-[Resolve]
-DNS=127.0.0.1
-#FallbackDNS=
-#Domains=
-#DNSSEC=no
-DNSOverTLS=no
-DNSStubListener=no
-EOF
-    systemctl restart systemd-resolved.service
-}
-
-adguard_nginx() {
-    #! TODO
 }
 
 unattended_upgrade() {
@@ -1222,25 +1146,7 @@ reading "${LANG[PROMPT_ACTION]}" OPTION
 
 case $OPTION in
     1)
-        show_dns_menu
-        reading "${LANG[PROMPT_ACTION]}" DNS
-        case $DNS in
-            1)
-                systemd_resolved
-                ;;
-
-            2)
-                validate_path ADGUARDPATH
-                adguard_install
-                adguard_dns
-                adguard_nginx #! TODO
-                ;;
-
-            *)
-                echo -e "${COLOR_YELLOW}${LANG[DNS_INVALID]}${COLOR_RESET}"
-                show_dns_menu
-                ;; 
-        esac
+        systemd_resolved
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
             install_packages
         fi
