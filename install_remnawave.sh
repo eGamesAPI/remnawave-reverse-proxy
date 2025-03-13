@@ -338,7 +338,7 @@ spinner() {
     local delay=0.1
     local reset_code="$COLOR_RESET"
 
-    
+    printf "${effect_code}${text_code}${bg_code}%s${reset_code}" "$text" > /dev/tty
 
     while kill -0 "$pid" 2>/dev/null; do
         for (( i=0; i<${#spinstr}; i++ )); do
