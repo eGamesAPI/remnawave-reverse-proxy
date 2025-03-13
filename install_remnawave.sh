@@ -207,20 +207,20 @@ check_os() {
 }
 
 log_clear() {
-  sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
+    sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
 }
 
 log_entry() {
-  mkdir -p ${DIR_REMNAWAVE}
-  LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
-  exec > >(tee -a "$LOGFILE") 2>&1
+    mkdir -p ${DIR_REMNAWAVE}
+    LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
+    exec > >(tee -a "$LOGFILE") 2>&1
 }
 
 update_remnawave_reverse() {
-  UPDATE_SCRIPT="${DIR_REMNAWAVE}remnawave_reverse"
-  wget -q -O $UPDATE_SCRIPT $SCRIPT_URL
-  ln -sf $UPDATE_SCRIPT /usr/local/bin/remnawave_reverse
-  chmod +x "$UPDATE_SCRIPT"
+    UPDATE_SCRIPT="${DIR_REMNAWAVE}remnawave_reverse"
+    wget -q -O $UPDATE_SCRIPT $SCRIPT_URL
+    ln -sf $UPDATE_SCRIPT /usr/local/bin/remnawave_reverse
+    chmod +x "$UPDATE_SCRIPT"
 }
 
 check_root() {
@@ -285,29 +285,29 @@ add_cron_rule() {
 }
 
 spinner() {
-  local pid=$1
-  local text=$2
+    local pid=$1
+    local text=$2
 
-  export LC_ALL=en_US.UTF-8
-  export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
 
-  local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-  local text_code="$COLOR_GREEN"
-  local bg_code=""
-  local effect_code="\033[1m"
-  local delay=0.1
-  local reset_code="$COLOR_RESET"
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local text_code="$COLOR_GREEN"
+    local bg_code=""
+    local effect_code="\033[1m"
+    local delay=0.1
+    local reset_code="$COLOR_RESET"
 
-  printf "${effect_code}${text_code}${bg_code}%s${reset_code}" "$text" > /dev/tty
+    
 
-  while kill -0 "$pid" 2>/dev/null; do
-    for (( i=0; i<${#spinstr}; i++ )); do
-      printf "\r${effect_code}${text_code}${bg_code}[%s] %s${reset_code}" "$(echo -n "${spinstr:$i:1}")" "$text" > /dev/tty
-      sleep $delay
+    while kill -0 "$pid" 2>/dev/null; do
+        for (( i=0; i<${#spinstr}; i++ )); do
+        printf "\r${effect_code}${text_code}${bg_code}[%s] %s${reset_code}" "$(echo -n "${spinstr:$i:1}")" "$text" > /dev/tty
+        sleep $delay
+        done
     done
-  done
 
-  printf "\r\033[K" > /dev/tty
+    printf "\r\033[K" > /dev/tty
 }
 
 randomhtml() {
