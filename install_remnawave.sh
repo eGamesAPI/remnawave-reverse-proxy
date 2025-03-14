@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
-SCRIPT_URL="https://raw.githubusercontent.com/prettyleaf/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[32m"
