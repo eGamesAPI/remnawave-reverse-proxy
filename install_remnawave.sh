@@ -695,7 +695,8 @@ services:
     hostname: remnawave-subscription-page
     restart: always
     environment:
-      - REMNAWAVE_PLAIN_DOMAIN=$PANEL_DOMAIN
+      - REMNAWAVE_PLAIN_DOMAIN=remnawave:3000
+      - REQUEST_REMNAWAVE_SCHEME=http
       - SUBSCRIPTION_PAGE_PORT=3010
     ports:
       - '127.0.0.1:3010:3010'
@@ -1244,7 +1245,7 @@ case $OPTION in
     2)
         cd /root/remnawave
         docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-        spinner $! "${LANG[INSTALLING]}"
+        spinner $! "${LANG[WAITING]}"
         rm -rf /root/remnawave
         installation
         log_clear
