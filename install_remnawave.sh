@@ -1160,7 +1160,7 @@ case $OPTION in
         randomhtml
         log_clear
         ;;
-    4)
+    0)
         echo -e "${COLOR_YELLOW}${LANG[EXITING]}${COLOR_RESET}"
         exit 0
         ;;
