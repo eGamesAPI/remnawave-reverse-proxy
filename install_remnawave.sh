@@ -1242,7 +1242,7 @@ case $OPTION in
         ;;
     2)
         cd /root/remnawave
-        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+        docker compose down -v --rmi all --remove-orphans && docker system prune -a --volumes -f > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
         rm -rf /root/remnawave
         installation
