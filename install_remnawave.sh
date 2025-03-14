@@ -33,9 +33,9 @@ set_language() {
                 [MENU_1]="Standard installation"
                 [MENU_2]="Reinstall panel"
                 [MENU_3]="Select random site template"
-                [MENU_4]="Exit"
-                [PROMPT_ACTION]="Select action (1-4):"
-                [INVALID_CHOICE]="Invalid choice. Please select 1-4."
+                [MENU_0]="Exit"
+                [PROMPT_ACTION]="Select action (1-3):"
+                [INVALID_CHOICE]="Invalid choice. Please select 1-3."
                 [EXITING]="Exiting"
                 # Presets
                 [DNS_CONF]="Configuring DNS..."
@@ -113,9 +113,9 @@ set_language() {
                 [MENU_1]="Стандартная установка"
                 [MENU_2]="Переустановить панель"
                 [MENU_3]="Выбрать случайный шаблон"
-                [MENU_4]="Выход"
-                [PROMPT_ACTION]="Выберите действие (1-4):"
-                [INVALID_CHOICE]="Неверный выбор. Выберите 1-4."
+                [MENU_0]="Выход"
+                [PROMPT_ACTION]="Выберите действие (1-3):"
+                [INVALID_CHOICE]="Неверный выбор. Выберите 1-3."
                 [EXITING]="Выход"
                 # Presets
                 [DNS_CONF]="Настраиваем DNS..."
@@ -282,7 +282,7 @@ show_menu() {
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
 }
 
