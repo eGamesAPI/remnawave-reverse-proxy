@@ -250,20 +250,21 @@ generate_user() {
 
 generate_password() {
     local length=24
-    local chars='A-Za-z0-9' # Заглавные и строчные буквы, цифры
-    local password=$(head /dev/urandom | tr -dc "$chars" | head -c "$length")
     local password=""
     local upper_chars='A-Z'
     local lower_chars='a-z'
     local digit_chars='0-9'
     local special_chars='!@#$%^&*()_+'
     local all_chars='A-Za-z0-9!@#$%^&*()_+'
+
     password+=$(head /dev/urandom | tr -dc "$upper_chars" | head -c 1)
     password+=$(head /dev/urandom | tr -dc "$lower_chars" | head -c 1)
     password+=$(head /dev/urandom | tr -dc "$digit_chars" | head -c 1)
     password+=$(head /dev/urandom | tr -dc "$special_chars" | head -c 3)
     password+=$(head /dev/urandom | tr -dc "$all_chars" | head -c $(($length - 6)))
+
     password=$(echo "$password" | fold -w1 | shuf | tr -d '\n')
+
     echo "$password"
 }
 
@@ -287,31 +288,6 @@ show_menu() {
     echo -e "${COLOR_ORANGE}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
 }
-
-# systemd_resolved() {
-#     echo -e ""
-#     echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
-#     tee /etc/systemd/resolved.conf <<EOF
-# [Resolve]
-# DNS=1.1.1.1 8.8.8.8 8.8.4.4
-# #FallbackDNS=
-# Domains=~.
-# DNSSEC=yes
-# DNSOverTLS=yes
-# EOF
-#     systemctl restart systemd-resolved.service
-# }
-
-# unattended_upgrade() {
-#     echo -e ""
-#     echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
-#     echo -e ""
-#     echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-#     echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
-#     dpkg-reconfigure -f noninteractive unattended-upgrades
-#     systemctl restart unattended-upgrades
-#     echo -e ""
-# }
 
 extract_domain() {
     local SUBDOMAIN=$1
@@ -759,16 +735,11 @@ EOL
 
     cat > nginx.conf <<EOL
 upstream remnawave {
-    server remnawave-subscription-page:3010;
+    server remnawave:3000;
 }
 
 upstream json {
     server remnawave-subscription-page:3010;
-}
-
-map \$host \$backend {
-    $PANEL_DOMAIN  http://remnawave;
-    $SUB_DOMAIN    http://json;
 }
 
 map \$http_upgrade \$connection_upgrade {
@@ -870,7 +841,6 @@ server {
         proxy_read_timeout 60s;
     }
 }
-
 
 server {
     server_name $SUB_DOMAIN;
