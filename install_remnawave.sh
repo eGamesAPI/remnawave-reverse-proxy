@@ -526,6 +526,9 @@ install_remnawave() {
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
+    cookies_random1=$(generate_user)
+    cookies_random2=$(generate_user)
+
     METRICS_USER=$(generate_user)
     METRICS_PASS=$(generate_password)
 
@@ -746,6 +749,26 @@ map \$http_upgrade \$connection_upgrade {
     ""      close;
 }
 
+map \$http_cookie \$auth_cookie {
+    default 0;
+    "~*${cookies_random1}=${cookies_random2}" 1;
+}
+
+map \$arg_${cookies_random1} \$auth_query {
+    default 0;
+    "${cookies_random2}" 1;
+}
+
+map "\$auth_cookie\$auth_query" \$authorized {
+    "~1" 1;
+    default 0;
+}
+
+map \$arg_${cookies_random1} \$set_cookie_header {
+    "${cookies_random2}" "${cookies_random1}=${cookies_random2}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+    default "";
+}
+
 ssl_protocols TLSv1.2 TLSv1.3;
 ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
@@ -758,7 +781,7 @@ ssl_stapling_verify on;
 resolver 1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4 208.67.222.222 208.67.220.220;
 
 server {
-    server_name $PANEL_DOMAIN $SUB_DOMAIN;
+    server_name $PANEL_DOMAIN;
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
@@ -766,9 +789,11 @@ server {
     ssl_certificate_key "/etc/nginx/ssl/$DOMAIN/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$DOMAIN/fullchain.pem";
 
-    location / {
+    add_header Set-Cookie \$set_cookie_header;
+
+    location ~ ^/api/sub/[^/]+ {
         proxy_http_version 1.1;
-        proxy_pass \$backend;
+        proxy_pass http://remnawave;
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
@@ -779,6 +804,77 @@ server {
         proxy_set_header X-Forwarded-Port \$server_port;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
+        error_page 404 =404;
+    }
+
+    location = / {
+        if (\$authorized = 0) {
+            return 302 https://$DOMAIN;
+        }
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location / {
+        if (\$authorized = 0) {
+            return 302 https://$DOMAIN;
+        }
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+
+
+server {
+    server_name $SUB_DOMAIN;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/$DOMAIN/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$DOMAIN/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$DOMAIN/fullchain.pem";
+
+    add_header Set-Cookie \$set_cookie_header;
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_pass http://json;
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 400 404 500 @redirect;
+    }
+
+    location @redirect {
+        return 404;
     }
 }
 
@@ -1086,7 +1182,7 @@ EOF
     fi
 
     if echo "$host_response" | jq -e '.response.uuid' > /dev/null; then
-	echo -e "${COLOR_YELLOW}${LANG[HOST_CREATED]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[HOST_CREATED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}${COLOR_RESET}"
     fi
@@ -1108,7 +1204,7 @@ EOF
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}https://$PANEL_DOMAIN${COLOR_RESET}"
+    echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
@@ -1142,8 +1238,8 @@ case $OPTION in
     1)
         systemd_resolved
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
-                install_packages
-            fi
+            install_packages
+        fi
         installation
         log_clear
         ;;
