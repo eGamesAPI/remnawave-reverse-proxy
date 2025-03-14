@@ -400,7 +400,7 @@ randomhtml() {
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
     apt-get update -y
-    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare
+    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades
 
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
@@ -1237,7 +1237,7 @@ reading "${LANG[PROMPT_ACTION]}" OPTION
 case $OPTION in
     1)
         systemd_resolved
-	unattended_upgrade
+        unattended_upgrade
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
             install_packages
         fi
