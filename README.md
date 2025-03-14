@@ -41,3 +41,13 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 ```
 
 <p align="center"><a href="#"><img src="./media/remnawave-reverse-proxy.png" alt="Showcase"></a></p>
+
+### Star History
+
+<a href="https://github.com/eGamesAPI/remnawave-reverse-proxy/stargazers">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=eGamesAPI/remnawave-reverse-proxy&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=eGamesAPI/remnawave-reverse-proxy&type=Date" />
+   <img alt="Stars" src="https://api.star-history.com/svg?repos=eGamesAPI/remnawave-reverse-proxy&type=Date" />
+ </picture>
+</a>
