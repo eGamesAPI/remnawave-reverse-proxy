@@ -286,30 +286,30 @@ show_menu() {
     echo -e ""
 }
 
-systemd_resolved() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
-    tee /etc/systemd/resolved.conf <<EOF
-[Resolve]
-DNS=1.1.1.1 8.8.8.8 8.8.4.4
-#FallbackDNS=
-Domains=~.
-DNSSEC=yes
-DNSOverTLS=yes
-EOF
-    systemctl restart systemd-resolved.service
-}
+# systemd_resolved() {
+#     echo -e ""
+#     echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
+#     tee /etc/systemd/resolved.conf <<EOF
+# [Resolve]
+# DNS=1.1.1.1 8.8.8.8 8.8.4.4
+# #FallbackDNS=
+# Domains=~.
+# DNSSEC=yes
+# DNSOverTLS=yes
+# EOF
+#     systemctl restart systemd-resolved.service
+# }
 
-unattended_upgrade() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
-    echo -e ""
-    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
-    dpkg-reconfigure -f noninteractive unattended-upgrades
-    systemctl restart unattended-upgrades
-    echo -e ""
-}
+# unattended_upgrade() {
+#     echo -e ""
+#     echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
+#     echo -e ""
+#     echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+#     echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
+#     dpkg-reconfigure -f noninteractive unattended-upgrades
+#     systemctl restart unattended-upgrades
+#     echo -e ""
+# }
 
 extract_domain() {
     local SUBDOMAIN=$1
@@ -451,6 +451,28 @@ install_packages() {
     ufw allow 443/tcp comment 'HTTPS'
     ufw --force enable
     touch ${DIR_REMNAWAVE}install_packages
+    
+    # systemd-resolved
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
+    tee /etc/systemd/resolved.conf <<EOF
+[Resolve]
+DNS=1.1.1.1 8.8.8.8 8.8.4.4
+#FallbackDNS=
+Domains=~.
+DNSSEC=yes
+DNSOverTLS=yes
+EOF
+    systemctl restart systemd-resolved.service
+
+    # Unattended-upgrades
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
+    echo -e ""
+    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
+    dpkg-reconfigure -f noninteractive unattended-upgrades
+    systemctl restart unattended-upgrades
     clear
 }
 
