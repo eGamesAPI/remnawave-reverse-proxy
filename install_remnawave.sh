@@ -1,7 +1,7 @@
 #!/bin/bash
 
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[32m"
@@ -733,7 +733,7 @@ upstream remnawave {
 }
 
 upstream json {
-    server remnawave-json:4000;
+    server remnawave-subscription-page:3010;
 }
 
 map \$host \$backend {
@@ -856,10 +856,9 @@ installation() {
 
     if [ -z "$register_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_REGISTER]}${COLOR_RESET}"
-    fi
-
-    if [[ "$register_response" == *"accessToken"* ]]; then
+    elif [[ "$register_response" == *"accessToken"* ]]; then
         token=$(echo "$register_response" | jq -r '.response.accessToken')
+        echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_REGISTER]}: $register_response${COLOR_RESET}"
     fi
