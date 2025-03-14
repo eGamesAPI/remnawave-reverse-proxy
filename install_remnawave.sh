@@ -1237,8 +1237,6 @@ case $OPTION in
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
             install_packages
         fi
-        # systemd_resolved
-        # unattended_upgrade
         installation
         log_clear
         ;;
