@@ -1237,11 +1237,11 @@ reading "${LANG[PROMPT_ACTION]}" OPTION
 
 case $OPTION in
     1)
-        systemd_resolved
-        unattended_upgrade
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
             install_packages
         fi
+        systemd_resolved
+        unattended_upgrade
         installation
         log_clear
         ;;
