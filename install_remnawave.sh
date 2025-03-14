@@ -43,7 +43,7 @@ set_language() {
                 [UNATTENDED_UPGRADE]="Enabling automatic security updates..."
                 # Remna
                 [INSTALL_PACKAGES]="Installing required packages..."
-                [INSTALLING1]="Installing Remnawave"
+                [INSTALLING]="Installing Remnawave"
                 [ENTER_PANEL_DOMAIN]="Enter panel domain (e.g. panel.example.com):"
                 [ENTER_SUB_DOMAIN]="Enter subscription domain (e.g. sub.example.com):"
                 [ENTER_CF_TOKEN]="Enter your Cloudflare API token or global API key:"
@@ -55,12 +55,12 @@ set_language() {
                 [CF_INVALID]="Invalid Cloudflare API token or email after %d attempts."
                 [CF_INVALID_ATTEMPT]="Invalid Cloudflare API key or email. Attempt %d of %d."
                 [CERT_MISSING]="Certificates not found. Obtaining new ones..."
-                [CONFIG_JSON]="Configuring remnawave-json..."
-                [INSTALLING]="Please wait..."
+                [WAITING]="Please wait..."
                 # API
                 [REGISTERING_REMNAWAVE]="Registering in Remnawave"
                 [CHECK_SERVER]="Checking server availability..."
                 [SERVER_NOT_READY]="Server is not ready, waiting..."
+                [REGISTRATION_SUCCESS]="Registration completed successfully!"
                 [GET_PUBLIC_KEY]="Getting public key..."
                 [PUBLIC_KEY_SUCCESS]="Public key successfully obtained."
                 [GENERATE_KEYS]="Generating x25519 keys..."
@@ -123,7 +123,7 @@ set_language() {
                 [UNATTENDED_UPGRADE]="Включаем автоматическое обновление безопаности..."
                 # Remna
                 [INSTALL_PACKAGES]="Установка необходимых пакетов..."
-                [INSTALLING1]="Установка Remnawave"
+                [INSTALLING]="Установка Remnawave"
                 [ENTER_PANEL_DOMAIN]="Введите домен панели (например, panel.example.com):"
                 [ENTER_SUB_DOMAIN]="Введите домен подписки (например, sub.example.com):"
                 [ENTER_CF_TOKEN]="Введите Cloudflare API токен или глобальный ключ:"
@@ -135,12 +135,12 @@ set_language() {
                 [CF_INVALID]="Неверный Cloudflare API ключ или email после %d попыток."
                 [CF_INVALID_ATTEMPT]="Неверный Cloudflare API ключ или email. Попытка %d из %d."
                 [CERT_MISSING]="Сертификаты не найдены. Получаем новые..."
-                [CONFIG_JSON]="Настройка remnawave-json..."
-                [INSTALLING]="Пожалуйста, подождите..."
+                [WAITING]="Пожалуйста, подождите..."
                 # API
                 [REGISTERING_REMNAWAVE]="Регистрация в Remnawave"
                 [CHECK_SERVER]="Проверка доступности сервера..."
                 [SERVER_NOT_READY]="Сервер не готов, ожидание..."
+                [REGISTRATION_SUCCESS]="Регистрация прошла успешно!"
                 [GET_PUBLIC_KEY]="Получаем публичный ключ..."
                 [PUBLIC_KEY_SUCCESS]="Публичный ключ успешно получен."
                 [GENERATE_KEYS]="Генерация ключей x25519..."
@@ -239,15 +239,27 @@ check_root() {
     fi
 }
 
-generate_password() {
+generate_user() {
     local length=8
     tr -dc 'a-zA-Z' < /dev/urandom | fold -w $length | head -n 1
 }
 
-generate_password1() {
+generate_password() {
     local length=24
     local chars='A-Za-z0-9' # Заглавные и строчные буквы, цифры
     local password=$(head /dev/urandom | tr -dc "$chars" | head -c "$length")
+    local password=""
+    local upper_chars='A-Z'
+    local lower_chars='a-z'
+    local digit_chars='0-9'
+    local special_chars='!@#$%^&*()_+'
+    local all_chars='A-Za-z0-9!@#$%^&*()_+'
+    password+=$(head /dev/urandom | tr -dc "$upper_chars" | head -c 1)
+    password+=$(head /dev/urandom | tr -dc "$lower_chars" | head -c 1)
+    password+=$(head /dev/urandom | tr -dc "$digit_chars" | head -c 1)
+    password+=$(head /dev/urandom | tr -dc "$special_chars" | head -c 3)
+    password+=$(head /dev/urandom | tr -dc "$all_chars" | head -c $(($length - 6)))
+    password=$(echo "$password" | fold -w1 | shuf | tr -d '\n')
     echo "$password"
 }
 
@@ -350,7 +362,7 @@ randomhtml() {
     cd /root/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
     echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]} ${COLOR_WHITE}$DOMAIN${COLOR_RESET}"
-    spinner $$ "${LANG[INSTALLING]}" &
+    spinner $$ "${LANG[WAITING]}" &
     spinner_pid=$!
 
     while ! wget -q --timeout=30 --tries=10 --retry-connrefused "https://github.com/cortez24rus/xui-rp-web/archive/refs/heads/main.zip"; do
@@ -511,10 +523,10 @@ install_remnawave() {
 
     DOMAIN=$(extract_domain $PANEL_DOMAIN)
 
-    SUPERADMIN_USERNAME=$(generate_password)
-    SUPERADMIN_PASSWORD=$(generate_password1)
+    SUPERADMIN_USERNAME=$(generate_user)
+    SUPERADMIN_PASSWORD=$(generate_password)
 
-    METRICS_USER=$(generate_password)
+    METRICS_USER=$(generate_user)
     METRICS_PASS=$(generate_password)
 
     JWT_AUTH_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
@@ -534,6 +546,8 @@ APP_PORT=3000
 METRICS_PORT=3001
 
 ### API ###
+# Possible values: max (start instances on all cores), number (start instances on number of cores), -1 (start instances on all cores - 1)
+# !!! Do not set this value more that physical cores count in your machine !!!
 API_INSTANCES=1
 
 ### DATABASE ###
@@ -557,25 +571,10 @@ NODES_NOTIFY_CHAT_ID=
 ### FRONT_END ###
 FRONT_END_DOMAIN=$PANEL_DOMAIN
 
-### SUBSCRIPTION ###
-SUB_SUPPORT_URL=
-SUB_PROFILE_TITLE=SUBSCRIPTION
-SUB_UPDATE_INTERVAL=12
-SUB_WEBPAGE_URL=https://$PANEL_DOMAIN
-
-### Remarks for expired, disabled and limited users
-EXPIRED_USER_REMARKS=["⚠️ Subscription expired","Contact support"]
-DISABLED_USER_REMARKS=["❌ Subscription disabled","Contact support"]
-LIMITED_USER_REMARKS=["🔴 Subscription limited","Contact support"]
-
 ### SUBSCRIPTION PUBLIC DOMAIN ###
 ### RAW DOMAIN, WITHOUT HTTP/HTTPS, DO NOT PLACE / to end of domain ###
 ### Used in "profile-web-page-url" response header ###
 SUB_PUBLIC_DOMAIN=$SUB_DOMAIN
-
-### SUPERADMIN ###
-SUPERADMIN_USERNAME=$SUPERADMIN_USERNAME
-SUPERADMIN_PASSWORD=$SUPERADMIN_PASSWORD
 
 ### SWAGGER ###
 SWAGGER_PATH=/docs
@@ -588,7 +587,9 @@ METRICS_PASS=$METRICS_PASS
 
 ### WEBHOOK ###
 WEBHOOK_ENABLED=false
+### Only https:// is allowed
 WEBHOOK_URL=https://webhook.site/1234567890
+### This secret is used to sign the webhook payload, must be exact 64 characters. Only a-z, 0-9, A-Z are allowed.
 WEBHOOK_SECRET_HEADER=vsmu67Kmg6R8FjIOF1WUY8LWBHie4scdEqrfsKmyf4IAf8dY3nFS0wwYHkhh6ZvQ
 
 ### CLOUDFLARE ###
@@ -644,6 +645,8 @@ services:
     depends_on:
       remnawave-db:
         condition: service_healthy
+      remnawave-redis:
+        condition: service_healthy
 
   remnawave-redis:
     image: valkey/valkey:8.0.2-alpine
@@ -654,6 +657,11 @@ services:
       - remnawave-network
     volumes:
       - remnawave-redis-data:/data
+    healthcheck:
+      test: [ "CMD", "valkey-cli", "ping" ]
+      interval: 3s
+      timeout: 10s
+      retries: 3
 
   remnawave-nginx:
     image: nginx:1.27
@@ -673,19 +681,20 @@ services:
       - remnawave-network
     depends_on:
       - remnawave
-      - remnawave-json
+      - remnawave-subscription-page
 
-  remnawave-json:
-    image: ghcr.io/jolymmiles/remnawave-json:latest
-    container_name: remnawave-json
-    hostname: remnawave-json
+  remnawave-subscription-page:
+    image: remnawave/subscription-page:latest
+    container_name: remnawave-subscription-page
+    hostname: remnawave-subscription-page
     restart: always
-    env_file:
-      - ./remnawave-json/.env
+    environment:
+      - REMNAWAVE_PLAIN_DOMAIN=$PANEL_DOMAIN
+      - SUBSCRIPTION_PAGE_PORT=3010
+    ports:
+      - '127.0.0.1:3010:3010'
     networks:
       - remnawave-network
-    volumes:
-      - ./remnawave-json/templates/subscription/index.html:/app/templates/subscription/index.html
 
   remnanode:
     image: remnawave/node:latest
@@ -720,7 +729,7 @@ EOL
 
     cat > nginx.conf <<EOL
 upstream remnawave {
-    server remnawave:3000;
+    server remnawave-subscription-page:3010;
 }
 
 upstream json {
@@ -800,23 +809,13 @@ server {
     return 444;
 }
 EOL
-    echo -e "${COLOR_YELLOW}${LANG[CONFIG_JSON]}${COLOR_RESET}"
-    git clone https://github.com/Jolymmiles/remnawave-json
-    cd remnawave-json
-    cat > .env <<EOL
-REMNAWAVE_URL=https://$PANEL_DOMAIN
-APP_PORT=4000
-APP_HOST=0.0.0.0
-WEB_PAGE_TEMPLATE_PATH=/app/templates/subscription/index.html
-EOL
 }
 
 installation() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING1]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"
     sleep 1
 
     install_remnawave
-    DOMAIN=$(extract_domain $PANEL_DOMAIN)
 
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CERTS]}${COLOR_RESET}"
     sleep 1
@@ -832,7 +831,7 @@ installation() {
     cd /root/remnawave
     docker compose up -d > /dev/null 2>&1 &
     
-    spinner $! "${LANG[INSTALLING]}"
+    spinner $! "${LANG[WAITING]}"
 	
     domain_url="127.0.0.1:3000"
     node_url="$DOMAIN"
@@ -1097,12 +1096,12 @@ EOF
     echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose down > /dev/null 2>&1 &
-    spinner $! "${LANG[INSTALLING]}"
+    spinner $! "${LANG[WAITING]}"
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose up -d > /dev/null 2>&1 &
-    spinner $! "${LANG[INSTALLING]}"
+    spinner $! "${LANG[WAITING]}"
 
     clear
 
@@ -1144,15 +1143,15 @@ case $OPTION in
     1)
         systemd_resolved
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
-            install_packages
-        fi
+                install_packages
+            fi
         installation
         log_clear
         ;;
     2)
         cd /root/remnawave
         docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-	spinner $! "${LANG[INSTALLING]}"
+        spinner $! "${LANG[INSTALLING]}"
         rm -rf /root/remnawave
         installation
         log_clear
