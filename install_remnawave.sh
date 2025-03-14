@@ -461,7 +461,7 @@ get_certificates() {
                 echo -e "${COLOR_GREEN}${LANG[CF_VALIDATING]}${COLOR_RESET}"
                 return 0
             else
-				echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_ATTEMPT]}" "$attempt" "$attempts")${COLOR_RESET}"
+				        echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_ATTEMPT]}" "$attempt" "$attempts")${COLOR_RESET}"
             if [ $attempt -lt $attempts ]; then
                 reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
                 reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
@@ -1152,7 +1152,7 @@ case $OPTION in
     2)
         cd /root/remnawave
         docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-		spinner $! "${LANG[INSTALLING]}"
+	spinner $! "${LANG[INSTALLING]}"
         rm -rf /root/remnawave
         installation
         log_clear
