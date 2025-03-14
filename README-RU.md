@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > Этот скрипт был протестирован в среде виртуализации KVM. Для корректной работы вам потребуется собственный домен, который необходимо привязать к Cloudflare. Скрипт рекомендуется запускать с правами root на свежеустановленной системе.
 -----
-### Настройка CLOUDFLARE
+### Настройка Cloudflare
 1. Настройте Cloudflare:
    - Привяжите ваш домен к Cloudflare.
    - Добавьте следующие DNS записи:
@@ -38,6 +38,8 @@
 ```
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
+
+Скрипт проведёт вас через процесс установки, предлагая ввести необходимые данные шаг за шагом. По завершении будет выведена вся необходимая информация.
 
 <p align="center"><a href="#"><img src="./media/remnawave-reverse-proxy.png" alt="Showcase"></a></p>
 
