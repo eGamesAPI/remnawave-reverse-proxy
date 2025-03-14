@@ -29,7 +29,7 @@ set_language() {
                 [ERROR_ROOT]="Script must be run as root"
                 [ERROR_OS]="Script is only supported for Debian 11/12 and Ubuntu 22.04/24.04"
                 # Menu
-                [MENU_TITLE]="REMNAWAVE REVERSE-PROXY"
+                [MENU_TITLE]="Main Menu:"
                 [MENU_1]="Standard installation"
                 [MENU_2]="Reinstall panel"
                 [MENU_3]="Select random site template"
@@ -108,7 +108,7 @@ set_language() {
                 # Root-check
                 [ERROR_ROOT]="Скрипт нужно запускать с правами root"
                 [ERROR_OS]="Скрипт поддерживается только для Debian 11/12 и Ubuntu 22.04/24.04"
-                [MENU_TITLE]="REMNAWAVE REVERSE-PROXY"
+                [MENU_TITLE]="Главное меню:"
                 # Menu
                 [MENU_1]="Стандартная установка"
                 [MENU_2]="Переустановить панель"
@@ -266,6 +266,7 @@ generate_password() {
 }
 
 show_language() {
+    clear
     banner
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_LANG]}${COLOR_RESET}"
     echo -e ""
@@ -275,6 +276,7 @@ show_language() {
 }
 
 show_menu() {
+    echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}"
