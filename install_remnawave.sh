@@ -5,7 +5,9 @@ SCRIPT_URL="https://raw.githubusercontent.com/prettyleaf/remnawave-reverse-proxy
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[32m"
+COLOR_LIME="\033[38;5;148m"
 COLOR_YELLOW="\033[1;33m"
+COLOR_ORANGE="\033[38;5;214m"
 COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
 COLOR_CYAN="\033[38;5;38m"
@@ -200,7 +202,7 @@ banner() {
     }
 
 question() {
-    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}$*${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_ORANGE}$*${COLOR_RESET}"
 }
 
 reading() {
@@ -270,8 +272,8 @@ show_language() {
     banner
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_LANG]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[LANG_EN]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[LANG_RU]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}1. ${LANG[LANG_EN]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}2. ${LANG[LANG_RU]}${COLOR_RESET}"
     echo -e ""
 }
 
@@ -279,10 +281,10 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}0. ${LANG[MENU_0]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}1. ${LANG[MENU_1]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}2. ${LANG[MENU_2]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}3. ${LANG[MENU_3]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
 }
 
@@ -364,7 +366,7 @@ spinner() {
 randomhtml() {
     cd /root/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
-    echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]} ${COLOR_WHITE}$DOMAIN${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[RANDOM_TEMPLATE]} ${COLOR_WHITE}$DOMAIN${COLOR_RESET}"
     spinner $$ "${LANG[WAITING]}" &
     spinner_pid=$!
 
@@ -401,7 +403,7 @@ randomhtml() {
 }
 
 install_packages() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
     apt-get update -y
     apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades
 
@@ -933,21 +935,21 @@ EOL
 }
 
 installation() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALLING]}${COLOR_RESET}"
     sleep 1
 
     install_remnawave
 
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_CERTS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[CHECK_CERTS]}${COLOR_RESET}"
     sleep 1
     if check_certificates $DOMAIN; then
-        echo -e "${COLOR_YELLOW}${LANG[CERT_EXIST]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[CERT_EXIST]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[CERT_MISSING]}${COLOR_RESET}"
         get_certificates $DOMAIN
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     cd /root/remnawave
     docker compose up -d > /dev/null 2>&1 &
@@ -959,10 +961,10 @@ installation() {
     target_dir="/root/remnawave"
     config_file="$target_dir/config.json"
 
-    echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 10
 	
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_SERVER]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[CHECK_SERVER]}${COLOR_RESET}"
     until curl -s "http://$domain_url/api/auth/register" > /dev/null; do
         echo -e "${COLOR_RED}${LANG[SERVER_NOT_READY]}${COLOR_RESET}"
         sleep 5
@@ -984,7 +986,7 @@ installation() {
         echo -e "${COLOR_RED}${LANG[ERROR_REGISTER]}: $register_response${COLOR_RESET}"
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
     sleep 3
 
     api_response=$(curl -s -X GET "http://$domain_url/api/keygen/get" \
@@ -1003,7 +1005,7 @@ installation() {
         echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}${COLOR_RESET}"
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
 
     env_node_file="$target_dir/.env-node"
     cat > "$env_node_file" <<EOL
@@ -1014,7 +1016,7 @@ APP_PORT=2222
 SSL_CERT="$pubkey"
 EOL
 
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
     keys=$(docker run --rm ghcr.io/xtls/xray-core x25519)
     private_key=$(echo "$keys" | grep "Private key:" | awk '{print $3}')
@@ -1105,7 +1107,7 @@ EOL
 }
 EOL
 
-    echo -e "${COLOR_YELLOW}${LANG[UPDATING_XRAY_CONFIG]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[UPDATING_XRAY_CONFIG]}${COLOR_RESET}"
     NEW_CONFIG=$(cat "$config_file")
     update_response=$(curl -s -X POST "http://$domain_url/api/xray/update-config" \
         -H "Authorization: Bearer $token" \
@@ -1120,7 +1122,7 @@ EOL
     fi
 
     if echo "$update_response" | jq -e '.response.config' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[XRAY_CONFIG_UPDATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[XRAY_CONFIG_UPDATED]}${COLOR_RESET}"
         sleep 1
     else
         echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_XRAY_CONFIG]}${COLOR_RESET}"
@@ -1154,7 +1156,7 @@ EOF
     fi
 
     if echo "$node_response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[NODE_CREATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[NODE_CREATED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
     fi
@@ -1175,7 +1177,7 @@ EOF
     if [ -z "$inbound_uuid" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_UUID]}${COLOR_RESET}"
     fi
-	echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}$inbound_uuid${COLOR_RESET}"
+	echo -e "${COLOR_ORANGE}${LANG[CREATE_HOST]}$inbound_uuid${COLOR_RESET}"
 	
     host_data=$(cat <<EOF
 {
@@ -1207,37 +1209,37 @@ EOF
     fi
 
     if echo "$host_response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[HOST_CREATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[HOST_CREATED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}${COLOR_RESET}"
     fi
 	sleep 1
 	
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 	
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
 
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}-------------------------------------------------${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}-------------------------------------------------${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}remnawave_reverse${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
 
     randomhtml
 }
@@ -1282,11 +1284,11 @@ case $OPTION in
         log_clear
         ;;
     0)
-        echo -e "${COLOR_YELLOW}${LANG[EXITING]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[EXITING]}${COLOR_RESET}"
         exit 0
         ;;
     *)
-        echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
         exit 1
         ;;
 esac
