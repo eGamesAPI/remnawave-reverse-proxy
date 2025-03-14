@@ -38,9 +38,7 @@ set_language() {
                 [INVALID_CHOICE]="Invalid choice. Please select 1-4."
                 [EXITING]="Exiting"
                 # Presets
-                [DNS_CHOOSE]="Configuring DNS..."
-                [DNS_1]="Configuring systemd-resolved..."
-                [DNS_INVALID]="Invalid choice."
+                [DNS_CONF]="Configuring DNS..."
                 # Unattended-upgrade
                 [UNATTENDED_UPGRADE]="Enabling automatic security updates..."
                 # Remna
@@ -120,9 +118,7 @@ set_language() {
                 [INVALID_CHOICE]="Неверный выбор. Выберите 1-4."
                 [EXITING]="Выход"
                 # Presets
-                [DNS_CHOOSE]="Настраиваем DNS..."
-                [DNS_1]="Настраиваем systemd-resolved..."
-                [DNS_INVALID]="Неверный выбор."
+                [DNS_CONF]="Настраиваем DNS..."
                 # Unattended-upgrade
                 [UNATTENDED_UPGRADE]="Включаем автоматическое обновление безопаности..."
                 # Remna
@@ -277,7 +273,7 @@ show_menu() {
 
 systemd_resolved() {
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[U]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
     tee /etc/systemd/resolved.conf <<EOF
 [Resolve]
 DNS=1.1.1.1 8.8.8.8 8.8.4.4
