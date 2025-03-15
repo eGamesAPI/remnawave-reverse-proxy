@@ -467,7 +467,7 @@ EOF
 
     (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE $COMMAND") | crontab -
 
-    echo -y "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
     echo -e ""
 }
 
