@@ -387,7 +387,7 @@ randomhtml() {
 install_packages() {
     echo -e "${COLOR_ORANGE}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
     apt-get update -y
-    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades
+    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades systemd-resolved
 
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
