@@ -39,10 +39,13 @@ set_language() {
                 [PROMPT_ACTION]="Select action (1-3):"
                 [INVALID_CHOICE]="Invalid choice. Please select 1-3."
                 [EXITING]="Exiting"
-                # Presets
+                # DNS
                 [DNS_CONF]="Configuring DNS..."
                 # Unattended-upgrade
                 [UNATTENDED_UPGRADE]="Enabling automatic security updates..."
+                # Auto-update
+                [AUTO_UPDATE]="Enabling Remnawave auto-update..."
+                [AUTO_UPDATE_ENABLED]="Remnawave auto-update enabled."
                 # Remna
                 [INSTALL_PACKAGES]="Installing required packages..."
                 [INSTALLING]="Installing Remnawave"
@@ -119,10 +122,13 @@ set_language() {
                 [PROMPT_ACTION]="Выберите действие (1-3):"
                 [INVALID_CHOICE]="Неверный выбор. Выберите 1-3."
                 [EXITING]="Выход"
-                # Presets
+                # DNS
                 [DNS_CONF]="Настраиваем DNS..."
                 # Unattended-upgrade
                 [UNATTENDED_UPGRADE]="Включаем автоматическое обновление безопаности..."
+                # Auto-update cron
+                [AUTO_UPDATE]="Включаем автообновление Remvawave..."
+                [AUTO_UPDATE_ENABLED]="Автообновление Remnawave включено."
                 # Remna
                 [INSTALL_PACKAGES]="Установка необходимых пакетов..."
                 [INSTALLING]="Установка Remnawave"
@@ -430,7 +436,7 @@ install_packages() {
     ufw --force enable
     touch ${DIR_REMNAWAVE}install_packages
     
-    # systemd-resolved
+    # DNS
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
     tee /etc/systemd/resolved.conf <<EOF
@@ -443,7 +449,7 @@ DNSOverTLS=yes
 EOF
     systemctl restart systemd-resolved.service
 
-    # Unattended-upgrades
+    # Unattended-upgrade
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
     echo -e ""
@@ -452,6 +458,17 @@ EOF
     dpkg-reconfigure -f noninteractive unattended-upgrades
     systemctl restart unattended-upgrades
     clear
+
+    # Auto-update cron
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE]}${COLOR_RESET}"
+    CRON_SCHEDULE="0 0 * * *"
+    COMMAND="cd /root/remnawave && docker compose pull && docker compose down && docker compose up -d"
+
+    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE $COMMAND") | crontab -
+
+    echo -y "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
+    echo -e ""
 }
 
 get_certificates() {
