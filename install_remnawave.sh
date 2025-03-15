@@ -317,17 +317,13 @@ add_cron_rule() {
     local logged_rule="${rule} >> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
 
     ( crontab -l | grep -Fxq "$logged_rule" ) || ( crontab -l 2>/dev/null; echo "$logged_rule" ) | crontab -
+}
 
-    # Auto-update cron
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE]}${COLOR_RESET}"
-    CRON_SCHEDULE="0 0 * * *"
-    COMMAND="cd /root/remnawave && docker compose pull && docker compose down && docker compose up -d"
+add_update_cron() {
+    local rule="$1"
+    local logged_rule2="${rule} >> ${DIR_REMNAWAVE}update_cron.log 2>&1"
 
-    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE $COMMAND") | crontab -
-
-    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
-    echo -e ""
+    ( crontab -l | grep -Fxq "$logged_rule" ) || ( crontab -l 2>/dev/null; echo "$logged_rule" ) | crontab -
 }
 
 spinner() {
@@ -1212,6 +1208,10 @@ EOF
     sleep 1
     docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
+
+    echo -e "${COLOR_ORANGE}${LANG[AUTO_UPDATE]}${COLOR_RESET}"
+    add_update_cron "0 0 * * * cd /root/remnawave && docker compose pull && docker compose down && docker compose up -d"
+    echo -e "${COLOR_ORANGE}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
 
     clear
 
