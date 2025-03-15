@@ -317,6 +317,17 @@ add_cron_rule() {
     local logged_rule="${rule} >> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
 
     ( crontab -l | grep -Fxq "$logged_rule" ) || ( crontab -l 2>/dev/null; echo "$logged_rule" ) | crontab -
+
+    # Auto-update cron
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE]}${COLOR_RESET}"
+    CRON_SCHEDULE="0 0 * * *"
+    COMMAND="cd /root/remnawave && docker compose pull && docker compose down && docker compose up -d"
+
+    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE $COMMAND") | crontab -
+
+    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
+    echo -e ""
 }
 
 spinner() {
@@ -458,17 +469,6 @@ EOF
     dpkg-reconfigure -f noninteractive unattended-upgrades
     systemctl restart unattended-upgrades
     clear
-
-    # Auto-update cron
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE]}${COLOR_RESET}"
-    CRON_SCHEDULE="0 0 * * *"
-    COMMAND="cd /root/remnawave && docker compose pull && docker compose down && docker compose up -d"
-
-    (crontab -l 2>/dev/null; echo "$CRON_SCHEDULE $COMMAND") | crontab -
-
-    echo -e "${COLOR_GREEN}${LANG[AUTO_UPDATE_ENABLED]}${COLOR_RESET}"
-    echo -e ""
 }
 
 get_certificates() {
