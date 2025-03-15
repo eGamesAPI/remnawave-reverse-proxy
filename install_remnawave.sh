@@ -5,9 +5,12 @@ SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[32m"
+COLOR_LIME="\033[38;5;148m"
 COLOR_YELLOW="\033[1;33m"
+COLOR_ORANGE="\033[38;5;214m"
 COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
+COLOR_CYAN="\033[38;5;38m"
 
 # Language variables
 declare -A LANG=(
@@ -20,23 +23,30 @@ set_language() {
     case $1 in
         en)
             LANG=(
-                #Lang
-		[CHOOSE_LANG]="Select language:"
+                # Lang
+                [CHOOSE_LANG]="Select language:"
                 [LANG_EN]="English"
                 [LANG_RU]="Russian"
-                #check
+                # Root-check
                 [ERROR_ROOT]="Script must be run as root"
-                [ERROR_OS]="Supported only Debian 11/12 and Ubuntu 22.04/24.04"
-                #Menu
-                [MENU_TITLE]="REMNAWAVE REVERSE-PROXY"
+                [ERROR_OS]="Script is only supported for Debian 11/12 and Ubuntu 22.04/24.04"
+                # Menu
+                [MENU_TITLE]="Main Menu:"
                 [MENU_1]="Standard installation"
                 [MENU_2]="Reinstall panel"
                 [MENU_3]="Select random site template"
-                [MENU_4]="Exit"
-                [PROMPT_ACTION]="Select action (1-4):"
-                [INVALID_CHOICE]="Invalid choice. Please select 1-4."
+                [MENU_0]="Exit"
+                [PROMPT_ACTION]="Select action (1-3):"
+                [INVALID_CHOICE]="Invalid choice. Please select 1-3."
                 [EXITING]="Exiting"
-                #Remna
+                # DNS
+                [DNS_CONF]="Configuring DNS..."
+                # Unattended-upgrade
+                [UNATTENDED_UPGRADE]="Enabling automatic security updates..."
+                # Auto-update
+                [AUTO_UPDATE]="Enabling Remnawave auto-update..."
+                [AUTO_UPDATE_ENABLED]="Remnawave auto-update enabled."
+                # Remna
                 [INSTALL_PACKAGES]="Installing required packages..."
                 [INSTALLING]="Installing Remnawave"
                 [ENTER_PANEL_DOMAIN]="Enter panel domain (e.g. panel.example.com):"
@@ -51,11 +61,11 @@ set_language() {
                 [CF_INVALID_ATTEMPT]="Invalid Cloudflare API key or email. Attempt %d of %d."
                 [CERT_MISSING]="Certificates not found. Obtaining new ones..."
                 [WAITING]="Please wait..."
-                #API
+                # API
                 [REGISTERING_REMNAWAVE]="Registering in Remnawave"
                 [CHECK_SERVER]="Checking server availability..."
                 [SERVER_NOT_READY]="Server is not ready, waiting..."
-		[REGISTRATION_SUCCESS]="Registration completed successfully!"
+                [REGISTRATION_SUCCESS]="Registration completed successfully!"
                 [GET_PUBLIC_KEY]="Getting public key..."
                 [PUBLIC_KEY_SUCCESS]="Public key successfully obtained."
                 [GENERATE_KEYS]="Generating x25519 keys..."
@@ -64,23 +74,23 @@ set_language() {
                 [NODE_CREATED]="Node successfully created."
                 [CREATE_HOST]="Creating host with UUID:"
                 [HOST_CREATED]="Host successfully created."
-                #Stop/Start
+                # Stop/Start
                 [STARTING_REMNAWAVE]="Starting Remnawave"
                 [STOPPING_REMNAWAVE]="Stopping Remnawave"
-                #Menu End
+                # Menu End
                 [INSTALL_COMPLETE]="               INSTALLATION COMPLETE!"
                 [PANEL_ACCESS]="Panel URL:"
                 [ADMIN_CREDS]="To log into the panel, use the following data:"
                 [USERNAME]="Username:"
                 [PASSWORD]="Password:"
                 [RELAUNCH_CMD]="To relaunch script use command:"
-                #RandomHTML
+                # RandomHTML
                 [RANDOM_TEMPLATE]="Installing random template for"
                 [DOWNLOAD_FAIL]="Download failed, retrying..."
                 [UNPACK_ERROR]="Error unpacking archive"
                 [TEMPLATE_COPY]="Template copied to /var/www/html/"
                 [SELECT_TEMPLATE]="Selected template:"
-                #Error
+                # Error
                 [ERROR_TOKEN]="Failed to get token."
                 [ERROR_EXTRACT_TOKEN]="Failed to extract token from response."
                 [ERROR_PUBLIC_KEY]="Failed to get public key."
@@ -100,19 +110,26 @@ set_language() {
             ;;
         ru)
             LANG=(
-                #check
+                # Root-check
                 [ERROR_ROOT]="Скрипт нужно запускать с правами root"
-                [ERROR_OS]="Поддержка только Debian 11/12 и Ubuntu 22.04/24.04"
-                [MENU_TITLE]="REMNAWAVE REVERSE-PROXY"
-                #Menu
+                [ERROR_OS]="Скрипт поддерживается только для Debian 11/12 и Ubuntu 22.04/24.04"
+                [MENU_TITLE]="Главное меню:"
+                # Menu
                 [MENU_1]="Стандартная установка"
                 [MENU_2]="Переустановить панель"
                 [MENU_3]="Выбрать случайный шаблон"
-                [MENU_4]="Выход"
-                [PROMPT_ACTION]="Выберите действие (1-4):"
-                [INVALID_CHOICE]="Неверный выбор. Выберите 1-4."
+                [MENU_0]="Выход"
+                [PROMPT_ACTION]="Выберите действие (1-3):"
+                [INVALID_CHOICE]="Неверный выбор. Выберите 1-3."
                 [EXITING]="Выход"
-                #Remna
+                # DNS
+                [DNS_CONF]="Настраиваем DNS..."
+                # Unattended-upgrade
+                [UNATTENDED_UPGRADE]="Включаем автоматическое обновление безопаности..."
+                # Auto-update cron
+                [AUTO_UPDATE]="Включаем автообновление Remvawave..."
+                [AUTO_UPDATE_ENABLED]="Автообновление Remnawave включено."
+                # Remna
                 [INSTALL_PACKAGES]="Установка необходимых пакетов..."
                 [INSTALLING]="Установка Remnawave"
                 [ENTER_PANEL_DOMAIN]="Введите домен панели (например, panel.example.com):"
@@ -127,11 +144,11 @@ set_language() {
                 [CF_INVALID_ATTEMPT]="Неверный Cloudflare API ключ или email. Попытка %d из %d."
                 [CERT_MISSING]="Сертификаты не найдены. Получаем новые..."
                 [WAITING]="Пожалуйста, подождите..."
-                #API
+                # API
                 [REGISTERING_REMNAWAVE]="Регистрация в Remnawave"
                 [CHECK_SERVER]="Проверка доступности сервера..."
                 [SERVER_NOT_READY]="Сервер не готов, ожидание..."
-		[REGISTRATION_SUCCESS]="Регистрация прошла успешно!"
+                [REGISTRATION_SUCCESS]="Регистрация прошла успешно!"
                 [GET_PUBLIC_KEY]="Получаем публичный ключ..."
                 [PUBLIC_KEY_SUCCESS]="Публичный ключ успешно получен."
                 [GENERATE_KEYS]="Генерация ключей x25519..."
@@ -140,23 +157,23 @@ set_language() {
                 [NODE_CREATED]="Узел успешно создан."
                 [CREATE_HOST]="Создаем хост с UUID:"
                 [HOST_CREATED]="Хост успешно создан."
-                #Stop/Start
+                # Stop/Start
                 [STOPPING_REMNAWAVE]="Остановка Remnawave"
                 [STARTING_REMNAWAVE]="Запуск Remnawave"
-                #Menu End
+                # Menu End
                 [INSTALL_COMPLETE]="               УСТАНОВКА ЗАВЕРШЕНА!"
                 [PANEL_ACCESS]="Панель доступна по адресу:"
                 [ADMIN_CREDS]="Для входа в панель используйте следующие данные:"
                 [USERNAME]="Логин:"
                 [PASSWORD]="Пароль:"
                 [RELAUNCH_CMD]="Для повторного запуска:"
-                #RandomHTML
+                # RandomHTML
                 [DOWNLOAD_FAIL]="Ошибка загрузки, повторная попытка..."
                 [UNPACK_ERROR]="Ошибка распаковки архива"
                 [RANDOM_TEMPLATE]="Установка случайного шаблона для"
                 [TEMPLATE_COPY]="Шаблон скопирован в /var/www/html/"
                 [SELECT_TEMPLATE]="Выбран шаблон:"
-                #Error
+                # Error
                 [ERROR_TOKEN]="Не удалось получить токен."
                 [ERROR_EXTRACT_TOKEN]="Не удалось извлечь токен из ответа."
                 [ERROR_PUBLIC_KEY]="Не удалось получить публичный ключ."
@@ -177,8 +194,21 @@ set_language() {
     esac
 }
 
+banner() {
+    echo
+    echo -e "${COLOR_CYAN}"
+    echo "██████╗ ███████╗███╗   ███╗███╗   ██╗ █████╗ ██╗    ██╗ █████╗ ██╗   ██╗███████╗"
+    echo "██╔══██╗██╔════╝████╗ ████║████╗  ██║██╔══██╗██║    ██║██╔══██╗██║   ██║██╔════╝"
+    echo "██████╔╝█████╗  ██╔████╔██║██╔██╗ ██║███████║██║ █╗ ██║███████║██║   ██║█████╗  "
+    echo "██╔══██╗██╔══╝  ██║╚██╔╝██║██║╚██╗██║██╔══██║██║███╗██║██╔══██║╚██╗ ██╔╝██╔══╝  "
+    echo "██║  ██║███████╗██║ ╚═╝ ██║██║ ╚████║██║  ██║╚███╔███╔╝██║  ██║ ╚████╔╝ ███████╗"
+    echo "╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝  ╚═══╝  ╚══════╝"
+    echo -e "${COLOR_RESET}"
+    echo
+    }
+
 question() {
-    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}$*${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_ORANGE}$*${COLOR_RESET}"
 }
 
 reading() {
@@ -197,20 +227,20 @@ check_os() {
 }
 
 log_clear() {
-  sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
+    sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
 }
 
 log_entry() {
-  mkdir -p ${DIR_REMNAWAVE}
-  LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
-  exec > >(tee -a "$LOGFILE") 2>&1
+    mkdir -p ${DIR_REMNAWAVE}
+    LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
+    exec > >(tee -a "$LOGFILE") 2>&1
 }
 
 update_remnawave_reverse() {
-  UPDATE_SCRIPT="${DIR_REMNAWAVE}remnawave_reverse"
-  wget -q -O $UPDATE_SCRIPT $SCRIPT_URL
-  ln -sf $UPDATE_SCRIPT /usr/local/bin/remnawave_reverse
-  chmod +x "$UPDATE_SCRIPT"
+    UPDATE_SCRIPT="${DIR_REMNAWAVE}remnawave_reverse"
+    wget -q -O $UPDATE_SCRIPT $SCRIPT_URL
+    ln -sf $UPDATE_SCRIPT /usr/local/bin/remnawave_reverse
+    chmod +x "$UPDATE_SCRIPT"
 }
 
 check_root() {
@@ -245,10 +275,12 @@ generate_password() {
 }
 
 show_language() {
+    clear
+    banner
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_LANG]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[LANG_EN]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[LANG_RU]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}1. ${LANG[LANG_EN]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}2. ${LANG[LANG_RU]}${COLOR_RESET}"
     echo -e ""
 }
 
@@ -256,10 +288,10 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}1. ${LANG[MENU_1]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}2. ${LANG[MENU_2]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}3. ${LANG[MENU_3]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
 }
 
@@ -288,35 +320,35 @@ add_cron_rule() {
 }
 
 spinner() {
-  local pid=$1
-  local text=$2
+    local pid=$1
+    local text=$2
 
-  export LC_ALL=en_US.UTF-8
-  export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
 
-  local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-  local text_code="$COLOR_GREEN"
-  local bg_code=""
-  local effect_code="\033[1m"
-  local delay=0.1
-  local reset_code="$COLOR_RESET"
+    local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local text_code="$COLOR_GREEN"
+    local bg_code=""
+    local effect_code="\033[1m"
+    local delay=0.1
+    local reset_code="$COLOR_RESET"
 
-  printf "${effect_code}${text_code}${bg_code}%s${reset_code}" "$text" > /dev/tty
+    printf "${effect_code}${text_code}${bg_code}%s${reset_code}" "$text" > /dev/tty
 
-  while kill -0 "$pid" 2>/dev/null; do
-    for (( i=0; i<${#spinstr}; i++ )); do
-      printf "\r${effect_code}${text_code}${bg_code}[%s] %s${reset_code}" "$(echo -n "${spinstr:$i:1}")" "$text" > /dev/tty
-      sleep $delay
+    while kill -0 "$pid" 2>/dev/null; do
+        for (( i=0; i<${#spinstr}; i++ )); do
+        printf "\r${effect_code}${text_code}${bg_code}[%s] %s${reset_code}" "$(echo -n "${spinstr:$i:1}")" "$text" > /dev/tty
+        sleep $delay
+        done
     done
-  done
 
-  printf "\r\033[K" > /dev/tty
+    printf "\r\033[K" > /dev/tty
 }
 
 randomhtml() {
     cd /root/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
-    echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]} ${COLOR_WHITE}$DOMAIN${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[RANDOM_TEMPLATE]} ${COLOR_WHITE}$DOMAIN${COLOR_RESET}"
     spinner $$ "${LANG[WAITING]}" &
     spinner_pid=$!
 
@@ -353,9 +385,9 @@ randomhtml() {
 }
 
 install_packages() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
     apt-get update -y
-    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare
+    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades systemd-resolved
 
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
@@ -403,6 +435,28 @@ install_packages() {
     ufw allow 443/tcp comment 'HTTPS'
     ufw --force enable
     touch ${DIR_REMNAWAVE}install_packages
+    
+    # DNS
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[DNS_CONF]}${COLOR_RESET}"
+    tee /etc/systemd/resolved.conf <<EOF
+[Resolve]
+DNS=1.1.1.1 8.8.8.8 8.8.4.4
+#FallbackDNS=
+Domains=~.
+DNSSEC=yes
+DNSOverTLS=yes
+EOF
+    systemctl restart systemd-resolved.service
+
+    # Unattended-upgrade
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[UNATTENDED_UPGRADE]}${COLOR_RESET}"
+    echo -e ""
+    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
+    dpkg-reconfigure -f noninteractive unattended-upgrades
+    systemctl restart unattended-upgrades
     clear
 }
 
@@ -428,7 +482,7 @@ get_certificates() {
                 echo -e "${COLOR_GREEN}${LANG[CF_VALIDATING]}${COLOR_RESET}"
                 return 0
             else
-                echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_ATTEMPT]}" "$attempt" "$attempts")${COLOR_RESET}"
+				echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_ATTEMPT]}" "$attempt" "$attempts")${COLOR_RESET}"
             if [ $attempt -lt $attempts ]; then
                 reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
                 reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
@@ -806,7 +860,7 @@ server {
 
     add_header Set-Cookie \$set_cookie_header;
 
-     location / {
+    location / {
         proxy_http_version 1.1;
         proxy_pass http://json;
         proxy_set_header Host \$host;
@@ -858,21 +912,21 @@ EOL
 }
 
 installation() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALLING]}${COLOR_RESET}"
     sleep 1
 
     install_remnawave
 
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_CERTS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[CHECK_CERTS]}${COLOR_RESET}"
     sleep 1
     if check_certificates $DOMAIN; then
-        echo -e "${COLOR_YELLOW}${LANG[CERT_EXIST]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[CERT_EXIST]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[CERT_MISSING]}${COLOR_RESET}"
         get_certificates $DOMAIN
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     cd /root/remnawave
     docker compose up -d > /dev/null 2>&1 &
@@ -884,10 +938,10 @@ installation() {
     target_dir="/root/remnawave"
     config_file="$target_dir/config.json"
 
-    echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 10
 	
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_SERVER]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[CHECK_SERVER]}${COLOR_RESET}"
     until curl -s "http://$domain_url/api/auth/register" > /dev/null; do
         echo -e "${COLOR_RED}${LANG[SERVER_NOT_READY]}${COLOR_RESET}"
         sleep 5
@@ -909,7 +963,7 @@ installation() {
         echo -e "${COLOR_RED}${LANG[ERROR_REGISTER]}: $register_response${COLOR_RESET}"
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
     sleep 3
 
     api_response=$(curl -s -X GET "http://$domain_url/api/keygen/get" \
@@ -928,7 +982,7 @@ installation() {
         echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}${COLOR_RESET}"
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
 
     env_node_file="$target_dir/.env-node"
     cat > "$env_node_file" <<EOL
@@ -939,7 +993,7 @@ APP_PORT=2222
 SSL_CERT="$pubkey"
 EOL
 
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
     keys=$(docker run --rm ghcr.io/xtls/xray-core x25519)
     private_key=$(echo "$keys" | grep "Private key:" | awk '{print $3}')
@@ -1030,7 +1084,7 @@ EOL
 }
 EOL
 
-    echo -e "${COLOR_YELLOW}${LANG[UPDATING_XRAY_CONFIG]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[UPDATING_XRAY_CONFIG]}${COLOR_RESET}"
     NEW_CONFIG=$(cat "$config_file")
     update_response=$(curl -s -X POST "http://$domain_url/api/xray/update-config" \
         -H "Authorization: Bearer $token" \
@@ -1045,7 +1099,7 @@ EOL
     fi
 
     if echo "$update_response" | jq -e '.response.config' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[XRAY_CONFIG_UPDATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[XRAY_CONFIG_UPDATED]}${COLOR_RESET}"
         sleep 1
     else
         echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_XRAY_CONFIG]}${COLOR_RESET}"
@@ -1079,7 +1133,7 @@ EOF
     fi
 
     if echo "$node_response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[NODE_CREATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[NODE_CREATED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
     fi
@@ -1100,7 +1154,7 @@ EOF
     if [ -z "$inbound_uuid" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_UUID]}${COLOR_RESET}"
     fi
-	echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}$inbound_uuid${COLOR_RESET}"
+	echo -e "${COLOR_ORANGE}${LANG[CREATE_HOST]}$inbound_uuid${COLOR_RESET}"
 	
     host_data=$(cat <<EOF
 {
@@ -1132,37 +1186,37 @@ EOF
     fi
 
     if echo "$host_response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_YELLOW}${LANG[HOST_CREATED]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[HOST_CREATED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}${COLOR_RESET}"
     fi
 	sleep 1
 	
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 	
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[STARTING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
     docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
 
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}-------------------------------------------------${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}-------------------------------------------------${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}remnawave_reverse${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
+    echo -e "${COLOR_ORANGE}=================================================${COLOR_RESET}"
 
     randomhtml
 }
@@ -1188,13 +1242,15 @@ case $OPTION in
     1)
         if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
             install_packages
-	fi
+        fi
         installation
         log_clear
         ;;
     2)
         cd /root/remnawave
-        docker compose down -v --rmi all --remove-orphans && docker system prune -a --volumes -f > /dev/null 2>&1 &
+        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        docker system prune -a --volumes -f > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
         rm -rf /root/remnawave
         installation
@@ -1204,12 +1260,12 @@ case $OPTION in
         randomhtml
         log_clear
         ;;
-    4)
-        echo -e "${COLOR_YELLOW}${LANG[EXITING]}${COLOR_RESET}"
+    0)
+        echo -e "${COLOR_ORANGE}${LANG[EXITING]}${COLOR_RESET}"
         exit 0
         ;;
     *)
-        echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        echo -e "${COLOR_ORANGE}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
         exit 1
         ;;
 esac
