@@ -323,7 +323,7 @@ add_update_cron() {
     local rule="$1"
     local logged_rule2="${rule} >> ${DIR_REMNAWAVE}update_cron.log 2>&1"
 
-    ( crontab -l | grep -Fxq "$logged_rule" ) || ( crontab -l 2>/dev/null; echo "$logged_rule" ) | crontab -
+    ( crontab -l | grep -Fxq "$logged_rule2" ) || ( crontab -l 2>/dev/null; echo "$logged_rule2" ) | crontab -
 }
 
 spinner() {
