@@ -3,6 +3,7 @@
 SCRIPT_VERSION="1.5.8"
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
+ALIAS_FILE="${DIR_REMNAWAVE}command_alias"
 SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
@@ -32,6 +33,193 @@ declare -A LANG=(
     [CHOOSE_LANG]="Select language:"
     [LANG_EN]="English"
     [LANG_RU]="Русский"
+    [ERROR_ROOT]="Script must be run as root"
+    [ERROR_OS]="Supported only Debian 11/12 and Ubuntu 22.04/24.04"
+    [MENU_TITLE]="REMNAWAVE REVERSE-PROXY by eGames"
+    [VERSION_LABEL]="Version: %s"
+    [MENU_0]="Exit"
+    [MENU_1]="Install panel and node on one server"
+    [MENU_2]="Installing only the panel"
+    [MENU_3]="Add node to panel"
+    [MENU_4]="Installing only the node"
+    [MENU_5]="Reinstall panel/node"
+    [MENU_6]="Start panel/node"
+    [MENU_7]="Stop panel/node"
+    [MENU_8]="Update panel/node"
+    [MENU_9]="Remnawave CLI"
+    [MENU_10]="Enable IPv6"
+    [MENU_11]="Disable IPv6"
+    [MENU_12]="Install random template for selfsteal node"
+    [MENU_13]="Check for updates script"
+    [MENU_14]="Set command alias"
+    [PROMPT_ACTION]="Select action (0-14):"
+    [INVALID_CHOICE]="Invalid choice. Please select 0-14."
+    [EXITING]="Exiting"
+    [WARNING_LABEL]="WARNING:"
+    [CONFIRM_PROMPT]="Enter 'y' to continue or 'n' to exit (y/n):"
+    [WARNING_NODE_PANEL]="Adding a node should only be done on the server where the panel is installed, not on the node server."
+    [CONFIRM_SERVER_PANEL]="Are you sure you are on the server with the installed panel?"
+    [INSTALL_PACKAGES]="Installing required packages..."
+    [INSTALLING]="Installing panel and node"
+    [INSTALLING_PANEL]="Installing panel"
+    [INSTALLING_NODE]="Installing node"
+    [ENTER_PANEL_DOMAIN]="Enter panel domain (e.g. panel.example.com):"
+    [ENTER_SUB_DOMAIN]="Enter subscription domain (e.g. sub.example.com):"
+    [ENTER_NODE_DOMAIN]="Enter selfsteal domain for node (e.g. node.example.com):"
+    [ENTER_CF_TOKEN]="Enter your Cloudflare API token or global API key:"
+    [ENTER_CF_EMAIL]="Enter your Cloudflare registered email:"
+    [CHECK_CERTS]="Checking certificates..."
+    [CERT_EXIST1]="Certificates found in /etc/letsencrypt/live/"
+    [CERT_EXIST]="Using existing certificates"
+    [CF_VALIDATING]="Cloudflare API key and email are valid"
+    [CF_INVALID]="Invalid Cloudflare API token or email after %d attempts."
+    [CF_INVALID_ATTEMPT]="Invalid Cloudflare API key or email. Attempt %d of %d."
+    [CERT_MISSING]="Certificates not found. Obtaining new ones..."
+    [WAITING]="Please wait..."
+    [REGISTERING_REMNAWAVE]="Registering in Remnawave"
+    [CHECK_SERVER]="Checking server availability..."
+    [SERVER_NOT_READY]="Server is not ready, waiting..."
+    [REGISTRATION_SUCCESS]="Registration completed successfully!"
+    [GET_PUBLIC_KEY]="Getting public key..."
+    [PUBLIC_KEY_SUCCESS]="Public key successfully obtained."
+    [GENERATE_KEYS]="Generating x25519 keys..."
+    [GENERATE_KEYS_SUCCESS]="Keys successfully generated."
+    [UPDATING_XRAY_CONFIG]="Updating Xray configuration..."
+    [XRAY_CONFIG_UPDATED]="Xray configuration successfully updated."
+    [NODE_CREATED]="Node successfully created."
+    [CREATE_HOST]="Creating host with UUID: "
+    [HOST_CREATED]="Host successfully created."
+    [CHANGE_DIR_FAILED]="Failed to change to directory %s"
+    [DIR_NOT_FOUND]="Directory /root/remnawave or /opt/remnawave not found"
+    [PANEL_RUNNING]="Panel/node already running"
+    [PANEL_STOPPED]="Panel/node already stopped"
+    [NO_UPDATE]="No updates available for panel/node"
+    [UPDATING]="Updating panel/node..."
+    [UPDATE_SUCCESS1]="Panel/node successfully updated"
+    [STARTING_PANEL_NODE]="Starting panel and node"
+    [STARTING_PANEL]="Starting panel"
+    [STARTING_NODE]="Starting node"
+    [STOPPING_REMNAWAVE]="Stopping panel and node"
+    [IMAGES_DETECTED]="Images detected, restarting containers..."
+    [INSTALL_COMPLETE]="               INSTALLATION COMPLETE!"
+    [PANEL_ACCESS]="Panel URL:"
+    [ADMIN_CREDS]="To log into the panel, use the following data:"
+    [USERNAME]="Username:"
+    [PASSWORD]="Password:"
+    [RELAUNCH_CMD]="To relaunch the manager, use the following command:"
+    [RANDOM_TEMPLATE]="Installing random template for camouflage site"
+    [DOWNLOAD_FAIL]="Download failed, retrying..."
+    [UNPACK_ERROR]="Error unpacking archive"
+    [TEMPLATE_COPY]="Template copied to /var/www/html/"
+    [SELECT_TEMPLATE]="Selected template:"
+    [ERROR_TOKEN]="Failed to get token."
+    [ERROR_EXTRACT_TOKEN]="Failed to extract token from response."
+    [ERROR_PUBLIC_KEY]="Failed to get public key."
+    [ERROR_EXTRACT_PUBLIC_KEY]="Failed to extract public key from response."
+    [ERROR_GENERATE_KEYS]="Failed to generate keys."
+    [ERROR_EMPTY_RESPONSE_CONFIG]="Empty response from server when updating configuration."
+    [ERROR_UPDATE_XRAY_CONFIG]="Failed to update Xray configuration."
+    [ERROR_EMPTY_RESPONSE_NODE]="Empty response from server when creating node."
+    [ERROR_CREATE_NODE]="Failed to create node."
+    [ERROR_EMPTY_RESPONSE_INBOUNDS]="Empty response from server when getting inbounds."
+    [ERROR_EXTRACT_UUID]="Failed to extract UUID from response."
+    [ERROR_EMPTY_RESPONSE_HOST]="Empty response from server when creating host."
+    [ERROR_CREATE_HOST]="Failed to create host."
+    [ERROR_EMPTY_RESPONSE_REGISTER]="Registration error - empty server response"
+    [ERROR_REGISTER]="Registration error"
+    [REINSTALL_WARNING]="All data will be deleted from the server. Are you sure? (y/n):"
+    [REINSTALL_TYPE_TITLE]="Select reinstallation method:"
+    [REINSTALL_PROMPT]="Select action (1-4):"
+    [INVALID_REINSTALL_CHOICE]="Invalid choice. Please select 1-4."
+    [POST_PANEL_MESSAGE]="Panel successfully installed!"
+    [POST_PANEL_INSTRUCTION]="To install the node, follow these steps:\n1. Run this script on the server where the node will be installed.\n2. Select 'Install only the node'."
+    [SELFSTEAL_PROMPT]="Enter the selfsteal domain for the node (e.g. node.example.com):"
+    [SELFSTEAL]="Enter the selfsteal domain for the node specified during panel installation:"
+    [PANEL_IP_PROMPT]="Enter the IP address of the panel to establish a connection between the panel and the node:"
+    [IP_ERROR]="Enter a valid IP address in the format X.X.X.X (e.g., 192.168.1.1)"
+    [CERT_PROMPT]="Enter the certificate obtained from the panel, keeping the SSL_CERT= line (paste the content and press Enter twice):"
+    [CERT_CONFIRM]="Are you sure the certificate is correct? (y/n):"
+    [ABORT_MESSAGE]="Installation aborted by user"
+    [SUCCESS_MESSAGE]="Node successfully connected"
+    [NODE_CHECK]="Checking node connection for %s..."
+    [NODE_ATTEMPT]="Attempt %d of %d..."
+    [NODE_UNAVAILABLE]="Node is unavailable on attempt %d."
+    [NODE_LAUNCHED]="Node successfully launched!"
+    [NODE_NOT_CONNECTED]="Node not connected after %d attempts!"
+    [CHECK_CONFIG]="Check the configuration or restart the panel."
+    [IPV6_ALREADY_ENABLED]="IPv6 already enabled"
+    [IPV6_ALREADY_DISABLED]="IPv6 already disabled"
+    [ENABLE_IPV6]="Enabling IPv6..."
+    [IPV6_ENABLED]="IPv6 has been enabled."
+    [DISABLING_IPV6]="Disabling IPv6..."
+    [IPV6_DISABLED]="IPv6 has been disabled."
+    [ADD_NODE_TO_PANEL]="Adding node to panel"
+    [EMPTY_SAVED_PANEL_DOMAIN]="Saved panel domain is empty. Requesting a new one..."
+    [USING_SAVED_PANEL_DOMAIN]="Using saved panel domain: %s"
+    [PANEL_DOMAIN_SAVED]="Panel domain saved"
+    [USING_SAVED_TOKEN]="Using saved token..."
+    [INVALID_SAVED_TOKEN]="Saved token is invalid. Requesting a new one..."
+    [ENTER_PANEL_USERNAME]="Enter panel username: "
+    [ENTER_PANEL_PASSWORD]="Enter panel password: "
+    [TOKEN_RECEIVED_AND_SAVED]="Token successfully received and saved"
+    [TOKEN_USED_SUCCESSFULLY]="Token successfully used"
+    [FAILED_TO_GET_XRAY_CONFIG]="Failed to get Xray configuration"
+    [GETTING_NEW_INBOUND_UUID]="Getting UUID of new inbound..."
+    [FAILED_TO_GET_INBOUND_UUID]="Failed to get UUID inbound for tag %s"
+    [INVALID_INBOUND_UUID_FORMAT]="Error: UUID of new inbound has an invalid format"
+    [GETTING_EXCLUDED_INBOUNDS]="Getting list of excluded inbounds..."
+    [EMPTY_EXCLUDED_INBOUNDS_WARNING]="Warning: excludedInbounds is empty. New node may use all inbounds!"
+    [EMPTY_EXCLUDED_INBOUNDS_ERROR]="Error: excludedInbounds is empty, although other inbounds exist!"
+    [INVALID_EXCLUDED_INBOUNDS_UUID]="Error: UUID in excludedInbounds has an invalid format"
+    [CHECKING_EXISTING_NODE]="Checking existing node with domain %s..."
+    [FAILED_TO_GET_NODES_LIST]="Failed to get list of nodes"
+    [NODE_NOT_FOUND]="Node with domain %s not found. Creating a new node..."
+    [EXISTING_NODE_FOUND]="Found existing node with UUID %s. Updating node..."
+    [NODE_UPDATED]="Node successfully updated"
+    [UPDATING_EXISTING_NODES]="Updating existing nodes..."
+    [FAILED_TO_GET_NODES_FOR_UPDATE]="Failed to get list of nodes for update"
+    [NO_NODES_TO_UPDATE]="No existing nodes to update"
+    [NODES_UPDATED_SUCCESS]="Existing nodes successfully updated"
+    [FAILED_TO_UPDATE_NODE]="Failed to update node %s"
+    [NODE_ADDED_SUCCESS]="Node successfully added!"
+    [CHECK_UPDATE]="Check for updates"
+    [GENERATING_CERTS]="Generating certificates for %s"
+    [REQUIRED_DOMAINS]="Required domains for certificates:"
+    [CHECKING_CERTS_FOR]="Checking certificates for %s"
+    [CHECK_DOMAIN_IP_FAIL]="Failed to determine the domain or server IP address."
+    [CHECK_DOMAIN_IP_FAIL_INSTRUCTION]="Ensure that the domain %s is correctly configured and points to this server (%s)."
+    [CHECK_DOMAIN_CLOUDFLARE]="The domain %s points to a Cloudflare IP (%s)."
+    [CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]="Cloudflare proxying is not allowed for the selfsteal domain. Disable proxying (switch to 'DNS Only')."
+    [CHECK_DOMAIN_MISMATCH]="The domain %s points to IP address %s, which differs from this server's IP (%s)."
+    [CHECK_DOMAIN_MISMATCH_INSTRUCTION]="For proper operation, the domain must point to the current server."
+    [UPDATE_AVAILABLE]="A new version of the script is available: %s (current version: %s)."
+    [UPDATE_CONFIRM]="Update the script? (y/n):"
+    [UPDATE_CANCELLED]="Update cancelled by user."
+    [UPDATE_SUCCESS]="Script successfully updated to version %s!"
+    [UPDATE_FAILED]="Error downloading the new version of the script."
+    [VERSION_CHECK_FAILED]="Could not determine the version of the remote script. Skipping update."
+    [LATEST_VERSION]="You already have the latest version of the script (%s)."
+    [RESTART_REQUIRED]="Please restart the script to apply changes."
+    [LOCAL_FILE_NOT_FOUND]="Local script file not found, downloading new version..."
+    [RUNNING_CLI]="Running Remnawave CLI..."
+    [CLI_SUCCESS]="Remnawave CLI executed successfully!"
+    [CLI_FAILED]="Failed to execute Remnawave CLI. Ensure the 'remnawave' container is running."
+    [CONTAINER_NOT_RUNNING]="Container 'remnawave' is not running. Please start it first."
+    [CERT_METHOD_PROMPT]="Select certificate generation method for all domains:"
+    [CERT_METHOD_CF]="1. Cloudflare API (supports wildcard)"
+    [CERT_METHOD_ACME]="2. ACME HTTP-01 (single domain, no wildcard)"
+    [CERT_METHOD_CHOOSE]="Choose option (1-2):"
+    [EMAIL_PROMPT]="Enter your email for Let's Encrypt registration:"
+    [CERTS_SKIPPED]="All certificates already exist. Skipping generation."
+    [CF_API_CHECK]="Validating Cloudflare API credentials..."
+    [ACME_METHOD]="Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)..."
+    [CERT_GENERATION_FAILED]="Certificate generation failed. Please check your input and DNS settings."
+    [ALIAS_TITLE]="Set Command Alias"
+    [ALIAS_CURRENT]="Current command alias: %s"
+    [ALIAS_NONE]="No alias set. Using default command: remnawave_reverse"
+    [ALIAS_PROMPT]="Enter new command alias (leave empty to remove):"
+    [ALIAS_SET]="Command alias set to: %s"
+    [ALIAS_REMOVED]="Command alias removed. Using default command: remnawave_reverse"
 )
 
 set_language() {
@@ -62,8 +250,9 @@ set_language() {
                 [MENU_11]="Disable IPv6"
                 [MENU_12]="Install random template for selfsteal node"
                 [MENU_13]="Check for updates script"
-                [PROMPT_ACTION]="Select action (0-13):"
-                [INVALID_CHOICE]="Invalid choice. Please select 0-13."
+                [MENU_14]="Set command alias"
+                [PROMPT_ACTION]="Select action (0-14):"
+                [INVALID_CHOICE]="Invalid choice. Please select 0-14."
                 [EXITING]="Exiting"
                 [WARNING_LABEL]="WARNING:"
                 [CONFIRM_PROMPT]="Enter 'y' to continue or 'n' to exit (y/n):"
@@ -238,6 +427,13 @@ set_language() {
                 [CF_API_CHECK]="Validating Cloudflare API credentials..."
                 [ACME_METHOD]="Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)..."
                 [CERT_GENERATION_FAILED]="Certificate generation failed. Please check your input and DNS settings."
+                #Alias
+                [ALIAS_TITLE]="Set Command Alias"
+                [ALIAS_CURRENT]="Current command alias: %s"
+                [ALIAS_NONE]="No alias set. Using default command: remnawave_reverse"
+                [ALIAS_PROMPT]="Enter new command alias (leave empty to remove):"
+                [ALIAS_SET]="Command alias set to: %s"
+                [ALIAS_REMOVED]="Command alias removed. Using default command: remnawave_reverse"
             )
             ;;
         ru)
@@ -262,8 +458,9 @@ set_language() {
                 [MENU_11]="Отключить IPv6"
                 [MENU_12]="Установить случайный шаблон для selfsteal ноды"
                 [MENU_13]="Проверить обновления скрипта"
-                [PROMPT_ACTION]="Выберите действие (0-13):"
-                [INVALID_CHOICE]="Неверный выбор. Выберите 0-13."
+                [MENU_14]="Задать алиас команды"
+                [PROMPT_ACTION]="Выберите действие (0-14):"
+                [INVALID_CHOICE]="Неверный выбор. Выберите 0-14."
                 [EXITING]="Выход"
                 [WARNING_LABEL]="ВНИМАНИЕ:"
                 [CONFIRM_PROMPT]="Введите 'y' для продолжения или 'n' для выхода (y/n):"
@@ -437,6 +634,13 @@ set_language() {
                 [CF_API_CHECK]="Проверка учетных данных Cloudflare API..."
                 [ACME_METHOD]="Используем ACME (Let's Encrypt) с HTTP-01 вызовом (без поддержки wildcard)..."
                 [CERT_GENERATION_FAILED]="Не удалось сгенерировать сертификаты. Проверьте введенные данные и настройки DNS."
+                #Alias
+                [ALIAS_TITLE]="Настройка алиаса команды"
+                [ALIAS_CURRENT]="Текущий алиас команды: %s"
+                [ALIAS_NONE]="Алиас не установлен. Используется стандартная команда: remnawave_reverse"
+                [ALIAS_PROMPT]="Введите новый алиас команды (оставьте пустым для удаления):"
+                [ALIAS_SET]="Алиас команды установлен: %s"
+                [ALIAS_REMOVED]="Алиас команды удален. Используется стандартная команда: remnawave_reverse"
             )
             ;;
     esac
@@ -693,6 +897,7 @@ show_menu() {
     echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}13. ${LANG[MENU_13]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}14. ${LANG[MENU_14]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
@@ -3161,8 +3366,65 @@ if ! load_language; then
     esac
 fi
 
+# Load command alias if exists
+load_command_alias
+
 show_menu
 reading "${LANG[PROMPT_ACTION]}" OPTION
+
+# Set command alias function
+set_command_alias() {
+    echo -e "${COLOR_GREEN}${LANG[ALIAS_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    
+    # Check if alias already exists
+    if [ -f "$ALIAS_FILE" ]; then
+        CURRENT_ALIAS=$(cat "$ALIAS_FILE")
+        printf "${COLOR_YELLOW}${LANG[ALIAS_CURRENT]}${COLOR_RESET}\n" "$CURRENT_ALIAS"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[ALIAS_NONE]}${COLOR_RESET}"
+    fi
+    
+    echo -e ""
+    reading "${LANG[ALIAS_PROMPT]}" NEW_ALIAS
+    
+    # If input is empty, remove the alias
+    if [ -z "$NEW_ALIAS" ]; then
+        rm -f "$ALIAS_FILE" 2>/dev/null
+        if [ -n "$CURRENT_ALIAS" ]; then
+            rm -f "/usr/local/bin/$CURRENT_ALIAS" 2>/dev/null
+        fi
+        echo -e "${COLOR_GREEN}${LANG[ALIAS_REMOVED]}${COLOR_RESET}"
+    else
+        # Save the new alias
+        echo "$NEW_ALIAS" > "$ALIAS_FILE"
+        
+        # Remove old alias if exists
+        if [ -n "$CURRENT_ALIAS" ] && [ "$CURRENT_ALIAS" != "$NEW_ALIAS" ]; then
+            rm -f "/usr/local/bin/$CURRENT_ALIAS" 2>/dev/null
+        fi
+        
+        # Create symlink for the new alias
+        ln -sf "${DIR_REMNAWAVE}remnawave_reverse" "/usr/local/bin/$NEW_ALIAS"
+        chmod +x "/usr/local/bin/$NEW_ALIAS"
+        printf "${COLOR_GREEN}${LANG[ALIAS_SET]}${COLOR_RESET}\n" "$NEW_ALIAS"
+    fi
+}
+
+# Function to load and setup the alias during script initialization
+load_command_alias() {
+    if [ -f "$ALIAS_FILE" ]; then
+        ALIAS=$(cat "$ALIAS_FILE")
+        if [ -n "$ALIAS" ]; then
+            # Ensure the alias symlink is created
+            ln -sf "${DIR_REMNAWAVE}remnawave_reverse" "/usr/local/bin/$ALIAS"
+            chmod +x "/usr/local/bin/$ALIAS"
+        fi
+    fi
+}
+
+# Load any existing command alias
+load_command_alias
 
 case $OPTION in
     1)
@@ -3265,6 +3527,12 @@ case $OPTION in
         ;;
     13)
         update_remnawave_reverse
+        sleep 2
+        remnawave_reverse
+        log_clear
+        ;;
+    14)
+        set_command_alias
         sleep 2
         remnawave_reverse
         log_clear
