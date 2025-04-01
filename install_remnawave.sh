@@ -220,6 +220,10 @@ declare -A LANG=(
     [ALIAS_PROMPT]="Enter new command alias (leave empty to remove):"
     [ALIAS_SET]="Command alias set to: %s"
     [ALIAS_REMOVED]="Command alias removed. Using default command: remnawave_reverse"
+    #Cron
+    [CRON_NOT_INSTALLED]="Cron is not installed. Installing cron..."
+    [CRON_NOT_RUNNING]="Cron service is not running. Starting cron..."
+    [CRON_UNSUPPORTED_OS]="Unsupported OS for automatic cron installation."
 )
 
 set_language() {
@@ -434,6 +438,10 @@ set_language() {
                 [ALIAS_PROMPT]="Enter new command alias (leave empty to remove):"
                 [ALIAS_SET]="Command alias set to: %s"
                 [ALIAS_REMOVED]="Command alias removed. Using default command: remnawave_reverse"
+                #Cron
+                [CRON_NOT_INSTALLED]="Cron is not installed. Installing cron..."
+                [CRON_NOT_RUNNING]="Cron service is not running. Starting cron..."
+                [CRON_UNSUPPORTED_OS]="Unsupported OS for automatic cron installation."
             )
             ;;
         ru)
@@ -641,6 +649,10 @@ set_language() {
                 [ALIAS_PROMPT]="Введите новый алиас команды (оставьте пустым для удаления):"
                 [ALIAS_SET]="Алиас команды установлен: %s"
                 [ALIAS_REMOVED]="Алиас команды удален. Используется стандартная команда: remnawave_reverse"
+                #Cron
+                [CRON_NOT_INSTALLED]="Cron не установлен. Устанавливаем cron..."
+                [CRON_NOT_RUNNING]="Сервис cron не запущен. Запускаем cron..."
+                [CRON_UNSUPPORTED_OS]="Неподдерживаемая ОС для автоматической установки cron."
             )
             ;;
     esac
@@ -961,6 +973,28 @@ choose_reinstall_type() {
 add_cron_rule() {
     local rule="$1"
     local logged_rule="${rule} >> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
+
+    # Check if cron is installed
+    if ! command -v crontab &> /dev/null; then
+        echo -e "${COLOR_YELLOW}${LANG[CRON_NOT_INSTALLED]}${COLOR_RESET}"
+        if grep -q "Ubuntu" /etc/os-release || grep -q "Debian" /etc/os-release; then
+            apt-get update -y > /dev/null 2>&1
+            apt-get install -y cron > /dev/null 2>&1
+            systemctl enable cron > /dev/null 2>&1
+            systemctl start cron > /dev/null 2>&1
+        else
+            echo -e "${COLOR_RED}${LANG[CRON_UNSUPPORTED_OS]}${COLOR_RESET}"
+            return 1
+        fi
+    fi
+
+    # Check if cron service is running, if not - start it
+    if systemctl is-active --quiet cron; then
+        true # Service is running
+    else
+        echo -e "${COLOR_YELLOW}${LANG[CRON_NOT_RUNNING]}${COLOR_RESET}"
+        systemctl start cron > /dev/null 2>&1
+    fi
 
     if ! crontab -u root -l > /dev/null 2>&1; then
         crontab -u root -l 2>/dev/null | crontab -u root -
