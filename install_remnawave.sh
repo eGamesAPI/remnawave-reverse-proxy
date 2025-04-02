@@ -3,7 +3,7 @@
 SCRIPT_VERSION="1.5.8"
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/blagodaren/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -62,8 +62,9 @@ set_language() {
                 [MENU_11]="Disable IPv6"
                 [MENU_12]="Install random template for selfsteal node"
                 [MENU_13]="Check for updates script"
-                [PROMPT_ACTION]="Select action (0-13):"
-                [INVALID_CHOICE]="Invalid choice. Please select 0-13."
+                [MENU_14]="Manage command alias"
+                [PROMPT_ACTION]="Select action (0-14):"
+                [INVALID_CHOICE]="Invalid choice. Please select 0-14."
                 [EXITING]="Exiting"
                 [WARNING_LABEL]="WARNING:"
                 [CONFIRM_PROMPT]="Enter 'y' to continue or 'n' to exit (y/n):"
@@ -238,6 +239,14 @@ set_language() {
                 [CF_API_CHECK]="Validating Cloudflare API credentials..."
                 [ACME_METHOD]="Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)..."
                 [CERT_GENERATION_FAILED]="Certificate generation failed. Please check your input and DNS settings."
+                # Alias management
+                [ALIAS_TITLE]="Command Alias Management"
+                [ALIAS_CURRENT]="Current alias: %s"
+                [ALIAS_NONE]="No alias currently set. Using standard command: remnawave_reverse"
+                [ALIAS_SET_PROMPT]="Enter new alias for the command (or leave empty to remove):"
+                [ALIAS_SET_SUCCESS]="Alias set successfully. You can now use: %s"
+                [ALIAS_REMOVE_SUCCESS]="Alias removed. Using standard command: remnawave_reverse"
+                [ALIAS_INVALID]="Invalid alias name. Use only letters, numbers, and underscores."
             )
             ;;
         ru)
@@ -262,8 +271,9 @@ set_language() {
                 [MENU_11]="Отключить IPv6"
                 [MENU_12]="Установить случайный шаблон для selfsteal ноды"
                 [MENU_13]="Проверить обновления скрипта"
-                [PROMPT_ACTION]="Выберите действие (0-13):"
-                [INVALID_CHOICE]="Неверный выбор. Выберите 0-13."
+                [MENU_14]="Управление алиасом команды"
+                [PROMPT_ACTION]="Выберите действие (0-14):"
+                [INVALID_CHOICE]="Неверный выбор. Выберите 0-14."
                 [EXITING]="Выход"
                 [WARNING_LABEL]="ВНИМАНИЕ:"
                 [CONFIRM_PROMPT]="Введите 'y' для продолжения или 'n' для выхода (y/n):"
@@ -437,6 +447,14 @@ set_language() {
                 [CF_API_CHECK]="Проверка учетных данных Cloudflare API..."
                 [ACME_METHOD]="Используем ACME (Let's Encrypt) с HTTP-01 вызовом (без поддержки wildcard)..."
                 [CERT_GENERATION_FAILED]="Не удалось сгенерировать сертификаты. Проверьте введенные данные и настройки DNS."
+                # Alias management
+                [ALIAS_TITLE]="Управление алиасом команды"
+                [ALIAS_CURRENT]="Текущий алиас: %s"
+                [ALIAS_NONE]="Алиас не установлен. Используется стандартная команда: remnawave_reverse"
+                [ALIAS_SET_PROMPT]="Введите новый алиас для команды (или оставьте пустым для удаления):"
+                [ALIAS_SET_SUCCESS]="Алиас успешно установлен. Теперь вы можете использовать: %s"
+                [ALIAS_REMOVE_SUCCESS]="Алиас удален. Используется стандартная команда: remnawave_reverse"
+                [ALIAS_INVALID]="Некорректное имя алиаса. Используйте только буквы, цифры и знак подчеркивания."
             )
             ;;
     esac
@@ -693,6 +711,7 @@ show_menu() {
     echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}13. ${LANG[MENU_13]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}14. ${LANG[MENU_14]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[MENU_0]}${COLOR_RESET}"
     echo -e ""
@@ -3145,6 +3164,95 @@ install_script_if_missing() {
         fi
         chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
         ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+        
+        # Check for existing alias in profile files
+        update_shell_aliases
+    fi
+}
+
+# Function to manage command alias
+manage_alias() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[ALIAS_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    
+    ALIAS_FILE="${DIR_REMNAWAVE}command_alias"
+    
+    # Check if alias exists
+    if [ -f "$ALIAS_FILE" ]; then
+        current_alias=$(cat "$ALIAS_FILE")
+        printf "${COLOR_YELLOW}${LANG[ALIAS_CURRENT]}${COLOR_RESET}\n" "$current_alias"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[ALIAS_NONE]}${COLOR_RESET}"
+    fi
+    
+    echo -e ""
+    reading "${LANG[ALIAS_SET_PROMPT]}" NEW_ALIAS
+    
+    if [ -z "$NEW_ALIAS" ]; then
+        # Remove alias if input is empty
+        if [ -f "$ALIAS_FILE" ]; then
+            rm -f "$ALIAS_FILE"
+            remove_shell_alias
+            echo -e "${COLOR_GREEN}${LANG[ALIAS_REMOVE_SUCCESS]}${COLOR_RESET}"
+        else
+            echo -e "${COLOR_GREEN}${LANG[ALIAS_NONE]}${COLOR_RESET}"
+        fi
+    else
+        # Validate alias name (allow only letters, numbers, and underscores)
+        if [[ "$NEW_ALIAS" =~ ^[a-zA-Z0-9_]+$ ]]; then
+            echo "$NEW_ALIAS" > "$ALIAS_FILE"
+            update_shell_aliases
+            printf "${COLOR_GREEN}${LANG[ALIAS_SET_SUCCESS]}${COLOR_RESET}\n" "$NEW_ALIAS"
+        else
+            echo -e "${COLOR_RED}${LANG[ALIAS_INVALID]}${COLOR_RESET}"
+        fi
+    fi
+}
+
+# Function to update shell aliases
+update_shell_aliases() {
+    ALIAS_FILE="${DIR_REMNAWAVE}command_alias"
+    
+    # Remove existing aliases first
+    remove_shell_alias
+    
+    # Add new alias if exists
+    if [ -f "$ALIAS_FILE" ]; then
+        current_alias=$(cat "$ALIAS_FILE")
+        if [ -n "$current_alias" ]; then
+            # Create alias in various profile files
+            for profile_file in ~/.bashrc ~/.zshrc ~/.bash_profile; do
+                if [ -f "$profile_file" ]; then
+                    # Add alias to profile file if not already present
+                    if ! grep -q "alias $current_alias='remnawave_reverse'" "$profile_file"; then
+                        echo "alias $current_alias='remnawave_reverse'" >> "$profile_file"
+                    fi
+                fi
+            done
+            
+            # Create system-wide alias
+            if [ -d "/etc/profile.d" ]; then
+                echo "alias $current_alias='remnawave_reverse'" > "/etc/profile.d/remnawave_alias.sh"
+                chmod +x "/etc/profile.d/remnawave_alias.sh"
+            fi
+        fi
+    fi
+}
+
+# Function to remove shell aliases
+remove_shell_alias() {
+    # Remove from user profile files
+    for profile_file in ~/.bashrc ~/.zshrc ~/.bash_profile; do
+        if [ -f "$profile_file" ]; then
+            # Remove any remnawave alias
+            sed -i '/alias.*=.*remnawave_reverse.*/d' "$profile_file"
+        fi
+    done
+    
+    # Remove system-wide alias
+    if [ -f "/etc/profile.d/remnawave_alias.sh" ]; then
+        rm -f "/etc/profile.d/remnawave_alias.sh"
     fi
 }
 
@@ -3265,6 +3373,12 @@ case $OPTION in
         ;;
     13)
         update_remnawave_reverse
+        sleep 2
+        remnawave_reverse
+        log_clear
+        ;;
+    14)
+        manage_alias
         sleep 2
         remnawave_reverse
         log_clear
