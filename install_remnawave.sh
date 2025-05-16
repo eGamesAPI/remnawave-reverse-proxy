@@ -2605,6 +2605,9 @@ networks:
   remnawave-network:
     name: remnawave-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
     external: false
 
 volumes:
@@ -2753,7 +2756,7 @@ EOL
 
     spinner $! "${LANG[WAITING]}"
 
-    remnawave_network_subnet=$(docker network inspect remnawave-network | grep -oP '"Subnet": "\K[^"]+')
+    remnawave_network_subnet=172.30.0.0/16
     ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp
      
     local domain_url="127.0.0.1:3000"
