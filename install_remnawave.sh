@@ -161,6 +161,10 @@ set_language() {
                 [UNPACK_ERROR]="Error unpacking archive"
                 [TEMPLATE_COPY]="Template copied to /var/www/html/"
                 [SELECT_TEMPLATE]="Selected template:"
+                [INSTALL_UTILS_PACKAGES]="Installing required utilities"
+                [ALL_UTILS_INSTALLED]="All required utilities are already installed"
+                [INSTALL_DOCKER_PACKAGES]="Installing Docker packages"
+                [ALL_DOCKER_INSTALLED]="All Docker packages are already installed"
                 #Error
                 [ERROR_TOKEN]="Failed to get token."
                 [ERROR_EXTRACT_TOKEN]="Failed to extract token from response."
@@ -457,6 +461,10 @@ set_language() {
                 [RANDOM_TEMPLATE]="Установка случайного шаблона для маскировочного сайта"
                 [TEMPLATE_COPY]="Шаблон скопирован в /var/www/html/"
                 [SELECT_TEMPLATE]="Выбран шаблон:"
+                [INSTALL_UTILS_PACKAGES]="Установка необходимых утилит"
+                [ALL_UTILS_INSTALLED]="Все необходимые утилиты уже установлены"
+                [INSTALL_DOCKER_PACKAGES]="Установка Docker-пакетов"
+                [ALL_DOCKER_INSTALLED]="Все Docker-пакеты уже установлены"
                 #Error
                 [ERROR_TOKEN]="Не удалось получить токен."
                 [ERROR_EXTRACT_TOKEN]="Не удалось извлечь токен из ответа."
@@ -1696,26 +1704,53 @@ randomhtml() {
 #Manage Template for steal
 
 install_packages() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
-    apt-get update -y
-    apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk
+    # Установка утилит
+    echo -e "${COLOR_YELLOW}${LANG[INSTALL_UTILS_PACKAGES]}${COLOR_RESET}"
 
-    if ! dpkg -l | grep -q '^ii.*cron '; then
-        apt-get install -y cron
+    DEPS_CHECK=(
+      ca-certificates         ca-certificates
+      curl                    curl
+      jq                      jq
+      ufw                     ufw
+      wget                    wget
+      gnupg                   gnupg
+      unzip                   unzip
+      nano                    nano
+      dialog                  dialog
+      git                     git
+      certbot                 certbot
+      python3-certbot-dns-cloudflare python3-certbot-dns-cloudflare
+      unattended-upgrades     unattended-upgrades
+      locales                 locales
+      dnsutils                dnsutils
+      coreutils               coreutils
+      grep                    grep
+      gawk                    gawk
+    )
+
+    DEPS_PACK=()
+
+    # Проверка и установка утилит
+    for ((i=0; i<${#DEPS_CHECK[@]}; i+=2)); do
+        bin="${DEPS_CHECK[i]}"
+        pkg="${DEPS_CHECK[i+1]}"
+
+        if command -v "$bin" >/dev/null 2>&1 || dpkg -s "$pkg" >/dev/null 2>&1; then
+            continue
+        fi
+
+        DEPS_PACK+=("$pkg")
+    done
+
+    if [ "${#DEPS_PACK[@]}" -gt 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[INSTALL_UTILS_PACKAGES]}: ${DEPS_PACK[*]}${COLOR_RESET}"
+        apt-get update -y
+        apt-get install -y "${DEPS_PACK[@]}"
+    else
+        echo -e "${COLOR_GREEN}${LANG[ALL_UTILS_INSTALLED]}${COLOR_RESET}"
     fi
 
-    if ! systemctl is-active --quiet cron; then
-        systemctl start cron || {
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-        }
-    fi
-
-    if ! systemctl is-enabled --quiet cron; then
-        systemctl enable cron || {
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-        }
-    fi
-
+    # Локаль
     if ! grep -q "^en_US.UTF-8 UTF-8" /etc/locale.gen; then
         if grep -q "^# en_US.UTF-8 UTF-8" /etc/locale.gen; then
             sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -1726,44 +1761,81 @@ install_packages() {
     locale-gen
     update-locale LANG=en_US.UTF-8
 
+    # Репозитории Docker
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          | tee /etc/apt/keyrings/docker.asc > /dev/null
         chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+          https://download.docker.com/linux/ubuntu \
+          $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
+          > /etc/apt/sources.list.d/docker.list
+
     elif grep -q "Debian" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/debian/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null
+        curl -fsSL https://download.docker.com/linux/debian/gpg \
+          | tee /etc/apt/keyrings/docker.asc > /dev/null
         chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+          https://download.docker.com/linux/debian \
+          $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
+          > /etc/apt/sources.list.d/docker.list
     fi
 
-    apt-get update
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    # Установка Docker-пакетов
+    DEPS_CHECK=(
+      docker          docker-ce-cli
+      containerd      containerd.io
+      docker-buildx   docker-buildx-plugin
+      docker-compose  docker-compose-plugin
+    )
+    DEPS_PACK=()
+
+    echo -e "${COLOR_YELLOW}${LANG[INSTALL_DOCKER_PACKAGES]}${COLOR_RESET}"
+    for ((i=0; i<${#DEPS_CHECK[@]}; i+=2)); do
+        bin="${DEPS_CHECK[i]}"
+        pkg="${DEPS_CHECK[i+1]}"
+
+        if command -v "$bin" >/dev/null 2>&1 || dpkg -s "$pkg" >/dev/null 2>&1; then
+            continue
+        fi
+
+        DEPS_PACK+=("$pkg")
+    done
+
+    if [ "${#DEPS_PACK[@]}" -gt 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[INSTALL_DOCKER_PACKAGES]}: ${DEPS_PACK[*]}${COLOR_RESET}"
+        apt-get update -y
+        apt-get install -y "${DEPS_PACK[@]}"
+    else
+        echo -e "${COLOR_GREEN}${LANG[ALL_DOCKER_INSTALLED]}${COLOR_RESET}"
+    fi
 
     # BBR
-    if ! grep -q "net.core.default_qdisc = fq" /etc/sysctl.conf; then
-        echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-    fi
-    if ! grep -q "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf; then
-        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-    fi
+    grep -qxF "net.core.default_qdisc = fq" /etc/sysctl.conf \
+      || echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    grep -qxF "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf \
+      || echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
 
     # UFW
     ufw --force reset
-    ufw allow 22/tcp comment 'SSH'
+    ufw limit 22/tcp comment 'SSH'
     ufw allow 443/tcp comment 'HTTPS'
     ufw --force enable
 
-    # Unattended-upgrade
-    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
+    # Unattended-upgrades
+    echo 'Unattended-Upgrade::Mail "root";' \
+      >> /etc/apt/apt.conf.d/50unattended-upgrades
+    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true \
+      | debconf-set-selections
     dpkg-reconfigure -f noninteractive unattended-upgrades
     systemctl restart unattended-upgrades
 
-    touch ${DIR_REMNAWAVE}install_packages
+    touch "${DIR_REMNAWAVE}install_packages"
     clear
 }
+
 
 extract_domain() {
     local SUBDOMAIN=$1
