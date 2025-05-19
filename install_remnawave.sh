@@ -1764,23 +1764,14 @@ install_packages() {
     # Репозитории Docker
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-          | tee /etc/apt/keyrings/docker.asc > /dev/null
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null
         chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-          https://download.docker.com/linux/ubuntu \
-          $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
-          > /etc/apt/sources.list.d/docker.list
-
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
     elif grep -q "Debian" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/debian/gpg \
-          | tee /etc/apt/keyrings/docker.asc > /dev/null
+        curl -fsSL https://download.docker.com/linux/debian/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null
         chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-          https://download.docker.com/linux/debian \
-          $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" \
-          > /etc/apt/sources.list.d/docker.list
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
     fi
 
     # Установка Docker-пакетов
@@ -1813,10 +1804,12 @@ install_packages() {
     fi
 
     # BBR
-    grep -qxF "net.core.default_qdisc = fq" /etc/sysctl.conf \
-      || echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-    grep -qxF "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf \
-      || echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    if ! grep -q "net.core.default_qdisc = fq" /etc/sysctl.conf; then
+        echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    fi
+    if ! grep -q "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    fi
 
     # UFW
     ufw --force reset
@@ -1825,10 +1818,8 @@ install_packages() {
     ufw --force enable
 
     # Unattended-upgrades
-    echo 'Unattended-Upgrade::Mail "root";' \
-      >> /etc/apt/apt.conf.d/50unattended-upgrades
-    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true \
-      | debconf-set-selections
+    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+    echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
     dpkg-reconfigure -f noninteractive unattended-upgrades
     systemctl restart unattended-upgrades
 
