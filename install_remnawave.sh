@@ -1704,8 +1704,7 @@ randomhtml() {
 #Manage Template for steal
 
 install_packages() {
-    # Установка утилит
-    echo -e "${COLOR_YELLOW}${LANG[INSTALL_UTILS_PACKAGES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
 
     DEPS_CHECK=(
       ca-certificates         ca-certificates
@@ -1750,7 +1749,6 @@ install_packages() {
         echo -e "${COLOR_GREEN}${LANG[ALL_UTILS_INSTALLED]}${COLOR_RESET}"
     fi
 
-    # Локаль
     if ! grep -q "^en_US.UTF-8 UTF-8" /etc/locale.gen; then
         if grep -q "^# en_US.UTF-8 UTF-8" /etc/locale.gen; then
             sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
@@ -1761,7 +1759,6 @@ install_packages() {
     locale-gen
     update-locale LANG=en_US.UTF-8
 
-    # Репозитории Docker
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null
@@ -1774,7 +1771,6 @@ install_packages() {
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
     fi
 
-    # Установка Docker-пакетов
     DEPS_CHECK=(
       docker          docker-ce-cli
       containerd      containerd.io
@@ -1817,16 +1813,15 @@ install_packages() {
     ufw allow 443/tcp comment 'HTTPS'
     ufw --force enable
 
-    # Unattended-upgrades
+    # Unattended-upgrade
     echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
     echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
     dpkg-reconfigure -f noninteractive unattended-upgrades
     systemctl restart unattended-upgrades
 
-    touch "${DIR_REMNAWAVE}install_packages"
+    touch ${DIR_REMNAWAVE}install_packages
     clear
 }
-
 
 extract_domain() {
     local SUBDOMAIN=$1
