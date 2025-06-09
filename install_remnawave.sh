@@ -88,10 +88,11 @@ set_language() {
                 [MENU_8]="Install random template for selfsteal node"
                 [MENU_9]="Manage panel access (Only for panel + node)"
                 [MENU_10]="Custom rules template from legiz"
-                [MENU_11]="Certificates"
-                [MENU_12]="Check for updates script"
-                [PROMPT_ACTION]="Select action (0-12):"
-                [INVALID_CHOICE]="Invalid choice. Please select 0-12."
+                [MENU_11]="Custom sub page extensions from legiz"
+                [MENU_12]="Certificates"
+                [MENU_13]="Check for updates script"
+                [PROMPT_ACTION]="Select action (0-13):"
+                [INVALID_CHOICE]="Invalid choice. Please select 0-13."
                 [WARNING_LABEL]="WARNING:"
                 [CONFIRM_PROMPT]="Enter 'y' to continue or 'n' to exit (y/n):"
                 [WARNING_NODE_PANEL]="Adding a node should only be done on the server where the panel is installed, not on the node server."
@@ -322,6 +323,17 @@ set_language() {
                 [PORT_8443_CLOSED]="Port 8443 has been closed."
                 [NGINX_CONF_NOT_FOUND]="File nginx.conf not found in $dir"
                 [NGINX_CONF_ERROR]="Failed to extract necessary parameters from nginx.conf"
+                # Sub Page Upload
+                [SUB_PAGE_NOT_APPLIED]="Custom sub page template not applied"
+                [UPLOADING_SUB_PAGE]="Uploading custom sub page template..."
+                [ERROR_FETCH_SUB_PAGE]="Failed to fetch custom sub page template."
+                [ERROR_EMPTY_RESPONSE_SUB_PAGE]="Empty response from API when updating template."
+                [ERROR_UPDATE_SUB_PAGE]="Failed to update custom sub page template"
+                [SUB_PAGE_UPDATED_SUCCESS]="Custom sub page template successfully updated."
+                [SELECT_SUB_PAGE_CUSTOM]="Select action (0-4):"
+                [SELECT_SUB_PAGE_CUSTOM1]="Select Custom Sub Page Template\nOnly run on panel server"
+                [SUB_PAGE_SELECT_CHOICE]="Invalid choice. Please select 0-4."
+                [RESTORE_SUB_PAGE]="Restore default sub page"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Custom rules template not applied"
                 [UPLOADING_TEMPLATE]="Uploading custom rules template..."
@@ -409,10 +421,11 @@ set_language() {
                 [MENU_8]="Установить случайный шаблон для selfsteal ноды"
                 [MENU_9]="Управление доступом к панели (Только для панели + нода)"
                 [MENU_10]="Кастомные шаблоны правил от legiz"
-                [MENU_11]="Управление сертификатами"
-                [MENU_12]="Проверить обновления скрипта"
-                [PROMPT_ACTION]="Выберите действие (0-12):"
-                [INVALID_CHOICE]="Неверный выбор. Выберите 0-12."
+                [MENU_11]="Кастомные расширения страницы подписки от legiz"
+                [MENU_12]="Управление сертификатами"
+                [MENU_13]="Проверить обновления скрипта"
+                [PROMPT_ACTION]="Выберите действие (0-13):"
+                [INVALID_CHOICE]="Неверный выбор. Выберите 0-13."
                 [WARNING_LABEL]="ВНИМАНИЕ:"
                 [CONFIRM_PROMPT]="Введите 'y' для продолжения или 'n' для выхода (y/n):"
                 [WARNING_NODE_PANEL]="Добавление ноды должно выполняться только на сервере, где установлена панель, а не на сервере ноды."
@@ -642,6 +655,17 @@ set_language() {
                 [PORT_8443_CLOSED]="Порт 8443 закрыт."
                 [NGINX_CONF_NOT_FOUND]="Файл nginx.conf не найден в $dir"
                 [NGINX_CONF_ERROR]="Не удалось извлечь необходимые параметры из nginx.conf"
+                # Sub Page Upload
+                [SUB_PAGE_NOT_APPLIED]="Пользовательский шаблон страницы подписки не применён"
+                [UPLOADING_SUB_PAGE]="Загрузка пользовательского шаблона страницы подписки..."
+                [ERROR_FETCH_SUB_PAGE]="Не удалось получить пользовательский шаблон страницы подписки."
+                [ERROR_EMPTY_RESPONSE_SUB_PAGE]="Пустой ответ от API при обновлении шаблона страницы подписки."
+                [ERROR_UPDATE_SUB_PAGE]="Не удалось обновить пользовательский шаблон страницы подписки"
+                [SUB_PAGE_UPDATED_SUCCESS]="Пользовательский шаблон страницы подписки успешно обновлён."
+                [SELECT_SUB_PAGE_CUSTOM]="Выберите действие (0–4):"
+                [SELECT_SUB_PAGE_CUSTOM1]="Выбор пользовательского шаблона страницы подписки\nДоступно только на сервере панели"
+                [SUB_PAGE_SELECT_CHOICE]="Недопустимый выбор. Пожалуйста, выберите от 0 до 4."
+                [RESTORE_SUB_PAGE]="Восстановить шаблон страницы подписки по умолчанию"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Шаблон правил не применён"
                 [UPLOADING_TEMPLATE]="Загрузка шаблона правил..."
@@ -943,9 +967,10 @@ show_menu() {
     echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Install random template
     echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage panel access
     echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Upload custom template from legiz
-    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Manage certificates
+    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Upload custom sub page extensions from legiz
+    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}" # Manage certificates
     echo -e ""
-    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}" # Check for updates
+    echo -e "${COLOR_YELLOW}13. ${LANG[MENU_13]}${COLOR_RESET}" # Check for updates
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -1337,6 +1362,72 @@ manage_template_upload() {
             sleep 2
             log_clear
             manage_template_upload
+            ;;
+    esac
+}
+
+show_sub_page_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[SELECT_SUB_PAGE_CUSTOM1]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. simple custom app list (clash and sing)${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. multiapp custom app list${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. marzbanify web page template (clash and sing)${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[RESTORE_SUB_PAGE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+}
+
+manage_sub_page_upload() {
+    show_sub_page_menu
+    reading "${LANG[SELECT_SUB_PAGE_CUSTOM]}" SUB_PAGE_OPTION
+    case $SUB_PAGE_OPTION in
+        1)
+            curl -L -o /opt/remnawave/app-config.json "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/app-config.json"
+            yq eval '
+                .services."remnawave-subscription-page".volumes 
+                |= ([.[] | select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json")] + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
+            ' -i /opt/remnawave/docker-compose.yml
+            cd /opt/remnawave
+            docker compose down remnawave-subscription-page
+            docker compose up -d remnawave-subscription-page
+            ;;
+        2)
+            curl -L -o /opt/remnawave/app-config.json "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/multiapp/app-config.json"
+            yq eval '
+                .services."remnawave-subscription-page".volumes 
+                |= ([.[] | select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json")] + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
+            ' -i /opt/remnawave/docker-compose.yml
+            cd /opt/remnawave
+            docker compose down remnawave-subscription-page
+            docker compose up -d remnawave-subscription-page
+            ;;
+        3)
+            curl -L -o /opt/remnawave/index.html "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/customweb/clash-sing/index.html"
+            yq eval '
+                .services."remnawave-subscription-page".volumes 
+                |= ([.[] | select(. != "./index.html:/opt/app/frontend/index.html")] + ["./index.html:/opt/app/frontend/index.html"])
+            ' -i /opt/remnawave/docker-compose.yml
+            cd /opt/remnawave
+            docker compose down remnawave-subscription-page
+            docker compose up -d remnawave-subscription-page
+            ;;
+        4)
+            yq eval 'del(.services."remnawave-subscription-page".volumes)' -i /opt/remnawave/docker-compose.yml
+            cd /opt/remnawave
+            docker compose down remnawave-subscription-page
+            docker compose up -d remnawave-subscription-page
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[TEMPLATE_SUB_PAGE_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            log_clear
+            manage_sub_page_upload
             ;;
     esac
 }
@@ -1840,7 +1931,7 @@ install_packages() {
         return 1
     fi
 
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk; then
+    if ! apt-get install -y ca-certificates curl jq yq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
     fi
@@ -4724,12 +4815,18 @@ case $OPTION in
         remnawave_reverse
         ;;
     11)
-        manage_certificates
+        manage_sub_page_upload
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     12)
+        manage_certificates
+        sleep 2
+        log_clear
+        remnawave_reverse
+        ;;
+    13)
         update_remnawave_reverse
         sleep 2
         log_clear
