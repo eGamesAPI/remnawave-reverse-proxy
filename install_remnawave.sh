@@ -327,7 +327,6 @@ set_language() {
                 [SUB_PAGE_NOT_APPLIED]="Custom sub page template not applied"
                 [UPLOADING_SUB_PAGE]="Uploading custom sub page template..."
                 [ERROR_FETCH_SUB_PAGE]="Failed to fetch custom sub page template."
-                [ERROR_EMPTY_RESPONSE_SUB_PAGE]="Empty response from API when updating template."
                 [ERROR_UPDATE_SUB_PAGE]="Failed to update custom sub page template"
                 [SUB_PAGE_UPDATED_SUCCESS]="Custom sub page template successfully updated."
                 [SELECT_SUB_PAGE_CUSTOM]="Select action (0-4):"
@@ -659,7 +658,6 @@ set_language() {
                 [SUB_PAGE_NOT_APPLIED]="Пользовательский шаблон страницы подписки не применён"
                 [UPLOADING_SUB_PAGE]="Загрузка пользовательского шаблона страницы подписки..."
                 [ERROR_FETCH_SUB_PAGE]="Не удалось получить пользовательский шаблон страницы подписки."
-                [ERROR_EMPTY_RESPONSE_SUB_PAGE]="Пустой ответ от API при обновлении шаблона страницы подписки."
                 [ERROR_UPDATE_SUB_PAGE]="Не удалось обновить пользовательский шаблон страницы подписки"
                 [SUB_PAGE_UPDATED_SUCCESS]="Пользовательский шаблон страницы подписки успешно обновлён."
                 [SELECT_SUB_PAGE_CUSTOM]="Выберите действие (0–4):"
@@ -1385,36 +1383,42 @@ manage_sub_page_upload() {
     case $SUB_PAGE_OPTION in
         1)
             curl -L -o /opt/remnawave/app-config.json "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/app-config.json"
-            yq eval '
-                .services."remnawave-subscription-page".volumes 
-                |= ([.[] | select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json")] + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
-            ' -i /opt/remnawave/docker-compose.yml
+            yq -Yi '
+              .services."remnawave-subscription-page".volumes = 
+                ((.services."remnawave-subscription-page".volumes // []) 
+                  | map(select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json"))
+                  + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
+            ' /opt/remnawave/docker-compose.yml
             cd /opt/remnawave
             docker compose down remnawave-subscription-page
             docker compose up -d remnawave-subscription-page
             ;;
         2)
             curl -L -o /opt/remnawave/app-config.json "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/multiapp/app-config.json"
-            yq eval '
-                .services."remnawave-subscription-page".volumes 
-                |= ([.[] | select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json")] + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
-            ' -i /opt/remnawave/docker-compose.yml
+            yq -Yi '
+              .services."remnawave-subscription-page".volumes = 
+                ((.services."remnawave-subscription-page".volumes // []) 
+                  | map(select(. != "./app-config.json:/opt/app/frontend/assets/app-config.json"))
+                  + ["./app-config.json:/opt/app/frontend/assets/app-config.json"])
+            ' /opt/remnawave/docker-compose.yml
             cd /opt/remnawave
             docker compose down remnawave-subscription-page
             docker compose up -d remnawave-subscription-page
             ;;
         3)
             curl -L -o /opt/remnawave/index.html "https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/customweb/clash-sing/index.html"
-            yq eval '
-                .services."remnawave-subscription-page".volumes 
-                |= ([.[] | select(. != "./index.html:/opt/app/frontend/index.html")] + ["./index.html:/opt/app/frontend/index.html"])
-            ' -i /opt/remnawave/docker-compose.yml
+            yq -Yi '
+              .services."remnawave-subscription-page".volumes = 
+                ((.services."remnawave-subscription-page".volumes // []) 
+                  | map(select(. != "./index.html:/opt/app/frontend/index.html"))
+                  + ["./index.html:/opt/app/frontend/index.html"])
+            ' /opt/remnawave/docker-compose.yml
             cd /opt/remnawave
             docker compose down remnawave-subscription-page
             docker compose up -d remnawave-subscription-page
             ;;
         4)
-            yq eval 'del(.services."remnawave-subscription-page".volumes)' -i /opt/remnawave/docker-compose.yml
+            yq -Yi 'del(.services."remnawave-subscription-page".volumes)' /opt/remnawave/docker-compose.yml
             cd /opt/remnawave
             docker compose down remnawave-subscription-page
             docker compose up -d remnawave-subscription-page
