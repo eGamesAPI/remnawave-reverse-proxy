@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.0.8"
+SCRIPT_VERSION="2.0.9"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -372,6 +372,14 @@ set_language() {
                 [SUB_WITH_APPCONFIG_SKIP]="No, skip app-config.json"
                 [SUB_WITH_APPCONFIG_INVALID]="Invalid option, skipping app-config.json"
                 [SUB_WITH_APPCONFIG_INPUT]="Select action (0-3):"
+                # Custom Branding
+                [BRANDING_SUPPORT_ASK]="Add branding support to subscription page?"
+                [BRANDING_SUPPORT_YES]="Yes, add branding support"
+                [BRANDING_SUPPORT_NO]="No, skip branding"
+                [BRANDING_NAME_PROMPT]="Enter your brand name:"
+                [BRANDING_SUPPORT_URL_PROMPT]="Enter your support page URL:"
+                [BRANDING_LOGO_URL_PROMPT]="Enter your brand logo URL:"
+                [BRANDING_ADDED_SUCCESS]="Branding configuration successfully added"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Custom rules template not applied"
                 [UPLOADING_TEMPLATE]="Uploading custom rules template..."
@@ -747,6 +755,14 @@ set_language() {
                 [SUB_WITH_APPCONFIG_SKIP]="Нет, пропустить добавление конфигурации"
                 [SUB_WITH_APPCONFIG_INVALID]="Неверный выбор, конфигурация не будет добавлена"
                 [SUB_WITH_APPCONFIG_INPUT]="Выберите действие (0–3):"
+                # Custom Branding
+                [BRANDING_SUPPORT_ASK]="Добавить поддержку брендирования страницы подписки?"
+                [BRANDING_SUPPORT_YES]="Да, добавить поддержку брендирования"
+                [BRANDING_SUPPORT_NO]="Нет, пропустить брендирование"
+                [BRANDING_NAME_PROMPT]="Введите название вашего бренда:"
+                [BRANDING_SUPPORT_URL_PROMPT]="Введите ссылку на страницу поддержки:"
+                [BRANDING_LOGO_URL_PROMPT]="Введите ссылку на логотип вашего бренда:"
+                [BRANDING_ADDED_SUCCESS]="Конфигурация брендирования успешно добавлена"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Шаблон правил не применён"
                 [UPLOADING_TEMPLATE]="Загрузка шаблона правил..."
@@ -2330,6 +2346,47 @@ download_with_fallback() {
     fi
 }
 
+branding_add_to_appconfig() {
+    local config_file="$1"
+    
+    if [ ! -f "$config_file" ]; then
+        echo -e "${COLOR_RED}Config file not found: $config_file${COLOR_RESET}"
+        return 1
+    fi
+    
+    echo -e "${COLOR_GREEN}${LANG[BRANDING_SUPPORT_ASK]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[BRANDING_SUPPORT_YES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[BRANDING_SUPPORT_NO]}${COLOR_RESET}"
+    echo -e ""
+    reading "Select option (1-2):" BRANDING_OPTION
+
+    case $BRANDING_OPTION in
+        1)
+            reading "${LANG[BRANDING_NAME_PROMPT]}" BRAND_NAME
+            reading "${LANG[BRANDING_SUPPORT_URL_PROMPT]}" SUPPORT_URL
+            reading "${LANG[BRANDING_LOGO_URL_PROMPT]}" LOGO_URL
+            
+            jq --arg name "$BRAND_NAME" \
+               --arg supportUrl "$SUPPORT_URL" \
+               --arg logoUrl "$LOGO_URL" \
+               '.config.branding = {
+                   "name": $name,
+                   "supportUrl": $supportUrl,
+                   "logoUrl": $logoUrl
+               }' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+            
+            echo -e "${COLOR_GREEN}${LANG[BRANDING_ADDED_SUCCESS]}${COLOR_RESET}"
+            ;;
+        2)
+            echo -e "${COLOR_YELLOW}${LANG[BRANDING_SUPPORT_NO]}${COLOR_RESET}"
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+            ;;
+    esac
+}
+
 manage_sub_page_upload() {
     if ! docker ps -a --filter "name=remnawave-subscription-page" --format '{{.Names}}' | grep -q "^remnawave-subscription-page$"; then
         printf "${COLOR_RED}${LANG[CONTAINER_NOT_FOUND]}${COLOR_RESET}\n" "remnawave-subscription-page"
@@ -2366,6 +2423,8 @@ manage_sub_page_upload() {
                 log_clear
                 return 1
             fi
+
+            branding_add_to_appconfig "$config_file"
 
             /usr/bin/yq eval 'del(.services."remnawave-subscription-page".volumes)' -i "$docker_compose_file"
             /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./app-config.json:/opt/app/frontend/assets/app-config.json"]' -i "$docker_compose_file"
@@ -2413,6 +2472,8 @@ manage_sub_page_upload() {
                         log_clear
                         return 1
                     fi
+
+                    branding_add_to_appconfig "$config_file"
                     ;;
                 0)
                     [ -f "$config_file" ] && rm -f "$config_file"
@@ -2474,6 +2535,7 @@ manage_sub_page_upload() {
                         log_clear
                         return 1
                     fi
+                    branding_add_to_appconfig "$config_file"
                     ;;
                 0)
                     [ -f "$config_file" ] && rm -f "$config_file"
