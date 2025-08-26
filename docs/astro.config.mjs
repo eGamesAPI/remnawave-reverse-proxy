@@ -34,8 +34,8 @@ export default defineConfig({
 				starlightKbd({
 					globalPicker: false,
 					types: [
-						{ id: 'mac', label: 'macOS' },
-						{ id: 'windows', label: 'Windows', default: true },
+						{ id: 'mac', label: 'macOS', default: true },
+						{ id: 'windows', label: 'Windows' },
 						{ id: 'linux', label: 'Linux' },
 					]
 				})
@@ -64,7 +64,7 @@ export default defineConfig({
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/eGamesAPI/remnawave-reverse-proxy/' },
 				{ icon: 'telegram', label: 'Telegram', href: 'https://t.me/remnawave_reverse' },
-				{ icon: 'seti:zip', label: 'Used resources', href: '../../contribution/resources' }
+				{ icon: 'seti:folder', label: 'Used resources', href: '../../contribution/resources' }
 			],
 			sidebar: [
 				{
@@ -87,13 +87,12 @@ export default defineConfig({
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
 						{ label: 'Access to Prometheus metrics', slug: 'configuration/prometheus-metrics', translations: { ru: 'Доступ к метрикам Prometheus' } },
-						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'External access to API', slug: 'configuration/external-api', translations: { ru: 'Внешний доступ к API' } },
-						{ label: 'Monitoring with Grafana', slug: 'configuration/monitoring-with-grafana', translations: { ru: 'Мониторинг через Grafana' } },
-						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
+						//{ label: 'Monitoring with Grafana', slug: 'configuration/grafana-monitoring', translations: { ru: 'Мониторинг через Grafana' } },
+						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitor', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
-						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
 						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
+						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 					],
 				},
 				{
@@ -120,5 +119,6 @@ export default defineConfig({
 
 // TODO:
 // add https://starlight-github-alerts.netlify.app/getting-started/
+// add more content to the "Common Issues" page
 // https://www.create.bingo/
 // https://octo.guide/
