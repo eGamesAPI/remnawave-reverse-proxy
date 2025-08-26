@@ -92,7 +92,7 @@ export default defineConfig({
 						{ label: 'Monitoring with Grafana', slug: 'configuration/monitoring-with-grafana', translations: { ru: 'Мониторинг через Grafana' } },
 						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
-						{ label: 'Secure Web Application Gateway', slug: 'configuration/swag', translations: { ru: 'Secure Web Application Gateway' }, badge: {text: '❌ WIP', variant: 'caution'} },
+						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
 						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
 					],
 				},
