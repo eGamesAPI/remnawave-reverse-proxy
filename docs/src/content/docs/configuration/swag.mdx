@@ -1,21 +1,19 @@
 ---
-title: Replacing default nginx with SWAG and configuring it for Remnawave
-description: A guide on installing and configuring SWAG to replace the default nginx in Remnawave.
+title: Replacing default nginx with SWAG (Secure Web Application Gateway) and configuring it for Remnawave
+description: A guide on installing and configuring SWAG (Secure Web Application Gateway) to replace the default nginx in Remnawave.
 ---
 
-import { Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges, LinkCard } from '@astrojs/starlight/components';
+import { Aside, Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges, LinkCard } from '@astrojs/starlight/components';
 
 :::danger[Warning]
 This is the preview version of this page and a lot of things may change in future.
 :::
 
-First, you need to decide whether you want to use [SWAG](https://github.com/linuxserver/docker-swag) or stick with the default nginx configuration. SWAG is a popular and easy choice for reverse proxy setups, especially when you've got a lot of stacks/containers to manage. It comes with built-it cert renewal, templates for various containers, which are a bit changed for beginner-friendly experience.
-
-There are 2 ways. You are "geek" and you stick to [Pingora](https://github.com/cloudflare/pingora)/[River](https://github.com/memorysafety/river) or you are "normal" and you use default Nginx because you don't want to deal with it, aight? SWAG is same nginx you familiar with (watch the pic below), but with some extra features and easier configuration. 
-
 :::tip[Contribution]
-Your critisizm won't be even viewed. However, I appreciate any feedback for IMPROVING it!
+Criticism is not welcome (read below) as it is our personal preference on how we configure our setup. However, I appreciate any feedback for IMPROVING it!
 :::
+
+First, you need to decide whether you want to use [SWAG](https://github.com/linuxserver/docker-swag) or stick with the default nginx configuration. SWAG (Secure Web Application Gateway) is a popular and easy choice for reverse proxy setups, especially when you've got a lot of stacks/containers to manage. It comes with built-it cert renewal, templates for various containers, which are a bit changed for beginner-friendly experience. SWAG is same nginx you familiar with (watch the pic below), but with some extra features and easier configuration. 
 
 <div style={{ display: 'flex', justifyContent: 'center' }}>
   <img 
@@ -25,15 +23,11 @@ Your critisizm won't be even viewed. However, I appreciate any feedback for IMPR
   />
 </div>
 
-:::danger[Important]
-You can't use SWAG if you installed Panel and Node on one machine. Panel and node installation uses nginx.sock, but for some reason I didn't manage to make SWAG remove it, so you don't have to manually stop it. Otherwise it will give you a message that sock is already used.
-:::
+<Aside type="caution" title="Important" icon="seti:todo">
+  You can't use SWAG if you installed Panel and Node on one machine. Panel and node installation uses nginx.sock, but for some reason I didn't manage to make SWAG remove it, so you don't have to manually stop it. Otherwise it will give you a message that sock is already used.
+</Aside>
 
 ## Installing SWAG
-
-:::note
-All steps were reproduced under root.
-:::
 
 <Steps>
 
