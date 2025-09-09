@@ -256,7 +256,7 @@ import { Aside, Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges
     nano /opt/remnawave/nginx.conf
     ```
 
-7. Найдите блок server и замените `olddomain.com` на `newdomain.com`:
+7. Найдите блок панели server и замените `olddomain.com` на `newdomain.com`:
 
     ```nginx title="nginx.conf" "newdomain.com"
     server {
@@ -297,23 +297,40 @@ import { Aside, Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges
     }
     ```
 
-8. Запустите скрипт remnawave_reverse
+8. Найдите блок ноды server и замените `olddomain.com` на `newdomain.com`:
+
+    ```nginx title="nginx.conf" "newdomain.com"
+    server {
+        server_name newdomain.com;
+        listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+        http2 on;
+
+        ssl_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+        ssl_certificate_key "/etc/nginx/ssl/newdomain.com/privkey.pem";
+        ssl_trusted_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+
+        root /var/www/html;
+        index index.html;
+    }
+    ```
+
+9. Запустите скрипт remnawave_reverse
 
     ```bash
     remnawave_reverse
     ```
 
-9. Выберите пункт 3: `Управление панелью/нодой`
+10. Выберите пункт 3: `Управление панелью/нодой`
 
-10. Выберите пункт 6: `Доступ к панели через порт 8443 (только для панели + ноды)`
+11. Выберите пункт 6: `Доступ к панели через порт 8443 (только для панели + ноды)`
 
-11. Перейдите в браузере по адресу, который выдал скрипт
+12. Перейдите в браузере по адресу, который выдал скрипт
 
-12. Войдите в панель Remnawave и перейдите в раздел Ноды --> Управление
+13. Войдите в панель Remnawave и перейдите в раздел Ноды --> Управление
 
-13. Выберите вашу ноду (Steal)
+14. Выберите вашу ноду (Steal)
 
-14. Измените поле Адрес на 172.30.0.1
+15. Измените поле Адрес на 172.30.0.1
 
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <img 
@@ -325,13 +342,25 @@ import { Aside, Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges
 
 16. Нажмите Сохранить
 
-17. Закройте доступ к порту 8443 через скрипт remnawave_reverse
+17. Перейдите в раздел Хосты --> Ваш Хост
+
+18. В поле Адрес введите новый домен, например `newdomain.com`
+
+19. Нажмите Сохранить
+
+20. Перейдите в раздел Профили --> Ваш профиль (StealConfig)
+
+21. Измените "serverNames" на новый домен, например `newdomain.com`
+
+22. Нажмите Сохранить
+
+23. Закройте доступ к порту 8443 через скрипт remnawave_reverse
 
     ```bash
     remnawave_reverse
     ```
 
-18. Перезапустите сервисы:
+24. Перезапустите сервисы:
 
     ```bash
     cd /opt/remnawave && docker compose down && docker compose up -d
