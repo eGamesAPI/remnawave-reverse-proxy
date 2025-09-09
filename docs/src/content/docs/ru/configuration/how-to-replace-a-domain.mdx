@@ -1,0 +1,362 @@
+---
+title: Как изменить домен в панели Remnawave
+description: Пошаговое руководство по замене домена в панели Remnawave, включая генерацию SSL-сертификата и обновление конфигурационных файлов.
+---
+
+import { Aside, Steps, LinkButtons, Tabs, TabItem, Icons, FileTree, Code, Badges, LinkCard } from '@astrojs/starlight/components';
+
+Это руководство поможет вам изменить текущий домен панели Remnawave (например, olddomain.com) на новый (например, newdomain.com). Вы узнаете, как сгенерировать новый SSL-сертификат и обновить конфигурационные файлы. Если вы используете панель вместе с нодой, в конце приведены дополнительные шаги.
+
+## Вариант только панель
+
+:::danger[Важно]
+Не забываем добавить DNS-запись указывающего на этот сервер для нового домена, например `newdomain.com`
+:::
+
+**Генерация нового SSL-сертификата**
+
+Для использования нового домена необходимо сгенерировать новый SSL-сертификат с помощью скрипта 
+
+<Steps>
+
+1. Запустите скрипт:
+
+    ```bash
+    remnawave_reverse
+    ```
+
+2. Выберите пункт 8: `Управление сертификатами домена`
+
+3. В подменю выберите пункт 2: `Сгенерировать новые сертификаты для другого домена`
+
+4. Введите новый домен, например, newdomain.com
+
+5. Выберите метод получения сертификата: ACME или Cloudflare
+
+6. После успешного выполнения сертификаты для нового домена появятся в следующей директории:
+
+    <FileTree>
+
+    - **/etc/letsencrypt/** - корневая директория сертификатов
+        - live
+            - newdomain.com - **новый домен**
+                - fullchain.pem
+                - privkey.pem
+            - olddomain.com - **старый домен**
+                - fullchain.pem
+                - privkey.pem
+
+    </FileTree> 
+
+</Steps>
+
+**Обновление конфигурационных файлов**
+
+После генерации сертификата обновите домен в конфигурационных файлах панели Remnawave.
+
+<Steps>
+
+1. Откройте файл `.env` для редактирования:
+
+    ```bash
+    nano /opt/remnawave/.env
+    ```
+
+2. Найдите строку с текущим доменом:
+
+    ```bash title=".env"
+    FRONT_END_DOMAIN=olddomain.com
+    ```
+
+3. Замените её на новый домен:
+
+    ```bash title=".env"
+    FRONT_END_DOMAIN=newdomain.com
+    ```
+
+4. Откройте файл `docker-compose.yml`:
+
+    ```bash
+    nano /opt/remnawave/docker-compose.yml
+    ```
+
+5. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
+
+    ```yaml title="docker-compose.yml" "newdomain.com"
+    remnawave-nginx:
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    hostname: remnawave-nginx
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/newdomain.com/fullchain.pem:/etc/nginx/ssl/newdomain.com/fullchain.pem:ro
+      - /etc/letsencrypt/live/newdomain.com/privkey.pem:/etc/nginx/ssl/newdomain.com/privkey.pem:ro
+    network_mode: host
+    depends_on:
+      - remnawave
+      - remnawave-subscription-page
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+    ```
+
+6. Откройте файл nginx.conf:
+
+    ```bash
+    nano /opt/remnawave/nginx.conf
+    ```
+
+7. Найдите блок server и замените `olddomain.com` на `newdomain.com`:
+
+    ```nginx title="nginx.conf" "newdomain.com"
+    server {
+        server_name newdomain.com;
+        listen 443 ssl;
+        http2 on;
+
+        ssl_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+        ssl_certificate_key "/etc/nginx/ssl/newdomain.com/privkey.pem";
+        ssl_trusted_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+
+        add_header Set-Cookie $set_cookie_header;
+
+        location / {
+            if ($authorized = 0) {
+                return 444;
+            }
+            proxy_http_version 1.1;
+            proxy_pass http://remnawave;
+            proxy_set_header Host $host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Port $server_port;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+    }
+    ```
+
+8. Перезапустите сервисы, чтобы применить изменения:
+
+    ```bash
+    cd /opt/remnawave && docker compose down && docker compose up -d
+    ```
+
+</Steps>
+
+## Вариант только панель + нода
+
+:::danger[Важно]
+Не забываем добавить DNS-запись указывающего на этот сервер для нового домена, например `newdomain.com`
+:::
+
+**Генерация нового SSL-сертификата**
+
+Для использования нового домена необходимо сгенерировать новый SSL-сертификат с помощью скрипта 
+
+<Steps>
+
+1. Запустите скрипт:
+
+    ```bash
+    remnawave_reverse
+    ```
+
+2. Выберите пункт 8: `Управление сертификатами домена`
+
+3. В подменю выберите пункт 2: `Сгенерировать новые сертификаты для другого домена`
+
+4. Введите новый домен, например, newdomain.com
+
+5. Выберите метод получения сертификата: ACME или Cloudflare
+
+6. После успешного выполнения сертификаты для нового домена появятся в следующей директории:
+
+    <FileTree>
+
+    - **/etc/letsencrypt/** - корневая директория сертификатов
+        - live
+            - newdomain.com - **новый домен**
+                - fullchain.pem
+                - privkey.pem
+            - olddomain.com - **старый домен**
+                - fullchain.pem
+                - privkey.pem
+
+    </FileTree> 
+
+</Steps>
+
+**Обновление конфигурационных файлов**
+
+После генерации сертификата обновите домен в конфигурационных файлах панели Remnawave.
+
+<Steps>
+
+1. Откройте файл `.env` для редактирования:
+
+    ```bash
+    nano /opt/remnawave/.env
+    ```
+
+2. Найдите строку с текущим доменом:
+
+    ```bash title=".env"
+    FRONT_END_DOMAIN=olddomain.com
+    ```
+
+3. Замените её на новый домен:
+
+    ```bash title=".env"
+    FRONT_END_DOMAIN=newdomain.com
+    ```
+
+4. Откройте файл `docker-compose.yml`:
+
+    ```bash
+    nano /opt/remnawave/docker-compose.yml
+    ```
+
+5. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
+
+    ```yaml title="docker-compose.yml" "newdomain.com"
+    remnawave-nginx:
+    image: nginx:1.28
+    container_name: remnawave-nginx
+    hostname: remnawave-nginx
+    network_mode: host
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/newdomain.com/fullchain.pem:/etc/nginx/ssl/newdomain.com/fullchain.pem:ro
+      - /etc/letsencrypt/live/newdomain.com/privkey.pem:/etc/nginx/ssl/newdomain.com/privkey.pem:ro
+      - /dev/shm:/dev/shm:rw
+      - /var/www/html:/var/www/html:ro
+    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    depends_on:
+      - remnawave
+      - remnawave-subscription-page
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+    ```
+
+6. Откройте файл nginx.conf:
+
+    ```bash
+    nano /opt/remnawave/nginx.conf
+    ```
+
+7. Найдите блок server и замените `olddomain.com` на `newdomain.com`:
+
+    ```nginx title="nginx.conf" "newdomain.com"
+    server {
+        server_name newdomain.com;
+        listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+        http2 on;
+
+        ssl_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+        ssl_certificate_key "/etc/nginx/ssl/newdomain.com/privkey.pem";
+        ssl_trusted_certificate "/etc/nginx/ssl/newdomain.com/fullchain.pem";
+
+        add_header Set-Cookie $set_cookie_header;
+
+        location / {
+            error_page 418 = @unauthorized;
+            recursive_error_pages on;
+            if ($authorized = 0) {
+                return 418;
+            }
+            proxy_http_version 1.1;
+            proxy_pass http://remnawave;
+            proxy_set_header Host $host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Port $server_port;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+
+        location @unauthorized {
+            root /var/www/html;
+            index index.html;
+        }
+    }
+    ```
+
+8. Запустите скрипт remnawave_reverse
+
+    ```bash
+    remnawave_reverse
+    ```
+
+9. Выберите пункт 3: `Управление панелью/нодой`
+
+10. Выберите пункт 6: `Доступ к панели через порт 8443 (только для панели + ноды)`
+
+11. Перейдите в браузере по адресу, который выдал скрипт
+
+12. Войдите в панель Remnawave и перейдите в раздел Ноды --> Управление
+
+13. Выберите вашу ноду (Steal)
+
+14. Измените поле Адрес на 172.30.0.1
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/remnawave_edit_node.png" 
+        alt="Address" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+16. Нажмите Сохранить
+
+17. Закройте доступ к порту 8443 через скрипт remnawave_reverse
+
+    ```bash
+    remnawave_reverse
+    ```
+
+18. Перезапустите сервисы:
+
+    ```bash
+    cd /opt/remnawave && docker compose down && docker compose up -d
+    ```
+
+</Steps>
+
+## Проверка результата
+
+<Steps>
+
+1. Откройте браузер и перейдите на новый домен (не забывая про куки):
+
+    ```bash "newdomain.com" "MdAGAnCL" "ExnqGvcX"
+    https://newdomain.com/auth/login?MdAGAnCL=ExnqGvcX
+    ```
+
+2. Убедитесь, что панель Remnawave загружается корректно и сертификат SSL работает.
+
+3. Если возникают ошибки, проверьте логи:
+
+    ```bash
+    cd /opt/remnawave && docker compose logs -f
+    ```
+
+4. Если панель не открывается, убедитесь, что DNS-записи для `newdomain.com` обновлены и указывают на ваш сервер.
+
+</Steps>

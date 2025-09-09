@@ -84,6 +84,14 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Configuration Remnawave', translations: { ru: 'Настройка Remnawave' },
+					items: [
+						{ label: 'How to replace a domain', slug: 'configuration/how-to-replace-a-domain', translations: { ru: 'Как изменить домен' } },
+						{ label: 'Access to Prometheus metrics', slug: 'configuration/prometheus-metrics', translations: { ru: 'Доступ к метрикам Prometheus' } },
+						{ label: 'External access to API', slug: 'configuration/external-api', translations: { ru: 'Внешний доступ к API' } },
+					],
+				},
+				{
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
 						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' }, badge: {text: '🎉 New', variant: 'default'} },
@@ -91,10 +99,7 @@ export default defineConfig({
 						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
 						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
-						{ label: 'Access to Prometheus metrics', slug: 'configuration/prometheus-metrics', translations: { ru: 'Доступ к метрикам Prometheus' } },
-						//{ label: 'Monitoring with Grafana', slug: 'configuration/monitoring-with-grafana', translations: { ru: 'Мониторинг через Grafana' } },
 						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
-						{ label: 'External access to API', slug: 'configuration/external-api', translations: { ru: 'Внешний доступ к API' } },
 					],
 				},
 				{
