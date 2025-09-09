@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.6"
+SCRIPT_VERSION="2.1.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -360,6 +360,8 @@ set_language() {
                 [PORT_8443_ALREADY_CONFIGURED]="Port 8443 already configured in nginx.conf"
                 [UFW_RELOAD_FAILED]="Failed to reload UFW."
                 [PORT_8443_ALREADY_CLOSED]="Port 8443 already closed in UFW."
+                #Legiz Extensions
+                [LEGIZ_EXTENSIONS_PROMPT]="Select action (0-3):"
                 # Sub Page Upload
                 [UPLOADING_SUB_PAGE]="Uploading custom sub page template..."
                 [ERROR_FETCH_SUB_PAGE]="Failed to fetch custom sub page template."
@@ -387,6 +389,26 @@ set_language() {
                 [BRANDING_SUPPORT_URL_PROMPT]="Enter your support page URL:"
                 [BRANDING_LOGO_URL_PROMPT]="Enter your brand logo URL:"
                 [BRANDING_ADDED_SUCCESS]="Branding configuration successfully added"
+                [CUSTOM_APP_LIST_MENU]="Edit custom application list and branding"
+                [CUSTOM_APP_LIST_NOT_FOUND]="Custom application list not found"
+                [EDIT_BRANDING]="Edit branding"
+                [EDIT_LOGO]="Change logo"
+                [EDIT_NAME]="Change name in branding"
+                [EDIT_SUPPORT_URL]="Change support link"
+                [DELETE_APPS]="Delete specific applications"
+                [BRANDING_CURRENT_VALUES]="Current branding values:"
+                [BRANDING_LOGO_URL]="Logo URL:"
+                [BRANDING_NAME]="Name:"
+                [BRANDING_SUPPORT_URL]="Support URL:"
+                [ENTER_NEW_LOGO]="Enter new logo URL:"
+                [ENTER_NEW_NAME]="Enter new brand name:"
+                [ENTER_NEW_SUPPORT]="Enter new support URL:"
+                [CONFIRM_CHANGE]="Confirm change? (y/n):"
+                [PLATFORM_SELECT]="Select platform:"
+                [APP_SELECT]="Which application do you want to delete?"
+                [CONFIRM_DELETE_APP]="Are you sure you want to delete application %s from platform %s? (y/n):"
+                [APP_DELETED_SUCCESS]="Application successfully deleted"
+                [NO_APPS_FOUND]="No applications found in this platform"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Custom rules template not applied"
                 [UPLOADING_TEMPLATE]="Uploading custom rules template..."
@@ -750,6 +772,8 @@ set_language() {
                 [PORT_8443_ALREADY_CONFIGURED]="Порт 8443 уже настроен в конфигурации Nginx."
                 [UFW_RELOAD_FAILED]="Не удалось перезагрузить UFW."
                 [PORT_8443_ALREADY_CLOSED]="Порт 8443 уже закрыт в UFW."
+                #Legiz Extensions
+                [LEGIZ_EXTENSIONS_PROMPT]="Выберите действие (0-3):"
                 # Sub Page Upload
                 [UPLOADING_SUB_PAGE]="Загрузка пользовательского шаблона страницы подписки..."
                 [ERROR_FETCH_SUB_PAGE]="Не удалось получить пользовательский шаблон страницы подписки."
@@ -777,6 +801,26 @@ set_language() {
                 [BRANDING_SUPPORT_URL_PROMPT]="Введите ссылку на страницу поддержки:"
                 [BRANDING_LOGO_URL_PROMPT]="Введите ссылку на логотип вашего бренда:"
                 [BRANDING_ADDED_SUCCESS]="Конфигурация брендирования успешно добавлена"
+                [CUSTOM_APP_LIST_MENU]="Редактирование кастомного списка приложений и брендирования"
+                [CUSTOM_APP_LIST_NOT_FOUND]="Кастомный список приложений не найден"
+                [EDIT_BRANDING]="Редактирование брендирования"
+                [EDIT_LOGO]="Изменить логотип"
+                [EDIT_NAME]="Изменить имя в брендировании"
+                [EDIT_SUPPORT_URL]="Изменить ссылку поддержки"
+                [DELETE_APPS]="Удалить определенные приложения"
+                [BRANDING_CURRENT_VALUES]="Текущие значения брендирования:"
+                [BRANDING_LOGO_URL]="URL логотипа:"
+                [BRANDING_NAME]="Имя:"
+                [BRANDING_SUPPORT_URL]="URL поддержки:"
+                [ENTER_NEW_LOGO]="Введите новый URL логотипа:"
+                [ENTER_NEW_NAME]="Введите новое имя бренда:"
+                [ENTER_NEW_SUPPORT]="Введите новую ссылку поддержки:"
+                [CONFIRM_CHANGE]="Подтвердить изменение? (y/n):"
+                [PLATFORM_SELECT]="Выберите платформу:"
+                [APP_SELECT]="Какое приложение вы хотите удалить?"
+                [CONFIRM_DELETE_APP]="Вы точно хотите удалить приложение %s из списка платформы %s? (y/n):"
+                [APP_DELETED_SUCCESS]="Приложение успешно удалено"
+                [NO_APPS_FOUND]="Приложения не найдены в этой платформе"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Шаблон правил не применён"
                 [UPLOADING_TEMPLATE]="Загрузка шаблона правил..."
@@ -2020,6 +2064,7 @@ show_custom_legiz_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SELECT_TEMPLATE_CUSTOM1]}${COLOR_RESET}" # Custom templates
     echo -e "${COLOR_YELLOW}2. ${LANG[SELECT_SUB_PAGE_CUSTOM1]}${COLOR_RESET}" # Custom sub page
+    echo -e "${COLOR_YELLOW}3. ${LANG[CUSTOM_APP_LIST_MENU]}${COLOR_RESET}" # Edit custom app list and branding
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -2027,7 +2072,7 @@ show_custom_legiz_menu() {
 
 manage_custom_legiz() {
     show_custom_legiz_menu
-    reading "${LANG[IPV6_PROMPT]}" LEGIZ_OPTION
+    reading "${LANG[LEGIZ_EXTENSIONS_PROMPT]}" LEGIZ_OPTION
     case $LEGIZ_OPTION in
         1)
             manage_template_upload
@@ -2067,6 +2112,11 @@ manage_custom_legiz() {
             fi
             
             manage_sub_page_upload
+            log_clear
+            manage_custom_legiz
+            ;;
+        3)
+            manage_custom_app_list
             log_clear
             manage_custom_legiz
             ;;
@@ -2658,6 +2708,229 @@ manage_sub_page_upload() {
     docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
     echo -e "${COLOR_GREEN}${LANG[SUB_PAGE_UPDATED_SUCCESS]}${COLOR_RESET}"
+}
+
+show_custom_app_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[CUSTOM_APP_LIST_MENU]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[EDIT_BRANDING]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[DELETE_APPS]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+}
+
+manage_custom_app_list() {
+    local config_file="/opt/remnawave/app-config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        echo -e "${COLOR_RED}${LANG[CUSTOM_APP_LIST_NOT_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    show_custom_app_menu
+    reading "${LANG[IPV6_PROMPT]}" APP_OPTION
+    
+    case $APP_OPTION in
+        1)
+            edit_branding "$config_file"
+            ;;
+        2)
+            delete_applications "$config_file"
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            manage_custom_app_list
+            ;;
+    esac
+}
+
+edit_branding() {
+    local config_file="$1"
+    local needs_restart=false
+    
+    # Check if branding exists
+    if jq -e '.config.branding' "$config_file" > /dev/null 2>&1; then
+        echo -e "${COLOR_GREEN}${LANG[BRANDING_CURRENT_VALUES]}${COLOR_RESET}"
+        local logo_url=$(jq -r '.config.branding.logoUrl // "N/A"' "$config_file")
+        local name=$(jq -r '.config.branding.name // "N/A"' "$config_file")
+        local support_url=$(jq -r '.config.branding.supportUrl // "N/A"' "$config_file")
+        
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_LOGO_URL]} ${COLOR_WHITE}$logo_url${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_NAME]} ${COLOR_WHITE}$name${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_SUPPORT_URL]} ${COLOR_WHITE}$support_url${COLOR_RESET}"
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[EDIT_BRANDING]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[EDIT_LOGO]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[EDIT_NAME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[EDIT_SUPPORT_URL]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" BRANDING_OPTION
+    
+    case $BRANDING_OPTION in
+        1)
+            reading "${LANG[ENTER_NEW_LOGO]}" new_logo
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg logo "$new_logo" '.config.branding.logoUrl = $logo' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        2)
+            reading "${LANG[ENTER_NEW_NAME]}" new_name
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg name "$new_name" '.config.branding.name = $name' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        3)
+            reading "${LANG[ENTER_NEW_SUPPORT]}" new_support
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg support "$new_support" '.config.branding.supportUrl = $support' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            edit_branding "$config_file"
+            ;;
+    esac
+    
+    # Restart container if changes were made
+    if [ "$needs_restart" = true ]; then
+        echo -e "${COLOR_GREEN}${LANG[BRANDING_ADDED_SUCCESS]}${COLOR_RESET}"
+        
+        # Restart subscription page container
+        cd /opt/remnawave || return 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    fi
+}
+
+delete_applications() {
+    local config_file="$1"
+    
+    # Get platforms with non-empty arrays
+    local platforms=$(jq -r '.platforms | to_entries[] | select(.value | length > 0) | .key' "$config_file" 2>/dev/null)
+    
+    if [ -z "$platforms" ]; then
+        echo -e "${COLOR_RED}${LANG[NO_APPS_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[PLATFORM_SELECT]}${COLOR_RESET}"
+    echo -e ""
+    
+    local i=1
+    declare -A platform_map
+    while IFS= read -r platform; do
+        echo -e "${COLOR_YELLOW}$i. $platform${COLOR_RESET}"
+        platform_map[$i]="$platform"
+        ((i++))
+    done <<< "$platforms"
+    
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" PLATFORM_OPTION
+    
+    if [ "$PLATFORM_OPTION" == "0" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+        return 0
+    fi
+    
+    if [ -z "${platform_map[$PLATFORM_OPTION]}" ]; then
+        echo -e "${COLOR_RED}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        sleep 2
+        delete_applications "$config_file"
+        return 1
+    fi
+    
+    local selected_platform=${platform_map[$PLATFORM_OPTION]}
+    
+    # Get applications from selected platform
+    local apps=$(jq -r --arg platform "$selected_platform" '.platforms[$platform][] | .name // .id' "$config_file" 2>/dev/null)
+    
+    if [ -z "$apps" ]; then
+        echo -e "${COLOR_RED}${LANG[NO_APPS_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[APP_SELECT]}${COLOR_RESET}"
+    echo -e ""
+    
+    local j=1
+    declare -A app_map
+    while IFS= read -r app; do
+        echo -e "${COLOR_YELLOW}$j. $app${COLOR_RESET}"
+        app_map[$j]="$app"
+        ((j++))
+    done <<< "$apps"
+    
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" APP_DELETE_OPTION
+    
+    if [ "$APP_DELETE_OPTION" == "0" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+        return 0
+    fi
+    
+    if [ -z "${app_map[$APP_DELETE_OPTION]}" ]; then
+        echo -e "${COLOR_RED}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        sleep 2
+        delete_applications "$config_file"
+        return 1
+    fi
+    
+    local selected_app=${app_map[$APP_DELETE_OPTION]}
+    
+    printf "${COLOR_YELLOW}${LANG[CONFIRM_DELETE_APP]}${COLOR_RESET}\n" "$selected_app" "$selected_platform"
+    read confirm
+    
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        # Remove the application from the platform array
+        jq --arg platform "$selected_platform" --arg app_name "$selected_app" '
+        .platforms[$platform] = [.platforms[$platform][] | select((.name // .id) != $app_name)]
+        ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        
+        echo -e "${COLOR_GREEN}${LANG[APP_DELETED_SUCCESS]}${COLOR_RESET}"
+        
+        # Restart subscription page container
+        cd /opt/remnawave || return 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+    fi
 }
 #Custom Templates and Extensions by legiz
 
