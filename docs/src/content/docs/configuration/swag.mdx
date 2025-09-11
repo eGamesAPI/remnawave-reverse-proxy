@@ -23,10 +23,6 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
   />
 </div>
 
-<Aside type="caution" title="Important" icon="seti:todo">
-  You can't use SWAG if you installed Panel and Node on one machine. Panel and node installation uses nginx.sock, but for some reason I didn't manage to make SWAG remove it, so you don't have to manually stop it. Otherwise it will give you a message that sock is already used.
-</Aside>
-
 ## Installing SWAG
 
 <Steps>
@@ -61,6 +57,9 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
         - SWAG_AUTORELOAD=true
       volumes:
         - /path/to/swag:/config
+      ports:
+        - 443:443
+        - 80:80 #optional
       restart: unless-stopped
       networks:
         - remnawave-network
@@ -103,6 +102,12 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
     ```
 
     In case you've done everything right "Server ready." will pop up in logs and make sure that `domain.com` shows the welcome page with a valid certificate. But we also need logs for monitoring autoreload logs in case you've done mistakes in proxy-conf.
+
+7. Don't forget to remove all related crontab entries for cert renewal as SWAG will handle it for you.
+
+    ```bash
+    crontab -e
+    ```
 
 </Steps>
 
