@@ -10,23 +10,21 @@ import starlightKbd from 'starlight-kbd';
 import starlightThemeRapide from 'starlight-theme-rapide';
 import autoImport from 'astro-auto-import';
 import starlightGitHubAlerts from 'starlight-github-alerts';
+import starlightThemeGalaxy from 'starlight-theme-galaxy';
 
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://wiki.egam.es',
 	integrations: [
 		autoImport({
-			imports: [
-				'.src/components/TryItOut.astro',
-				'.src/components/TryItOut_ru.astro',
-			],
+			imports: [],
 		}),
 		starlight({
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
 			},
 			plugins: [
-				starlightThemeRapide(),
+				starlightThemeGalaxy(),
 				starlightGitHubAlerts(),
 				starlightHeadingBadges(),
 				starlightScrollToTop({
@@ -123,10 +121,3 @@ export default defineConfig({
 		}),
 	],
 });
-
-
-
-// TODO:
-// add https://starlight-github-alerts.netlify.app/getting-started/
-// https://www.create.bingo/
-// https://octo.guide/
