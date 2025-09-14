@@ -4068,7 +4068,7 @@ create_config_profile() {
                 port: 443,
                 protocol: "vless",
                 settings: { clients: [], decryption: "none" },
-                sniffing: { enabled: true, destOverride: ["http", "tls"] },
+                sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
                 streamSettings: {
                     network: "tcp",
                     security: "reality",
