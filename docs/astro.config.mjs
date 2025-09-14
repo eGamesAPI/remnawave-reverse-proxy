@@ -9,6 +9,7 @@ import starlightSidebarTopics from 'starlight-sidebar-topics';
 import starlightKbd from 'starlight-kbd';
 import starlightThemeRapide from 'starlight-theme-rapide';
 import autoImport from 'astro-auto-import';
+import starlightGitHubAlerts from 'starlight-github-alerts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -26,6 +27,7 @@ export default defineConfig({
 			},
 			plugins: [
 				starlightThemeRapide(),
+				starlightGitHubAlerts(),
 				starlightHeadingBadges(),
 				starlightScrollToTop({
 					showTooltip: false,
