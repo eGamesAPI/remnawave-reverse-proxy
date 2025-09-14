@@ -317,7 +317,7 @@ After generating the certificate, update the domain in the Remnawave panel confi
 
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <img 
-        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/remnawave_edit_node.png" 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/remnawave_edit_node.png" 
         alt="Address" 
         style={{ maxWidth: '60%' }} 
       />
@@ -325,13 +325,25 @@ After generating the certificate, update the domain in the Remnawave panel confi
 
 16. Click Save
 
-17. Close access to port 8443 through the remnawave_reverse script
+17. Go to the Hosts --> Your Host section
+
+18. In the Address field enter the new domain, for example `newdomain.com`
+
+19. Click Save
+
+20. Go to the Profiles --> Your profile (StealConfig) section
+
+21. Change "serverNames" to the new domain, for example `newdomain.com`
+
+22. Click Save
+
+23. Close access to port 8443 through the remnawave_reverse script
 
     ```bash
     remnawave_reverse
     ```
 
-18. Restart the services:
+24. Restart the services:
 
     ```bash
     cd /opt/remnawave && docker compose down && docker compose up -d
