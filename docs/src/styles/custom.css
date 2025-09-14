@@ -42,3 +42,71 @@
 :root[data-theme='light'] .light-banner {
 	display: block;
 }
+
+/* Center the splash page content vertically */
+.sl-flex[data-type="template"] {
+	min-height: 100vh;
+	display: flex !important;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+/* Ensure the hero section takes full height and centers content with proper order */
+.hero {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	min-height: 100vh;
+	text-align: center;
+}
+
+/* Reorder hero elements: logo first, then title, description, actions */
+.hero .sl-flex {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2rem;
+}
+
+/* Logo should appear first - move it to the top */
+.hero .hero-image {
+	order: 1;
+	margin-bottom: 1rem;
+}
+
+/* Title should be second */
+.hero h1 {
+	order: 2;
+	margin: 0;
+}
+
+/* Description/tagline should be third */
+.hero .tagline {
+	order: 3;
+	margin: 0;
+}
+
+/* Action buttons should be last */
+.hero .actions {
+	order: 4;
+	margin-top: 1rem;
+}
+
+/* Alternative approach - target the main content area of splash template */
+main[data-pagefind-body] {
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+/* Ensure the splash template content is centered */
+.sl-markdown-content {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
