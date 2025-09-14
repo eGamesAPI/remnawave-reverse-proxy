@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.7"
+SCRIPT_VERSION="2.1.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2487,6 +2487,10 @@ branding_add_to_appconfig() {
 }
 
 manage_sub_page_upload() {
+    if [ -d "/opt/remnawave/index.html" ] || [ -d "/opt/remnawave/app-config.json" ]; then
+        rm -rf "/opt/remnawave/index.html" "/opt/remnawave/app-config.json"
+    fi
+    
     if ! docker ps -a --filter "name=remnawave-subscription-page" --format '{{.Names}}' | grep -q "^remnawave-subscription-page$"; then
         printf "${COLOR_RED}${LANG[CONTAINER_NOT_FOUND]}${COLOR_RESET}\n" "remnawave-subscription-page"
         sleep 2
