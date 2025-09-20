@@ -1,13 +1,11 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightHeadingBadges from 'starlight-heading-badges';
 import starlightScrollToTop from 'starlight-scroll-to-top';
 import starlightUtils from "@lorenzo_lewis/starlight-utils";
 import starlightLinksValidator from 'starlight-links-validator'
 import starlightSidebarTopics from 'starlight-sidebar-topics';
 import starlightKbd from 'starlight-kbd';
-import starlightThemeRapide from 'starlight-theme-rapide';
 import autoImport from 'astro-auto-import';
 import starlightGitHubAlerts from 'starlight-github-alerts';
 import starlightThemeGalaxy from 'starlight-theme-galaxy';
@@ -26,7 +24,6 @@ export default defineConfig({
 			plugins: [
 				starlightThemeGalaxy(),
 				starlightGitHubAlerts(),
-				starlightHeadingBadges(),
 				starlightScrollToTop({
 					showTooltip: false,
 					borderRadius: '25',
@@ -94,11 +91,11 @@ export default defineConfig({
 				{
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
-						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' }, badge: {text: '🎉 New', variant: 'default'} },
+						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' }, badge: {text: '🎉 New', variant: 'success'} },
 						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
 						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
-						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
+						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' } },
 						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
 					],
 				},
