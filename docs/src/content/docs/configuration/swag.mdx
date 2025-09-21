@@ -90,7 +90,7 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
     dns_cloudflare_api_token = token
     ```
 
-5. Delete nginx section in `/opt/remnawave/docker-compose.yml` and restart the stack.
+5. Stop remnawave stack, delete nginx section in `/opt/remnawave/docker-compose.yml` and restart the stack.
 
     ```bash
     cd /opt/remnawave && docker compose down
@@ -205,7 +205,7 @@ Now we need to implement the nginx configuration we had for SWAG to work with re
     }
     ```
 
-    You may get confused as a lot of strings are gone, that's because some parameters and headers are already present in SWAG's `proxy.conf` and `ssl.conf`, so you don't need to repeat them. If you want to add some headers, you add them back from `/opt/remnawave/nginx.conf`.
+    You may get confused as a lot of strings are gone, that's because some parameters such as `upstream`, headers and others are already present in SWAG's `proxy.conf` and `ssl.conf`, so you don't need to repeat them. If you want to add some headers, you add them back from `/opt/remnawave/nginx.conf`.
 
 4. Navigate to `/path/to/swag/config/nginx/site-confs` and edit `default` file.
 
