@@ -23,11 +23,7 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
   />
 </div>
 
-<Aside type="caution" title="Important" icon="seti:todo">
-  You can't use SWAG if you installed Panel and Node on one machine. Panel and node installation uses nginx.sock, but for some reason I didn't manage to make SWAG remove it, so you don't have to manually stop it. Otherwise it will give you a message that sock is already used.
-</Aside>
-
-## Installing SWAG
+## Installing SWAG for panel only
 
 <Steps>
 
@@ -59,8 +55,12 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
         - DNSPLUGIN=cloudflare
         - PROPAGATION=60
         - SWAG_AUTORELOAD=true
+    #    - DISABLE-F2B=true #optional
       volumes:
         - /path/to/swag:/config
+      ports:
+        - 443:443
+        - 80:80 #optional
       restart: unless-stopped
       networks:
         - remnawave-network
@@ -72,7 +72,7 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
           external: true
     ```
 
-      I guess optional, but can be added
+    I guess optional, but can be added
 
     ```yml
       logging:
@@ -90,19 +90,25 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
     dns_cloudflare_api_token = token
     ```
 
-5. Delete nginx section in `/opt/remnawave/docker-compose.yml` and stop the stack.
+5. Stop remnawave stack, delete nginx section in `/opt/remnawave/docker-compose.yml` and restart the stack.
 
     ```bash
     cd /opt/remnawave && docker compose down
     ```
 
-6. Start the stack and monitor logs, we'll need them in a second.
+6. Start swag's stack and monitor logs, we'll need them in a second.
 
     ```bash
     cd /opt/swag && docker compose up -d && docker compose logs -f -t
     ```
 
     In case you've done everything right "Server ready." will pop up in logs and make sure that `domain.com` shows the welcome page with a valid certificate. But we also need logs for monitoring autoreload logs in case you've done mistakes in proxy-conf.
+
+7. Don't forget to remove all related crontab entries for cert renewal as SWAG will handle it for you.
+
+    ```bash
+    crontab -e
+    ```
 
 </Steps>
 
@@ -199,7 +205,7 @@ Now we need to implement the nginx configuration we had for SWAG to work with re
     }
     ```
 
-    You may get confused as a lot of strings are gone, that's because some parameters and headers are already present in SWAG's `proxy.conf` and `ssl.conf`, so you don't need to repeat them. If you want to add some headers, you add them back from `/opt/remnawave/nginx.conf`.
+    You may get confused as a lot of strings are gone, that's because some parameters such as `upstream`, headers and others are already present in SWAG's `proxy.conf` and `ssl.conf`, so you don't need to repeat them. If you want to add some headers, you add them back from `/opt/remnawave/nginx.conf`.
 
 4. Navigate to `/path/to/swag/config/nginx/site-confs` and edit `default` file.
 
