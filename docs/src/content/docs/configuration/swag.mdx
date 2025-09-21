@@ -55,6 +55,7 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
         - DNSPLUGIN=cloudflare
         - PROPAGATION=60
         - SWAG_AUTORELOAD=true
+    #    - DISABLE-F2B=true #optional
       volumes:
         - /path/to/swag:/config
       ports:
@@ -89,13 +90,13 @@ First, you need to decide whether you want to use [SWAG](https://github.com/linu
     dns_cloudflare_api_token = token
     ```
 
-5. Delete nginx section in `/opt/remnawave/docker-compose.yml` and stop the stack.
+5. Delete nginx section in `/opt/remnawave/docker-compose.yml` and restart the stack.
 
     ```bash
     cd /opt/remnawave && docker compose down
     ```
 
-6. Start the stack and monitor logs, we'll need them in a second.
+6. Start swag's stack and monitor logs, we'll need them in a second.
 
     ```bash
     cd /opt/swag && docker compose up -d && docker compose logs -f -t
