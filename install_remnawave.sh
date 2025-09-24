@@ -4064,7 +4064,7 @@ create_config_profile() {
         config: {
             log: { loglevel: "warning" },
             dns: {
-                queryStrategy: "ForceIPv4",
+                queryStrategy: "UseIPv4",
                 servers: [{ address: "https://dns.google/dns-query", skipFallback: false }]
             },
             inbounds: [{
