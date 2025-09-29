@@ -96,7 +96,7 @@ export default defineConfig({
 						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
 						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' } },
-						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
+						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' } },
 					],
 				},
 				{
