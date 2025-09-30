@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.8"
+SCRIPT_VERSION="2.1.8a"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -3004,7 +3004,7 @@ randomhtml() {
 
     template_urls=(
         "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
-        "https://github.com/SmallPoppa/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
     )
 
     if [ -z "$template_source" ]; then
@@ -3037,7 +3037,7 @@ randomhtml() {
 
     RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
 
-    if [[ "$selected_url" == *"SmallPoppa"* && "$RandomHTML" == "503 error pages" ]]; then
+    if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
         cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         versions=("v1" "v2")
         RandomVersion="${versions[$RANDOM % ${#versions[@]}]}"
