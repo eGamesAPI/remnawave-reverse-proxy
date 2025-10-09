@@ -9,26 +9,14 @@ import { LinkButton } from '@astrojs/starlight/components';
 ## Running the script
 
 :::danger[Warning]
-Script must be run as **root**.
+Script must be run as **root**, and also on the server where the Remnawave panel is installed.
 :::
 
-:::danger[Warning]
-You need to run the script on the server where the Remnawave panel is installed.
-:::
-
-Enter the command on your server:
+Enter this command on your server where the Remnawave panel is installed:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
-
-:::note
-If you would like to install using 1.6.16 version, you can use the following command:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/tags/v.1.7.5/install_remnawave.sh)
-```
-:::
 
 ## Add node to panel
 
@@ -44,9 +32,13 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 3. Enter your new domain `selfsteal` which will be used to connect the node to the panel, as well as the name for the node.
 
+    :::danger[Warning]
+    Don't forget to add a DNS record for your domain.
+    :::
+
     ![Add node to panel2 EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel2.webp)
 
-4. After successfully adding the node to the panel, run the script on your new server, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
+4. After successfully adding the node to the panel, run the script on your new server, where the Remnawave node will be installed, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
 
 </Steps>
 
