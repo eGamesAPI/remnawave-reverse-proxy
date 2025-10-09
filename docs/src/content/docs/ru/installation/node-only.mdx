@@ -9,7 +9,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 ## Установка скрипта
 
 :::danger[Важно]
-Скрипт нужно запускать с **правами root**.
+Скрипт нужно запускать с **правами root**, а так же на сервере, на котором будет установлена нода Remnawave.
 :::
 
 Введите данную команду на вашем сервере:
@@ -17,14 +17,6 @@ import { LinkButton } from '@astrojs/starlight/components';
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
-
-:::note
-Если вы хотите установить версию 1.6.16, вы можете использовать следующую команду:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/tags/v.1.7.5/install_remnawave.sh)
-```
-:::
 
 ## Установка ноды
 
@@ -42,7 +34,11 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![SSL_CERT RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/ssl_cert.webp)
 
-4. Скрипт запросит домен `selfsteal`, который вы указали при первоначальной установке панели или через пункт `Добавить ноду в панель`, ip-адрес и сертификат панели.
+4. Скрипт запросит домен `selfsteal`, который вы указали при первоначальной установке панели или через пункт [`Добавить ноду в панель`](https://wiki.egam.es/ru/installation/add-node/), ip-адрес и сертификат панели.
+
+    :::danger[Важно]
+    Не забудьте добавить DNS-запись для вашего домена.
+    :::
 
     ![Menu node end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/menu_node_end.webp)
 

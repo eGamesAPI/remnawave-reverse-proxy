@@ -9,11 +9,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 ## Установка скрипта
 
 :::danger[Важно]
-Скрипт нужно запускать с **правами root**.
-:::
-
-:::danger[Важно]
-Запускать скрипт нужно на сервере, на котором установлена панель Remnawave.
+Скрипт нужно запускать с **правами root**, а так же на сервере, на котором установлена панель Remnawave.
 :::
 
 Введите данную команду на вашем сервере:
@@ -21,14 +17,6 @@ import { LinkButton } from '@astrojs/starlight/components';
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
-
-:::note
-Если вы хотите установить версию 1.6.16, вы можете использовать следующую команду:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/tags/v.1.7.5/install_remnawave.sh)
-```
-:::
 
 ## Добавить ноду в панель
 
@@ -42,11 +30,15 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Add node to panel RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/add_node_to_panel.webp)
 
-3. Введите ваш новый домен `selfsteal` который будет использоваться для подключения ноды к панели, а так же название для самой ноды.
+3. Введите ваш новый домен для `selfsteal` который будет использоваться для подключения ноды к панели, а так же название для самой ноды.
 
+    :::danger[Важно]
+    Не забудьте добавить DNS-запись для вашего домена.
+    :::
+    
     ![Add node to panel2 RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/add_node_to_panel2.webp)
 
-4. После успешного добавления ноды в панель, запустите скрипт на вашем новом сервере, выберите пункт `Установка компонентов Remnawave`, а затем [`Установить только ноду`](https://wiki.egam.es/ru/installation/node-only/).
+4. После успешного добавления ноды в панель, запустите скрипт на вашем новом сервере, где будет установлена нода Remnawave, выберите пункт `Установка компонентов Remnawave`, а затем [`Установить только ноду`](https://wiki.egam.es/ru/installation/node-only/).
 
 </Steps>
 
