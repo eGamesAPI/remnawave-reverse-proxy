@@ -347,7 +347,7 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Select template source:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="Sni templates"
-                [NOTHING_TEMPLATES]="Nothing templates (prettyleaf)"
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
                 [CHOOSE_TEMPLATE_OPTION]="Select option (0-3):"
                 [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-3."
                 # Manage Panel Access
@@ -763,7 +763,7 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Выберите источник шаблонов:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="SNI templates"
-                [NOTHING_TEMPLATES]="Nothing templates (prettyleaf)"
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
                 [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-3):"
                 [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-3."
                 #Manage panel access
