@@ -3078,9 +3078,9 @@ randomhtml() {
     local random_id_suffix=$(openssl rand -hex 4)
 
     local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
-    local usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
+    local meta_usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
     local random_meta_name=${meta_names[$RANDOM % ${#meta_names[@]}]}
-    local random_username=${usernames[$RANDOM % ${#usernames[@]}]}
+    local random_username=${meta_usernames[$RANDOM % ${#meta_usernames[@]}]}
 
     local class_prefixes=("style" "data" "ui" "layout" "theme" "view")
     local random_class_prefix=${class_prefixes[$RANDOM % ${#class_prefixes[@]}]}
