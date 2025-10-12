@@ -3001,7 +3001,7 @@ randomhtml() {
     cd /opt/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
     rm -f main.zip 2>/dev/null
-    rm -rf simple-web-templates-main/ sni-templates-main/ 2>/dev/null
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/ 2>/dev/null
 
     echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
     sleep 1
@@ -3011,6 +3011,7 @@ randomhtml() {
     template_urls=(
         "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
         "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip"
     )
 
     if [ -z "$template_source" ]; then
@@ -3034,14 +3035,24 @@ randomhtml() {
     if [[ "$selected_url" == *"eGamesAPI"* ]]; then
         cd simple-web-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets ".gitattributes" "README.md" "_config.yml" 2>/dev/null
+    elif [[ "$selected_url" == *"nothing-sni"* ]]; then
+        cd nothing-sni-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf .github README.md 2>/dev/null
     else
         cd sni-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets "README.md" "index.html" 2>/dev/null
     fi
 
-    mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
+    # Special handling for nothing-sni - select random HTML file
+    if [[ "$selected_url" == *"nothing-sni"* ]]; then
+        # Randomly select one HTML file from 1-8.html
+        selected_number=$((RANDOM % 8 + 1))
+        RandomHTML="${selected_number}.html"
+    else
+        mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
 
-    RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+    fi
 
     if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
         cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
@@ -3077,6 +3088,7 @@ randomhtml() {
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
         -e "s/<body/<body class=\"$random_class\"/" \
+        -e "s/CHANGEMEPLS/$random_meta_name/g" \
         {} \;
 
     find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
@@ -3107,7 +3119,7 @@ randomhtml() {
     fi
 
     cd /opt/
-    rm -rf simple-web-templates-main/ sni-templates-main/
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/
 }
 #Manage Template for steal
 
