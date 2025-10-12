@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "type": "module",
-  "version": "v2.1.9",
+  "version": "v2.1.10",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
@@ -20,7 +20,7 @@
     "starlight-kbd": "^0.2.0",
     "starlight-links-validator": "^0.17.2",
     "starlight-package-managers": "^0.11.0",
-    "starlight-scroll-to-top": "^0.3.1",
+    "starlight-scroll-to-top": "^0.4.0",
     "starlight-showcases": "^0.3.0",
     "starlight-sidebar-topics": "^0.6.0",
     "starlight-sidebar-topics-dropdown": "^0.5.1",

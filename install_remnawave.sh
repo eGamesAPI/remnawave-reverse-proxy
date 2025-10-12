@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.9"
+SCRIPT_VERSION="2.1.10"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -347,8 +347,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Select template source:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="Sni templates"
-                [CHOOSE_TEMPLATE_OPTION]="Select option (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-2."
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
+                [CHOOSE_TEMPLATE_OPTION]="Select option (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-3."
                 # Manage Panel Access
                 [PORT_8443_OPEN]="Open port 8443 for panel access"
                 [PORT_8443_CLOSE]="Close port 8443 for panel access"
@@ -762,8 +763,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Выберите источник шаблонов:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="SNI templates"
-                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-2."
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
+                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-3."
                 #Manage panel access
                 [PORT_8443_OPEN]="Открыть доступ к панели на порту 8443"
                 [PORT_8443_CLOSE]="Закрыть доступ к панели на порту 8443"
@@ -2990,6 +2992,7 @@ show_template_source_options() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -3001,7 +3004,7 @@ randomhtml() {
     cd /opt/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
     rm -f main.zip 2>/dev/null
-    rm -rf simple-web-templates-main/ sni-templates-main/ 2>/dev/null
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/ 2>/dev/null
 
     echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
     sleep 1
@@ -3011,6 +3014,7 @@ randomhtml() {
     template_urls=(
         "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
         "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip"
     )
 
     if [ -z "$template_source" ]; then
@@ -3018,8 +3022,12 @@ randomhtml() {
     else
         if [ "$template_source" = "simple" ]; then
             selected_url=${template_urls[0]}  # Simple web templates
-        else
+        elif [ "$template_source" = "sni" ]; then
             selected_url=${template_urls[1]}  # Sni templates
+        elif [ "$template_source" = "nothing" ]; then
+            selected_url=${template_urls[2]}  # Nothing templates
+        else
+            selected_url=${template_urls[1]}  # Default to Sni templates
         fi
     fi
 
@@ -3034,14 +3042,24 @@ randomhtml() {
     if [[ "$selected_url" == *"eGamesAPI"* ]]; then
         cd simple-web-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets ".gitattributes" "README.md" "_config.yml" 2>/dev/null
+    elif [[ "$selected_url" == *"nothing-sni"* ]]; then
+        cd nothing-sni-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf .github README.md 2>/dev/null
     else
         cd sni-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets "README.md" "index.html" 2>/dev/null
     fi
 
-    mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
+    # Special handling for nothing-sni - select random HTML file
+    if [[ "$selected_url" == *"nothing-sni"* ]]; then
+        # Randomly select one HTML file from 1-8.html
+        selected_number=$((RANDOM % 8 + 1))
+        RandomHTML="${selected_number}.html"
+    else
+        mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
 
-    RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+    fi
 
     if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
         cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
@@ -3060,7 +3078,9 @@ randomhtml() {
     local random_id_suffix=$(openssl rand -hex 4)
 
     local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
+    local meta_usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
     local random_meta_name=${meta_names[$RANDOM % ${#meta_names[@]}]}
+    local random_username=${meta_usernames[$RANDOM % ${#meta_usernames[@]}]}
 
     local class_prefixes=("style" "data" "ui" "layout" "theme" "view")
     local random_class_prefix=${class_prefixes[$RANDOM % ${#class_prefixes[@]}]}
@@ -3077,6 +3097,7 @@ randomhtml() {
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
         -e "s/<body/<body class=\"$random_class\"/" \
+        -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
     find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
@@ -3090,12 +3111,19 @@ randomhtml() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
+    if [[ ! -d "/var/www/html/" ]]; then
+        mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
+    fi
+    rm -rf /var/www/html/*
+
+    # Handle both directory-based and file-based templates
     if [[ -d "${RandomHTML}" ]]; then
-        if [[ ! -d "/var/www/html/" ]]; then
-            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
-        fi
-        rm -rf /var/www/html/*
+        # Directory-based template (simple-web-templates, sni-templates)
         cp -a "${RandomHTML}"/. "/var/www/html/"
+        echo "${LANG[TEMPLATE_COPY]}"
+    elif [[ -f "${RandomHTML}" ]]; then
+        # File-based template (nothing-sni)
+        cp "${RandomHTML}" "/var/www/html/index.html"
         echo "${LANG[TEMPLATE_COPY]}"
     else
         echo "${LANG[UNPACK_ERROR]}" && exit 1
@@ -3107,7 +3135,7 @@ randomhtml() {
     fi
 
     cd /opt/
-    rm -rf simple-web-templates-main/ sni-templates-main/
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/
 }
 #Manage Template for steal
 
@@ -5890,6 +5918,12 @@ case $OPTION in
                     ;;
                 2)
                     randomhtml "sni"
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
+                    ;;
+                3)
+                    randomhtml "nothing"
                     sleep 2
                     log_clear
                     remnawave_reverse
