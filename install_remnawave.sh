@@ -3078,7 +3078,9 @@ randomhtml() {
     local random_id_suffix=$(openssl rand -hex 4)
 
     local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
+    local usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
     local random_meta_name=${meta_names[$RANDOM % ${#meta_names[@]}]}
+    local random_username=${usernames[$RANDOM % ${#usernames[@]}]}
 
     local class_prefixes=("style" "data" "ui" "layout" "theme" "view")
     local random_class_prefix=${class_prefixes[$RANDOM % ${#class_prefixes[@]}]}
@@ -3095,7 +3097,7 @@ randomhtml() {
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
         -e "s/<body/<body class=\"$random_class\"/" \
-        -e "s/CHANGEMEPLS/$random_meta_name/g" \
+        -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
     find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
