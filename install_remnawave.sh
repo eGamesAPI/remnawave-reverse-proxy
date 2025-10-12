@@ -3095,7 +3095,7 @@ randomhtml() {
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
         -e "s/<body/<body class=\"$random_class\"/" \
-        -e "s/CHANGEMEPLS/$DOMAIN/g" \
+        -e "s/CHANGEMEPLS/${random_title}/g" \
         {} \;
 
     find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
