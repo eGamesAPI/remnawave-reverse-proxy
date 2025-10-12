@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.8a"
+SCRIPT_VERSION="2.1.9"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -289,6 +289,9 @@ set_language() {
                 [ENTER_PANEL_PASSWORD]="Enter panel password: "
                 [TOKEN_RECEIVED_AND_SAVED]="Token successfully received and saved"
                 [TOKEN_USED_SUCCESSFULLY]="Token successfully used"
+                [DOMAIN_ALREADY_EXISTS]="Domain already exists"
+                [TRY_ANOTHER_DOMAIN]="Please use another domain"
+                [ERROR_CHECK_DOMAIN]="Error checking domain"
                 [NODE_ADDED_SUCCESS]="Node successfully added!"
                 [CREATE_NEW_NODE]="Creating new node for %s..."
                 [CF_INVALID_NAME]="Error: The name of the configuration profile %s is already in use.\nPlease choose another name."
@@ -701,6 +704,9 @@ set_language() {
                 [ENTER_PANEL_PASSWORD]="Введите пароль панели: "
                 [TOKEN_RECEIVED_AND_SAVED]="Токен успешно получен и сохранён"
                 [TOKEN_USED_SUCCESSFULLY]="Токен успешно использован"
+                [DOMAIN_ALREADY_EXISTS]="Домен уже используется"
+                [TRY_ANOTHER_DOMAIN]="Пожалуйста, используйте другой домен"
+                [ERROR_CHECK_DOMAIN]="Ошибка при проверке домена"
                 [NODE_ADDED_SUCCESS]="Нода успешно добавлена!"
                 [CREATE_NEW_NODE]="Создаём новую ноду для %s"
                 [CF_INVALID_NAME]="Ошибка: Имя конфигурационного профиля %s уже используется.\nПожалуйста, выберите другое имя."
@@ -3967,6 +3973,32 @@ generate_xray_keys() {
     echo "$private_key"
 }
 
+check_node_domain() {
+    local domain_url="$1"
+    local token="$2"
+    local domain="$3"
+
+    local response=$(make_api_request "GET" "http://$domain_url/api/nodes" "$token")
+    
+    if [ -z "$response" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CHECK_DOMAIN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if echo "$response" | jq -e '.response' > /dev/null 2>&1; then
+        local existing_domain=$(echo "$response" | jq -r --arg addr "$domain" '.response[] | select(.address == $addr) | .address' 2>/dev/null)
+        if [ -n "$existing_domain" ]; then
+            echo -e "${COLOR_RED}${LANG[DOMAIN_ALREADY_EXISTS]}: $domain${COLOR_RESET}"
+            return 1
+        fi
+        return 0
+    else
+        local error_message=$(echo "$response" | jq -r '.message // "Unknown error"')
+        echo -e "${COLOR_RED}${LANG[ERROR_CHECK_DOMAIN]}: $error_message${COLOR_RESET}"
+        return 1
+    fi
+}
+
 create_node() {
     local domain_url=$1
     local token=$2
@@ -4570,7 +4602,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:17.6
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4627,7 +4659,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.3-alpine
+    image: valkey/valkey:8.1.4-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -5737,14 +5769,26 @@ add_node_to_panel() {
     echo -e "${COLOR_YELLOW}${LANG[ADD_NODE_TO_PANEL]}${COLOR_RESET}"
     sleep 1
 
-    reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+    get_panel_token
+    token=$(cat "$TOKEN_FILE")
+    if [ $? -ne 0 ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    while true; do
+        reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+        check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
+        if [ $? -eq 0 ]; then
+            break
+        fi
+        echo -e "${COLOR_YELLOW}${LANG[TRY_ANOTHER_DOMAIN]}${COLOR_RESET}"
+    done
     
-        while true; do
+    while true; do
         reading "${LANG[ENTER_NODE_NAME]}" entity_name
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                get_panel_token
-                token=$(cat "$TOKEN_FILE")
                 local response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
                 
                 if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null; then
