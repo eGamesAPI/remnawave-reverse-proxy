@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.9"
+SCRIPT_VERSION="2.1.10"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -347,8 +347,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Select template source:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="Sni templates"
-                [CHOOSE_TEMPLATE_OPTION]="Select option (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-2."
+                [NOTHING_TEMPLATES]="Nothing templates (prettyleaf)"
+                [CHOOSE_TEMPLATE_OPTION]="Select option (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-3."
                 # Manage Panel Access
                 [PORT_8443_OPEN]="Open port 8443 for panel access"
                 [PORT_8443_CLOSE]="Close port 8443 for panel access"
@@ -762,8 +763,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Выберите источник шаблонов:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="SNI templates"
-                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-2."
+                [NOTHING_TEMPLATES]="Nothing templates (prettyleaf)"
+                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-3."
                 #Manage panel access
                 [PORT_8443_OPEN]="Открыть доступ к панели на порту 8443"
                 [PORT_8443_CLOSE]="Закрыть доступ к панели на порту 8443"
@@ -2990,6 +2992,7 @@ show_template_source_options() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -3019,8 +3022,12 @@ randomhtml() {
     else
         if [ "$template_source" = "simple" ]; then
             selected_url=${template_urls[0]}  # Simple web templates
-        else
+        elif [ "$template_source" = "sni" ]; then
             selected_url=${template_urls[1]}  # Sni templates
+        elif [ "$template_source" = "nothing" ]; then
+            selected_url=${template_urls[2]}  # Nothing templates
+        else
+            selected_url=${template_urls[1]}  # Default to Sni templates
         fi
     fi
 
@@ -3102,12 +3109,19 @@ randomhtml() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
+    if [[ ! -d "/var/www/html/" ]]; then
+        mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
+    fi
+    rm -rf /var/www/html/*
+
+    # Handle both directory-based and file-based templates
     if [[ -d "${RandomHTML}" ]]; then
-        if [[ ! -d "/var/www/html/" ]]; then
-            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
-        fi
-        rm -rf /var/www/html/*
+        # Directory-based template (simple-web-templates, sni-templates)
         cp -a "${RandomHTML}"/. "/var/www/html/"
+        echo "${LANG[TEMPLATE_COPY]}"
+    elif [[ -f "${RandomHTML}" ]]; then
+        # File-based template (nothing-sni)
+        cp "${RandomHTML}" "/var/www/html/index.html"
         echo "${LANG[TEMPLATE_COPY]}"
     else
         echo "${LANG[UNPACK_ERROR]}" && exit 1
@@ -5902,6 +5916,12 @@ case $OPTION in
                     ;;
                 2)
                     randomhtml "sni"
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
+                    ;;
+                3)
+                    randomhtml "nothing"
                     sleep 2
                     log_clear
                     remnawave_reverse
