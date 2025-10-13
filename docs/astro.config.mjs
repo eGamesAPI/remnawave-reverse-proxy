@@ -91,7 +91,7 @@ export default defineConfig({
 				{
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
-						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' }, badge: {text: '🎉 New', variant: 'success'} },
+						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' } },
 						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
 						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
