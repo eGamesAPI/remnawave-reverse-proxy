@@ -3111,18 +3111,14 @@ randomhtml() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
-    if [[ ! -d "/var/www/html/" ]]; then
-        mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
-    fi
-    rm -rf /var/www/html/*
-
-    # Handle both directory-based and file-based templates
     if [[ -d "${RandomHTML}" ]]; then
-        # Directory-based template (simple-web-templates, sni-templates)
+        if [[ ! -d "/var/www/html/" ]]; then
+            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
+        fi
+        rm -rf /var/www/html/*
         cp -a "${RandomHTML}"/. "/var/www/html/"
         echo "${LANG[TEMPLATE_COPY]}"
     elif [[ -f "${RandomHTML}" ]]; then
-        # File-based template (nothing-sni)
         cp "${RandomHTML}" "/var/www/html/index.html"
         echo "${LANG[TEMPLATE_COPY]}"
     else
