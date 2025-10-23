@@ -4640,7 +4640,7 @@ services:
     ports:
       - '127.0.0.1:6767:5432'
     volumes:
-      - remnawave-db-data:/var/lib/postgresql/data
+      - remnawave-db-data:/var/lib/postgresql
     networks:
       - remnawave-network
     healthcheck:
