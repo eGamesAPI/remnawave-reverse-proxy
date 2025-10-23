@@ -5223,7 +5223,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:17.6
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -5237,7 +5237,7 @@ services:
     ports:
       - '127.0.0.1:6767:5432'
     volumes:
-      - remnawave-db-data:/var/lib/postgresql/data
+      - remnawave-db-data:/var/lib/postgresql
     networks:
       - remnawave-network
     healthcheck:
@@ -5280,7 +5280,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.3-alpine
+    image: valkey/valkey:8.1.4-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
