@@ -9,7 +9,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 ## Running the script
 
 :::danger[Warning]
-Script must be run as **root**.
+Script must be run as **root**, and also on the server where the Remnawave node will be installed.
 :::
 
 Enter the command on your server:
@@ -17,14 +17,6 @@ Enter the command on your server:
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
-
-:::note
-If you would like to install using 1.6.16 version, you can use the following command:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/tags/v.1.7.5/install_remnawave.sh)
-```
-:::
 
 ## Installing the node
 
@@ -42,7 +34,11 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![SSL_CERT RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/ssl_cert.webp)
 
-4. Script will ask you for the selfsteal domain that you specified during the panel installation or through the `Add node to panel` section, the panel's IP address, and the SSL certificate from the panel.
+4. Script will ask you for the selfsteal domain that you specified during the panel installation or through the [`Add node to panel`](https://wiki.egam.es/installation/add-node/) section, the panel's IP address, and the SSL certificate from the panel.
+
+    :::danger[Warning]
+    Don't forget to add a DNS record for your domain.
+    :::
 
     ![Menu node end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_node_end.webp)
 

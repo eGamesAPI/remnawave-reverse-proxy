@@ -26,7 +26,7 @@
 -----
 
 ### Настройка домена
-Скрипт поддерживает два способа настройки домена: через Cloudflare или с использованием ACME на вашем хостинг-провайдере.
+Скрипт предоставляет два способа настройки домена: через Cloudflare или с использованием ACME на вашем хостинг-провайдере.
 
 ### Настройка DNS-записей для варианта панель + нода на одном сервере
 
@@ -95,11 +95,6 @@
 Для последней версии Remnawave
 ```
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
-```
-
-Для версии 1.7.5 (совместима с панелью 1.6.16):
-```
-bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/tags/v.1.7.5/install_remnawave.sh)
 ```
 <p align="center"><a href="#"><img src="./media/remnawave-reverse-proxy.png" alt="Image"></a></p>
 

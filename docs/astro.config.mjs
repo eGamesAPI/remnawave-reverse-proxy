@@ -1,32 +1,29 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightHeadingBadges from 'starlight-heading-badges';
 import starlightScrollToTop from 'starlight-scroll-to-top';
 import starlightUtils from "@lorenzo_lewis/starlight-utils";
 import starlightLinksValidator from 'starlight-links-validator'
 import starlightSidebarTopics from 'starlight-sidebar-topics';
 import starlightKbd from 'starlight-kbd';
-import starlightThemeRapide from 'starlight-theme-rapide';
 import autoImport from 'astro-auto-import';
+import starlightGitHubAlerts from 'starlight-github-alerts';
+import starlightThemeGalaxy from 'starlight-theme-galaxy';
 
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://wiki.egam.es',
 	integrations: [
 		autoImport({
-			imports: [
-				'.src/components/TryItOut.astro',
-				'.src/components/TryItOut_ru.astro',
-			],
+			imports: [],
 		}),
 		starlight({
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
 			},
 			plugins: [
-				starlightThemeRapide(),
-				starlightHeadingBadges(),
+				starlightThemeGalaxy(),
+				starlightGitHubAlerts(),
 				starlightScrollToTop({
 					showTooltip: false,
 					borderRadius: '25',
@@ -84,17 +81,22 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Configuration Remnawave', translations: { ru: 'Настройка Remnawave' },
+					items: [
+						{ label: 'How to replace a domain', slug: 'configuration/how-to-replace-a-domain', translations: { ru: 'Как изменить домен' } },
+						{ label: 'Access to Prometheus metrics', slug: 'configuration/prometheus-metrics', translations: { ru: 'Доступ к метрикам Prometheus' } },
+						{ label: 'External access to API', slug: 'configuration/external-api', translations: { ru: 'Внешний доступ к API' } },
+					],
+				},
+				{
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
-						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' }, badge: {text: '🎉 New', variant: 'default'} },
+						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' } },
 						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
 						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
-						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' }, badge: {text: '🎉 New', variant: 'default'} },
-						{ label: 'Access to Prometheus metrics', slug: 'configuration/prometheus-metrics', translations: { ru: 'Доступ к метрикам Prometheus' } },
-						//{ label: 'Monitoring with Grafana', slug: 'configuration/monitoring-with-grafana', translations: { ru: 'Мониторинг через Grafana' } },
-						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' }, badge: {text: '❌ WIP', variant: 'caution'} },
-						{ label: 'External access to API', slug: 'configuration/external-api', translations: { ru: 'Внешний доступ к API' } },
+						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' } },
+						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' } },
 					],
 				},
 				{
@@ -116,10 +118,3 @@ export default defineConfig({
 		}),
 	],
 });
-
-
-
-// TODO:
-// add https://starlight-github-alerts.netlify.app/getting-started/
-// https://www.create.bingo/
-// https://octo.guide/

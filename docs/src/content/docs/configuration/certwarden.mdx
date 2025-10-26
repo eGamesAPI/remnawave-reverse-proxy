@@ -12,15 +12,15 @@ import { LinkButton } from '@astrojs/starlight/components';
 Cert Warden solves the problem of automating certificate management in complex infrastructures, such as Kubernetes clusters, web applications, or IoT devices. Here are the main reasons why it can be useful:
 
 1. **Automation:**
-- Cert Warden automates the acquisition, renewal, and distribution of SSL/TLS certificates, eliminating the need for manual management, which can be time-consuming and prone to errors.
-- Supports automatic renewal of certificates before their expiration date, minimizing the risk of downtime due to expired certificates.
+    - Cert Warden automates the acquisition, renewal, and distribution of SSL/TLS certificates, eliminating the need for manual management, which can be time-consuming and prone to errors.
+    - Supports automatic renewal of certificates before their expiration date, minimizing the risk of downtime due to expired certificates.
 
 2. **Centralized Management:**
-- Instead of configuring separate ACME clients on each server, Cert Warden allows managing all certificates from a single place. This is especially convenient in large infrastructures with multiple servers or domains.
+    - Instead of configuring separate ACME clients on each server, Cert Warden allows managing all certificates from a single place. This is especially convenient in large infrastructures with multiple servers or domains.
 
 3. **Security:**
-- Cert Warden uses API keys for client authentication, ensuring secure access to certificates.
-- Supports working with trusted certificate authorities, such as Let’s Encrypt, ensuring the use of valid and recognized certificates.
+    - Cert Warden uses API keys for client authentication, ensuring secure access to certificates.
+    - Supports working with trusted certificate authorities, such as Let’s Encrypt, ensuring the use of valid and recognized certificates.
 
 ## Installation and configuration of Cert Warden
 
@@ -64,7 +64,7 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
       remnawave-network:
         name: remnawave-network
         driver: bridge
-        external: false
+        external: true
     ```
 
 2. Run Cert Warden
@@ -245,9 +245,11 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
 
 4. In the ACME Account field, select the previously created account
 
-5. In the Subject (and Common Name) field, enter the domain for which we will be receiving wildcard certificates (for example, `*.example.com`)
+5. In the `Subject (and Common Name)` field, enter the domain 2 levels, for example `example.com`
 
-6. Click on the Submit button
+6. Click on the `ADD` button and in the `Alternate Name 1` field enter the already wildcard domain `*.example.com`
+
+7. Click on the Submit button
 
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <img 
@@ -257,15 +259,15 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
       />
     </div>
 
-7. A window with ACME Orders will pop up
+8. A window with ACME Orders will pop up
 
       ![Cert Warden ACME Orders](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_acme_orders.png)
 
-8. Click on the `PLACE NEW ORDER` button
+9. Click on the `PLACE NEW ORDER` button
 
-9. Now we wait for the certificate to be received, we can track the status in the `ACME Queue` section, as soon as the domain disappears, the certificate is received
+10. Now we wait for the certificate to be received, we can track the status in the `ACME Queue` section, as soon as the domain disappears, the certificate is received
 
-10. Go to the `Dashboard` section and see that the certificate is received and how many days are left until the expiration date
+11. Go to the `Dashboard` section and see that the certificate is received and how many days are left until the expiration date
 
       ![Cert Warden Dashboard](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_dashboard_certificate.png) 
 
@@ -280,27 +282,19 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
 - Docker container restart: If certificates are updated, the client can restart specified Docker containers to pick up the new certificates.
 
 
-## Certwarden Client Installation and Configuration
-
-:::note
-We will install the client on the same server as the Remnawave panel, so we can also receive certificates.
-:::
-
-:::note
-Analogously, it is installed on other servers that will receive certificates
-:::
+## Certwarden Client Installation and Configuration on Remnawave Panel Server
 
 <Steps>
 
 1. Create a directory for Cert Warden Client
 
     ```bash
-    mkdir -p /opt/certwardenclient && cd /opt/certwardenclient && nano docker-compose.yml
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
     ```
    
     Insert the following content:
 
-    ```yaml title="docker-compose.yml"
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
     services:
         certwardenclient:
           image: ghcr.io/gregtwallace/certwarden-client:latest
@@ -338,7 +332,105 @@ Analogously, it is installed on other servers that will receive certificates
         remnawave-network:
           name: remnawave-network
           driver: bridge
-          external: false
+          external: true
+    ```
+
+2. `CW_CLIENT_AES_KEY_BASE64` - Specify the key generated in the `Certificates` -> `Post Processing` -> `Client AES Key` section. Click the `GENERATE` button to obtain the key.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png" 
+        alt="Cert Warden AES Key" 
+        style={{ maxWidth: '50%' }} 
+      />
+    </div>
+
+3. `CW_CLIENT_SERVER_ADDRESS` - Specify the address of the Cert Warden server (e.g., `https://certwarden.example.com`)
+
+4. `CW_CLIENT_KEY_NAME` - Specify the name of the key created in the `Private Keys` section.
+
+5. `CW_CLIENT_KEY_APIKEY` - Specify the API key created in the `Private Keys` section.
+
+6. `CW_CLIENT_CERT_NAME` - Specify the name of the certificate created in the `Certificates` section.
+
+7. `CW_CLIENT_CERT_APIKEY` - Specify the API key created in the `Certificates` section.
+
+8. Run Cert Warden Client
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+9. In the `/opt/certwardenclient/certs` folder, the `fullchain.pem` and `privkey.pem` files should appear
+
+10. Now we can mount them in our docker-compose.yml in section `remnawave-nginx`
+
+    ```bash
+    cd /opt/remnawave && nano docker-compose.yml
+    ```
+
+    Add to volumes, do not forget to specify your domain:
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+11. Restart nginx
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+</Steps>
+
+## Certwarden Client Installation and Configuration on Remnawave Node Server
+
+:::note
+Analogously, it is installed on node remnawave servers that will receive certificates
+:::
+
+<Steps>
+
+1. Create a directory for Cert Warden Client
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+   
+    Insert the following content:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
     ```
 
 2. `CW_CLIENT_AES_KEY_BASE64` - Specify the key generated in the `Certificates` -> `Post Processing` -> `Client AES Key` section. Click the `GENERATE` button to obtain the key.
