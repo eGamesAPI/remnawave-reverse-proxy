@@ -1,10 +1,10 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.1.4"
+SCRIPT_VERSION="2.2.0 DEV"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -289,6 +289,9 @@ set_language() {
                 [ENTER_PANEL_PASSWORD]="Enter panel password: "
                 [TOKEN_RECEIVED_AND_SAVED]="Token successfully received and saved"
                 [TOKEN_USED_SUCCESSFULLY]="Token successfully used"
+                [DOMAIN_ALREADY_EXISTS]="Domain already exists"
+                [TRY_ANOTHER_DOMAIN]="Please use another domain"
+                [ERROR_CHECK_DOMAIN]="Error checking domain"
                 [NODE_ADDED_SUCCESS]="Node successfully added!"
                 [CREATE_NEW_NODE]="Creating new node for %s..."
                 [CF_INVALID_NAME]="Error: The name of the configuration profile %s is already in use.\nPlease choose another name."
@@ -344,8 +347,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Select template source:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="Sni templates"
-                [CHOOSE_TEMPLATE_OPTION]="Select option (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-2."
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
+                [CHOOSE_TEMPLATE_OPTION]="Select option (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Invalid choice. Please select 0-3."
                 # Manage Panel Access
                 [PORT_8443_OPEN]="Open port 8443 for panel access"
                 [PORT_8443_CLOSE]="Close port 8443 for panel access"
@@ -360,6 +364,8 @@ set_language() {
                 [PORT_8443_ALREADY_CONFIGURED]="Port 8443 already configured in nginx.conf"
                 [UFW_RELOAD_FAILED]="Failed to reload UFW."
                 [PORT_8443_ALREADY_CLOSED]="Port 8443 already closed in UFW."
+                #Legiz Extensions
+                [LEGIZ_EXTENSIONS_PROMPT]="Select action (0-3):"
                 # Sub Page Upload
                 [UPLOADING_SUB_PAGE]="Uploading custom sub page template..."
                 [ERROR_FETCH_SUB_PAGE]="Failed to fetch custom sub page template."
@@ -387,6 +393,26 @@ set_language() {
                 [BRANDING_SUPPORT_URL_PROMPT]="Enter your support page URL:"
                 [BRANDING_LOGO_URL_PROMPT]="Enter your brand logo URL:"
                 [BRANDING_ADDED_SUCCESS]="Branding configuration successfully added"
+                [CUSTOM_APP_LIST_MENU]="Edit custom application list and branding"
+                [CUSTOM_APP_LIST_NOT_FOUND]="Custom application list not found"
+                [EDIT_BRANDING]="Edit branding"
+                [EDIT_LOGO]="Change logo"
+                [EDIT_NAME]="Change name in branding"
+                [EDIT_SUPPORT_URL]="Change support link"
+                [DELETE_APPS]="Delete specific applications"
+                [BRANDING_CURRENT_VALUES]="Current branding values:"
+                [BRANDING_LOGO_URL]="Logo URL:"
+                [BRANDING_NAME]="Name:"
+                [BRANDING_SUPPORT_URL]="Support URL:"
+                [ENTER_NEW_LOGO]="Enter new logo URL:"
+                [ENTER_NEW_NAME]="Enter new brand name:"
+                [ENTER_NEW_SUPPORT]="Enter new support URL:"
+                [CONFIRM_CHANGE]="Confirm change? (y/n):"
+                [PLATFORM_SELECT]="Select platform:"
+                [APP_SELECT]="Which application do you want to delete?"
+                [CONFIRM_DELETE_APP]="Are you sure you want to delete application %s from platform %s? (y/n):"
+                [APP_DELETED_SUCCESS]="Application successfully deleted"
+                [NO_APPS_FOUND]="No applications found in this platform"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Custom rules template not applied"
                 [UPLOADING_TEMPLATE]="Uploading custom rules template..."
@@ -679,6 +705,9 @@ set_language() {
                 [ENTER_PANEL_PASSWORD]="Введите пароль панели: "
                 [TOKEN_RECEIVED_AND_SAVED]="Токен успешно получен и сохранён"
                 [TOKEN_USED_SUCCESSFULLY]="Токен успешно использован"
+                [DOMAIN_ALREADY_EXISTS]="Домен уже используется"
+                [TRY_ANOTHER_DOMAIN]="Пожалуйста, используйте другой домен"
+                [ERROR_CHECK_DOMAIN]="Ошибка при проверке домена"
                 [NODE_ADDED_SUCCESS]="Нода успешно добавлена!"
                 [CREATE_NEW_NODE]="Создаём новую ноду для %s"
                 [CF_INVALID_NAME]="Ошибка: Имя конфигурационного профиля %s уже используется.\nПожалуйста, выберите другое имя."
@@ -734,8 +763,9 @@ set_language() {
                 [CHOOSE_TEMPLATE_SOURCE]="Выберите источник шаблонов:"
                 [SIMPLE_WEB_TEMPLATES]="Simple web templates"
                 [SNI_TEMPLATES]="SNI templates"
-                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-2):"
-                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-2."
+                [NOTHING_TEMPLATES]="Nothing Sni templates"
+                [CHOOSE_TEMPLATE_OPTION]="Выберите действие (0-3):"
+                [INVALID_TEMPLATE_CHOICE]="Неверный выбор. Выберите 0-3."
                 #Manage panel access
                 [PORT_8443_OPEN]="Открыть доступ к панели на порту 8443"
                 [PORT_8443_CLOSE]="Закрыть доступ к панели на порту 8443"
@@ -750,6 +780,8 @@ set_language() {
                 [PORT_8443_ALREADY_CONFIGURED]="Порт 8443 уже настроен в конфигурации Nginx."
                 [UFW_RELOAD_FAILED]="Не удалось перезагрузить UFW."
                 [PORT_8443_ALREADY_CLOSED]="Порт 8443 уже закрыт в UFW."
+                #Legiz Extensions
+                [LEGIZ_EXTENSIONS_PROMPT]="Выберите действие (0-3):"
                 # Sub Page Upload
                 [UPLOADING_SUB_PAGE]="Загрузка пользовательского шаблона страницы подписки..."
                 [ERROR_FETCH_SUB_PAGE]="Не удалось получить пользовательский шаблон страницы подписки."
@@ -777,6 +809,26 @@ set_language() {
                 [BRANDING_SUPPORT_URL_PROMPT]="Введите ссылку на страницу поддержки:"
                 [BRANDING_LOGO_URL_PROMPT]="Введите ссылку на логотип вашего бренда:"
                 [BRANDING_ADDED_SUCCESS]="Конфигурация брендирования успешно добавлена"
+                [CUSTOM_APP_LIST_MENU]="Редактирование кастомного списка приложений и брендирования"
+                [CUSTOM_APP_LIST_NOT_FOUND]="Кастомный список приложений не найден"
+                [EDIT_BRANDING]="Редактирование брендирования"
+                [EDIT_LOGO]="Изменить логотип"
+                [EDIT_NAME]="Изменить имя в брендировании"
+                [EDIT_SUPPORT_URL]="Изменить ссылку поддержки"
+                [DELETE_APPS]="Удалить определенные приложения"
+                [BRANDING_CURRENT_VALUES]="Текущие значения брендирования:"
+                [BRANDING_LOGO_URL]="URL логотипа:"
+                [BRANDING_NAME]="Имя:"
+                [BRANDING_SUPPORT_URL]="URL поддержки:"
+                [ENTER_NEW_LOGO]="Введите новый URL логотипа:"
+                [ENTER_NEW_NAME]="Введите новое имя бренда:"
+                [ENTER_NEW_SUPPORT]="Введите новую ссылку поддержки:"
+                [CONFIRM_CHANGE]="Подтвердить изменение? (y/n):"
+                [PLATFORM_SELECT]="Выберите платформу:"
+                [APP_SELECT]="Какое приложение вы хотите удалить?"
+                [CONFIRM_DELETE_APP]="Вы точно хотите удалить приложение %s из списка платформы %s? (y/n):"
+                [APP_DELETED_SUCCESS]="Приложение успешно удалено"
+                [NO_APPS_FOUND]="Приложения не найдены в этой платформе"
                 # Template Upload
                 [TEMPLATE_NOT_APPLIED]="Шаблон правил не применён"
                 [UPLOADING_TEMPLATE]="Загрузка шаблона правил..."
@@ -845,7 +897,7 @@ error() {
 }
 
 check_os() {
-    if ! grep -q "bullseye" /etc/os-release && ! grep -q "bookworm" /etc/os-release && ! grep -q "jammy" /etc/os-release && ! grep -q "noble" /etc/os-release; then
+    if ! grep -q "bullseye" /etc/os-release && ! grep -q "bookworm" /etc/os-release && ! grep -q "jammy" /etc/os-release && ! grep -q "noble" /etc/os-release && ! grep -q "trixie" /etc/os-release; then
         error "${LANG[ERROR_OS]}"
     fi
 }
@@ -898,7 +950,7 @@ start_panel_node() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if docker ps -q --filter "ancestor=remnawave/backend:dev" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:dev" | grep -q .; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}...${COLOR_RESET}"
@@ -919,7 +971,7 @@ stop_panel_node() {
     fi
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if ! docker ps -q --filter "ancestor=remnawave/backend:dev" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:dev" | grep -q .; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}...${COLOR_RESET}"
@@ -1491,7 +1543,7 @@ view_logs() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if ! docker ps -q --filter "ancestor=remnawave/backend:dev" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:dev" | grep -q .; then
         echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
         exit 1
     fi
@@ -2020,6 +2072,7 @@ show_custom_legiz_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SELECT_TEMPLATE_CUSTOM1]}${COLOR_RESET}" # Custom templates
     echo -e "${COLOR_YELLOW}2. ${LANG[SELECT_SUB_PAGE_CUSTOM1]}${COLOR_RESET}" # Custom sub page
+    echo -e "${COLOR_YELLOW}3. ${LANG[CUSTOM_APP_LIST_MENU]}${COLOR_RESET}" # Edit custom app list and branding
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -2027,7 +2080,7 @@ show_custom_legiz_menu() {
 
 manage_custom_legiz() {
     show_custom_legiz_menu
-    reading "${LANG[IPV6_PROMPT]}" LEGIZ_OPTION
+    reading "${LANG[LEGIZ_EXTENSIONS_PROMPT]}" LEGIZ_OPTION
     case $LEGIZ_OPTION in
         1)
             manage_template_upload
@@ -2067,6 +2120,11 @@ manage_custom_legiz() {
             fi
             
             manage_sub_page_upload
+            log_clear
+            manage_custom_legiz
+            ;;
+        3)
+            manage_custom_app_list
             log_clear
             manage_custom_legiz
             ;;
@@ -2437,6 +2495,10 @@ branding_add_to_appconfig() {
 }
 
 manage_sub_page_upload() {
+    if [ -d "/opt/remnawave/index.html" ] || [ -d "/opt/remnawave/app-config.json" ]; then
+        rm -rf "/opt/remnawave/index.html" "/opt/remnawave/app-config.json"
+    fi
+    
     if ! docker ps -a --filter "name=remnawave-subscription-page" --format '{{.Names}}' | grep -q "^remnawave-subscription-page$"; then
         printf "${COLOR_RED}${LANG[CONTAINER_NOT_FOUND]}${COLOR_RESET}\n" "remnawave-subscription-page"
         sleep 2
@@ -2659,6 +2721,229 @@ manage_sub_page_upload() {
     spinner $! "${LANG[WAITING]}"
     echo -e "${COLOR_GREEN}${LANG[SUB_PAGE_UPDATED_SUCCESS]}${COLOR_RESET}"
 }
+
+show_custom_app_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[CUSTOM_APP_LIST_MENU]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[EDIT_BRANDING]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[DELETE_APPS]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+}
+
+manage_custom_app_list() {
+    local config_file="/opt/remnawave/app-config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        echo -e "${COLOR_RED}${LANG[CUSTOM_APP_LIST_NOT_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    show_custom_app_menu
+    reading "${LANG[IPV6_PROMPT]}" APP_OPTION
+    
+    case $APP_OPTION in
+        1)
+            edit_branding "$config_file"
+            ;;
+        2)
+            delete_applications "$config_file"
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            manage_custom_app_list
+            ;;
+    esac
+}
+
+edit_branding() {
+    local config_file="$1"
+    local needs_restart=false
+    
+    # Check if branding exists
+    if jq -e '.config.branding' "$config_file" > /dev/null 2>&1; then
+        echo -e "${COLOR_GREEN}${LANG[BRANDING_CURRENT_VALUES]}${COLOR_RESET}"
+        local logo_url=$(jq -r '.config.branding.logoUrl // "N/A"' "$config_file")
+        local name=$(jq -r '.config.branding.name // "N/A"' "$config_file")
+        local support_url=$(jq -r '.config.branding.supportUrl // "N/A"' "$config_file")
+        
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_LOGO_URL]} ${COLOR_WHITE}$logo_url${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_NAME]} ${COLOR_WHITE}$name${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[BRANDING_SUPPORT_URL]} ${COLOR_WHITE}$support_url${COLOR_RESET}"
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[EDIT_BRANDING]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[EDIT_LOGO]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[EDIT_NAME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[EDIT_SUPPORT_URL]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" BRANDING_OPTION
+    
+    case $BRANDING_OPTION in
+        1)
+            reading "${LANG[ENTER_NEW_LOGO]}" new_logo
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg logo "$new_logo" '.config.branding.logoUrl = $logo' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        2)
+            reading "${LANG[ENTER_NEW_NAME]}" new_name
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg name "$new_name" '.config.branding.name = $name' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        3)
+            reading "${LANG[ENTER_NEW_SUPPORT]}" new_support
+            reading "${LANG[CONFIRM_CHANGE]}" confirm
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                jq --arg support "$new_support" '.config.branding.supportUrl = $support' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+                needs_restart=true
+            fi
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            edit_branding "$config_file"
+            ;;
+    esac
+    
+    # Restart container if changes were made
+    if [ "$needs_restart" = true ]; then
+        echo -e "${COLOR_GREEN}${LANG[BRANDING_ADDED_SUCCESS]}${COLOR_RESET}"
+        
+        # Restart subscription page container
+        cd /opt/remnawave || return 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    fi
+}
+
+delete_applications() {
+    local config_file="$1"
+    
+    # Get platforms with non-empty arrays
+    local platforms=$(jq -r '.platforms | to_entries[] | select(.value | length > 0) | .key' "$config_file" 2>/dev/null)
+    
+    if [ -z "$platforms" ]; then
+        echo -e "${COLOR_RED}${LANG[NO_APPS_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[PLATFORM_SELECT]}${COLOR_RESET}"
+    echo -e ""
+    
+    local i=1
+    declare -A platform_map
+    while IFS= read -r platform; do
+        echo -e "${COLOR_YELLOW}$i. $platform${COLOR_RESET}"
+        platform_map[$i]="$platform"
+        ((i++))
+    done <<< "$platforms"
+    
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" PLATFORM_OPTION
+    
+    if [ "$PLATFORM_OPTION" == "0" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+        return 0
+    fi
+    
+    if [ -z "${platform_map[$PLATFORM_OPTION]}" ]; then
+        echo -e "${COLOR_RED}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        sleep 2
+        delete_applications "$config_file"
+        return 1
+    fi
+    
+    local selected_platform=${platform_map[$PLATFORM_OPTION]}
+    
+    # Get applications from selected platform
+    local apps=$(jq -r --arg platform "$selected_platform" '.platforms[$platform][] | .name // .id' "$config_file" 2>/dev/null)
+    
+    if [ -z "$apps" ]; then
+        echo -e "${COLOR_RED}${LANG[NO_APPS_FOUND]}${COLOR_RESET}"
+        sleep 2
+        return 1
+    fi
+    
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[APP_SELECT]}${COLOR_RESET}"
+    echo -e ""
+    
+    local j=1
+    declare -A app_map
+    while IFS= read -r app; do
+        echo -e "${COLOR_YELLOW}$j. $app${COLOR_RESET}"
+        app_map[$j]="$app"
+        ((j++))
+    done <<< "$apps"
+    
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[IPV6_PROMPT]}" APP_DELETE_OPTION
+    
+    if [ "$APP_DELETE_OPTION" == "0" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+        return 0
+    fi
+    
+    if [ -z "${app_map[$APP_DELETE_OPTION]}" ]; then
+        echo -e "${COLOR_RED}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
+        sleep 2
+        delete_applications "$config_file"
+        return 1
+    fi
+    
+    local selected_app=${app_map[$APP_DELETE_OPTION]}
+    
+    printf "${COLOR_YELLOW}${LANG[CONFIRM_DELETE_APP]}${COLOR_RESET}\n" "$selected_app" "$selected_platform"
+    read confirm
+    
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        # Remove the application from the platform array
+        jq --arg platform "$selected_platform" --arg app_name "$selected_app" '
+        .platforms[$platform] = [.platforms[$platform][] | select((.name // .id) != $app_name)]
+        ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+        
+        echo -e "${COLOR_GREEN}${LANG[APP_DELETED_SUCCESS]}${COLOR_RESET}"
+        
+        # Restart subscription page container
+        cd /opt/remnawave || return 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+    fi
+}
 #Custom Templates and Extensions by legiz
 
 add_cron_rule() {
@@ -2707,6 +2992,7 @@ show_template_source_options() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -2718,7 +3004,7 @@ randomhtml() {
     cd /opt/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
 
     rm -f main.zip 2>/dev/null
-    rm -rf simple-web-templates-main/ sni-templates-main/ 2>/dev/null
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/ 2>/dev/null
 
     echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
     sleep 1
@@ -2727,7 +3013,8 @@ randomhtml() {
 
     template_urls=(
         "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
-        "https://github.com/SmallPoppa/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip"
     )
 
     if [ -z "$template_source" ]; then
@@ -2735,8 +3022,12 @@ randomhtml() {
     else
         if [ "$template_source" = "simple" ]; then
             selected_url=${template_urls[0]}  # Simple web templates
-        else
+        elif [ "$template_source" = "sni" ]; then
             selected_url=${template_urls[1]}  # Sni templates
+        elif [ "$template_source" = "nothing" ]; then
+            selected_url=${template_urls[2]}  # Nothing templates
+        else
+            selected_url=${template_urls[1]}  # Default to Sni templates
         fi
     fi
 
@@ -2751,16 +3042,26 @@ randomhtml() {
     if [[ "$selected_url" == *"eGamesAPI"* ]]; then
         cd simple-web-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets ".gitattributes" "README.md" "_config.yml" 2>/dev/null
+    elif [[ "$selected_url" == *"nothing-sni"* ]]; then
+        cd nothing-sni-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf .github README.md 2>/dev/null
     else
         cd sni-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         rm -rf assets "README.md" "index.html" 2>/dev/null
     fi
 
-    mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
+    # Special handling for nothing-sni - select random HTML file
+    if [[ "$selected_url" == *"nothing-sni"* ]]; then
+        # Randomly select one HTML file from 1-8.html
+        selected_number=$((RANDOM % 8 + 1))
+        RandomHTML="${selected_number}.html"
+    else
+        mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
 
-    RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+    fi
 
-    if [[ "$selected_url" == *"SmallPoppa"* && "$RandomHTML" == "503 error pages" ]]; then
+    if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
         cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
         versions=("v1" "v2")
         RandomVersion="${versions[$RANDOM % ${#versions[@]}]}"
@@ -2777,7 +3078,9 @@ randomhtml() {
     local random_id_suffix=$(openssl rand -hex 4)
 
     local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
+    local meta_usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
     local random_meta_name=${meta_names[$RANDOM % ${#meta_names[@]}]}
+    local random_username=${meta_usernames[$RANDOM % ${#meta_usernames[@]}]}
 
     local class_prefixes=("style" "data" "ui" "layout" "theme" "view")
     local random_class_prefix=${class_prefixes[$RANDOM % ${#class_prefixes[@]}]}
@@ -2794,6 +3097,7 @@ randomhtml() {
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
         -e "s/<body/<body class=\"$random_class\"/" \
+        -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
     find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
@@ -2814,6 +3118,9 @@ randomhtml() {
         rm -rf /var/www/html/*
         cp -a "${RandomHTML}"/. "/var/www/html/"
         echo "${LANG[TEMPLATE_COPY]}"
+    elif [[ -f "${RandomHTML}" ]]; then
+        cp "${RandomHTML}" "/var/www/html/index.html"
+        echo "${LANG[TEMPLATE_COPY]}"
     else
         echo "${LANG[UNPACK_ERROR]}" && exit 1
     fi
@@ -2824,7 +3131,7 @@ randomhtml() {
     fi
 
     cd /opt/
-    rm -rf simple-web-templates-main/ sni-templates-main/
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/
 }
 #Manage Template for steal
 
@@ -3690,12 +3997,38 @@ generate_xray_keys() {
     echo "$private_key"
 }
 
+check_node_domain() {
+    local domain_url="$1"
+    local token="$2"
+    local domain="$3"
+
+    local response=$(make_api_request "GET" "http://$domain_url/api/nodes" "$token")
+    
+    if [ -z "$response" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CHECK_DOMAIN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if echo "$response" | jq -e '.response' > /dev/null 2>&1; then
+        local existing_domain=$(echo "$response" | jq -r --arg addr "$domain" '.response[] | select(.address == $addr) | .address' 2>/dev/null)
+        if [ -n "$existing_domain" ]; then
+            echo -e "${COLOR_RED}${LANG[DOMAIN_ALREADY_EXISTS]}: $domain${COLOR_RESET}"
+            return 1
+        fi
+        return 0
+    else
+        local error_message=$(echo "$response" | jq -r '.message // "Unknown error"')
+        echo -e "${COLOR_RED}${LANG[ERROR_CHECK_DOMAIN]}: $error_message${COLOR_RESET}"
+        return 1
+    fi
+}
+
 create_node() {
     local domain_url=$1
     local token=$2
     local config_profile_uuid=$3
     local inbound_uuid=$4
-    local node_address="${5:-$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || curl -s -4 ipinfo.io/ip)}"
+    local node_address="${5:-172.30.0.1}"
     local node_name="${6:-Steal}"
 
     local node_data=$(cat <<EOF
@@ -3787,7 +4120,7 @@ create_config_profile() {
         config: {
             log: { loglevel: "warning" },
             dns: {
-                queryStrategy: "ForceIPv4",
+                queryStrategy: "UseIPv4",
                 servers: [{ address: "https://dns.google/dns-query", skipFallback: false }]
             },
             inbounds: [{
@@ -3795,7 +4128,7 @@ create_config_profile() {
                 port: 443,
                 protocol: "vless",
                 settings: { clients: [], decryption: "none" },
-                sniffing: { enabled: true, destOverride: ["http", "tls"] },
+                sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
                 streamSettings: {
                     network: "tcp",
                     security: "reality",
@@ -4293,7 +4626,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:17.6
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4307,7 +4640,7 @@ services:
     ports:
       - '127.0.0.1:6767:5432'
     volumes:
-      - remnawave-db-data:/var/lib/postgresql/data
+      - remnawave-db-data:/var/lib/postgresql
     networks:
       - remnawave-network
     healthcheck:
@@ -4322,7 +4655,7 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:latest
+    image: remnawave/backend:dev
     container_name: remnawave
     hostname: remnawave
     restart: always
@@ -4332,6 +4665,12 @@ services:
       - '127.0.0.1:3000:3000'
     networks:
       - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:\${METRICS_PORT:-3001}/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       remnawave-db:
         condition: service_healthy
@@ -4344,7 +4683,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.3-alpine
+    image: valkey/valkey:8.1.4-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -4353,7 +4692,7 @@ services:
     volumes:
       - remnawave-redis-data:/data
     healthcheck:
-      test: [ "CMD", "valkey-cli", "ping" ]
+      test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
       timeout: 10s
       retries: 3
@@ -4884,7 +5223,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:17.6
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4898,7 +5237,7 @@ services:
     ports:
       - '127.0.0.1:6767:5432'
     volumes:
-      - remnawave-db-data:/var/lib/postgresql/data
+      - remnawave-db-data:/var/lib/postgresql
     networks:
       - remnawave-network
     healthcheck:
@@ -4913,7 +5252,7 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:latest
+    image: remnawave/backend:dev
     container_name: remnawave
     hostname: remnawave
     restart: always
@@ -4923,6 +5262,12 @@ services:
       - '127.0.0.1:3000:3000'
     networks:
       - remnawave-network
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -f http://localhost:\${METRICS_PORT:-3001}/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       remnawave-db:
         condition: service_healthy
@@ -4935,7 +5280,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.3-alpine
+    image: valkey/valkey:8.1.4-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -4944,7 +5289,7 @@ services:
     volumes:
       - remnawave-redis-data:/data
     healthcheck:
-      test: [ "CMD", "valkey-cli", "ping" ]
+      test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
       timeout: 10s
       retries: 3
@@ -5338,7 +5683,7 @@ installation_node() {
         max-file: '5'
 
   remnanode:
-    image: remnawave/node:latest
+    image: remnawave/node:dev
     container_name: remnanode
     hostname: remnanode
     restart: always
@@ -5448,14 +5793,26 @@ add_node_to_panel() {
     echo -e "${COLOR_YELLOW}${LANG[ADD_NODE_TO_PANEL]}${COLOR_RESET}"
     sleep 1
 
-    reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+    get_panel_token
+    token=$(cat "$TOKEN_FILE")
+    if [ $? -ne 0 ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    while true; do
+        reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+        check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
+        if [ $? -eq 0 ]; then
+            break
+        fi
+        echo -e "${COLOR_YELLOW}${LANG[TRY_ANOTHER_DOMAIN]}${COLOR_RESET}"
+    done
     
-        while true; do
+    while true; do
         reading "${LANG[ENTER_NODE_NAME]}" entity_name
         if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                get_panel_token
-                token=$(cat "$TOKEN_FILE")
                 local response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
                 
                 if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null; then
@@ -5557,6 +5914,12 @@ case $OPTION in
                     ;;
                 2)
                     randomhtml "sni"
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
+                    ;;
+                3)
+                    randomhtml "nothing"
                     sleep 2
                     log_clear
                     remnawave_reverse
