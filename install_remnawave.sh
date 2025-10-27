@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.0"
+SCRIPT_VERSION="2.2.1"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -269,7 +269,7 @@ set_language() {
                 [SELFSTEAL]="Enter the selfsteal domain for the node specified during panel installation:"
                 [PANEL_IP_PROMPT]="Enter the IP address of the panel to establish a connection between the panel and the node:"
                 [IP_ERROR]="Enter a valid IP address in the format X.X.X.X (e.g., 192.168.1.1)"
-                [CERT_PROMPT]="Enter the certificate obtained from the panel, keeping the SSL_CERT= line (paste the content and press Enter twice):"
+                [CERT_PROMPT]="Enter the certificate obtained from the panel (paste the content and press Enter twice):"
                 [CERT_CONFIRM]="Are you sure the certificate is correct? (y/n):"
                 [ABORT_MESSAGE]="Installation aborted by user"
                 [SUCCESS_MESSAGE]="Node successfully connected"
@@ -660,7 +660,7 @@ set_language() {
                 [SELFSTEAL]="Введите selfsteal домен для ноды, который указали при установке панели:"
                 [PANEL_IP_PROMPT]="Введите IP адрес панели, чтобы установить соединение между панелью и ноды:"
                 [IP_ERROR]="Введите корректный IP-адрес в формате X.X.X.X (например, 192.168.1.1)"
-                [CERT_PROMPT]="Введите сертификат, полученный от панели, сохраняя строку SSL_CERT= (вставьте содержимое и 2 раза нажмите Enter):"
+                [CERT_PROMPT]="Введите сертификат, полученный от панели (вставьте содержимое и 2 раза нажмите Enter):"
                 [CERT_CONFIRM]="Вы уверены, что сертификат правильный? (y/n):"
                 [ABORT_MESSAGE]="Установка прервана пользователем"
                 [SUCCESS_MESSAGE]="Нода успешно подключена"
@@ -1680,7 +1680,7 @@ manage_warp() {
 
     case $WARP_OPTION in
         1)
-            if [ ! -f "/opt/remnawave/.env-node" ]; then
+            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml; then
                 echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
                 exit 1
             fi
