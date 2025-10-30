@@ -2948,7 +2948,16 @@ install_packages() {
 
 extract_domain() {
     local SUBDOMAIN=$1
-    echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
+    echo "$SUBDOMAIN" | awk -F'.' '
+    {
+        if (NF == 3) {
+            print $(NF-1)"."$NF
+        } else if (NF > 3) {
+            print $(NF-2)"."$(NF-1)"."$NF
+        } else {
+            print $0
+        }
+    }'
 }
 
 check_domain() {
