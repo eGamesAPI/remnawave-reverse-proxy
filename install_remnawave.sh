@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.1"
+SCRIPT_VERSION="2.2.2"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2947,8 +2947,8 @@ install_packages() {
 }
 
 extract_domain() {
-    local SUBDOMAIN=$1
-    echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
+    local SUBDOMAIN="$1"
+    echo "$SUBDOMAIN" | sed 's/^[^.]*\.//'
 }
 
 check_domain() {
@@ -3129,7 +3129,7 @@ get_certificates() {
     local DOMAIN=$1
     local CERT_METHOD=$2
     local LETSENCRYPT_EMAIL=$3
-    local BASE_DOMAIN=$(extract_domain "$DOMAIN")
+    local BASE_DOMAIN="$DOMAIN"
     local WILDCARD_DOMAIN="*.$BASE_DOMAIN"
 
     printf "${COLOR_YELLOW}${LANG[GENERATING_CERTS]}${COLOR_RESET}\n" "$DOMAIN"
