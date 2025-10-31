@@ -4572,11 +4572,13 @@ server {
 
     root /var/www/html;
     index index.html;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 }
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
     return 444;
 }
@@ -5314,11 +5316,13 @@ server {
 
     root /var/www/html;
     index index.html;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 }
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
     return 444;
 }
