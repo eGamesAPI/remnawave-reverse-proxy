@@ -4081,15 +4081,15 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}${LANG[ADDING_CRON_FOR_EXISTING_CERTS]}${COLOR_RESET}"
         if [ "$min_days_left" -le 30 ]; then
             echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
-            add_cron_rule "0 5 * * * $cron_command"
+            add_cron_rule "0 5 * * 0 $cron_command"
         else
-            add_cron_rule "0 5 1 */2 * $cron_command"
+            add_cron_rule "0 5 * * 0 $cron_command"
         fi
-    elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * *.*$cron_command"; then
+    elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then
         echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}${LANG[UPDATING_CRON]}${COLOR_RESET}"
         crontab -u root -l 2>/dev/null | grep -v "/usr/bin/certbot renew" | crontab -u root -
-        add_cron_rule "0 5 * * * $cron_command"
+        add_cron_rule "0 5 * * 0 $cron_command"
     else
         echo -e "${COLOR_YELLOW}${LANG[CRON_ALREADY_EXISTS]}${COLOR_RESET}"
     fi
