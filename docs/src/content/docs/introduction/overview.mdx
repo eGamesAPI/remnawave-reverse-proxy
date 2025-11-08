@@ -16,46 +16,73 @@ import lightBanner from '../../../assets/banner-black.webp';
 THIS REPOSITORY IS AN EDUCATIONAL EXAMPLE FOR LEARNING NGINX, REVERSE PROXY AND NETWORK SECURITY BASICS. THIS SCRIPT DEMONSTRATES NGINX CONFIGURATION AS A REVERSE PROXY. NOT FOR PRODUCTION USE! IF YOU DON'T UNDERSTAND HOW THE CONTROL PANEL WORKS - THAT'S YOUR PROBLEM, NOT THE SCRIPT AUTHOR'S. USE AT YOUR OWN RISK!
 :::
 
-## Server uses Nginx Reverse-Proxy
-
 This script is designed to streamline the setup of a reverse proxy server using NGINX and Xray, as well as to automate the installation of the Remnawave control panel and node. In this configuration, Xray operates directly on port 443, forwarding traffic through a socket that NGINX listens to. This approach minimizes unnecessary TCP overhead, delivering improved performance and connection reliability.
 
 :::note[Important]
 Supports Debian and Ubuntu. The script has been tested in a KVM virtualization environment. For proper operation, you will need your own domain. It is recommended to run it with root privileges on a freshly installed system.
 :::
 
-The script supports deployment on either a single server (with both the panel and node together) or two separate servers, depending on your needs:
+## Deployment Modes
 
-- Single Server: Ideal for a compact setup where the control panel and Xray node are installed on the same machine.
-- Panel Server: Serves as the central management hub, without hosting an Xray node.
-- Node Server: Hosts the Xray node along with a Self Steal stub for VLESS REALITY. To ensure proper operation, you need to prepare three domains (or subdomains) in advance: the first will be used for the control panel, the second for handling subscriptions, and the third for the Self Steal stub site, which is hosted on the node server.
+The script supports flexible deployment configurations:
 
-## Panel Protection via URL Parameter
+**1. Single Server Mode**
+- Control panel and XRAY node installed on one machine
+- Suitable for compact installations with moderate traffic
 
-To enhance the security of the panel, an additional layer of protection against detection has been implemented in the NGINX configuration:
+**2. Distributed Mode**
+- **Panel Server**: Management center without XRAY node
+- **Node Server**: Hosts XRAY node with SelfSteal stub for VLESS REALITY
 
-- To access the panel, you must navigate to a URL in the following format:
+## Security Features
 
+### Panel Access Protection
+
+NGINX configuration implements URL parameter-based authentication to protect against unauthorized discovery:
+
+**Access Method**
 ```
 https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>
 ```
 
-- This request automatically sets a special Cookie in the browser with the name `<SECRET_KEY>` and the value `<SECRET_KEY>`.
-- If the Cookie is missing or the URL request lacks the specified parameter, the user will encounter either a blank page or a 404 error, depending on the requested path.
+**How It Works**
 
-This mechanism ensures the panel remains hidden from unauthorized access. Even if an attacker attempts to scan the host or brute-force paths, they will be unable to access the panel without the correct parameter and corresponding Cookie.
+1. URL parameter automatically sets a cookie in the browser
+   - Cookie name: `<SECRET_KEY>`
+   - Cookie value: `<SECRET_KEY>`
 
-## Proxy server configuration
+2. Access requirements:
+   - Valid cookie must be present
+   - URL must contain correct parameter
 
-1. Proxy server configuration:
-    - Support for automatic configuration updates via subscription and JSON subscription with the ability to convert to formats for popular applications.
-2. NGINX reverse proxy setup in combination with Xray.
-3. Security measures:
-    - UFW setup for access management.
-    - Cloudflare/ACME SSL certificates with automatic renewal
-    - Manage IPv6 to prevent potential vulnerabilities.
-    - BBR optimization for TCP connections.
-    - Selecting a random website template from an array.
+3. Failed access behavior:
+   - Missing cookie: Blank page or 404 error
+   - Incorrect parameter: Blank page or 404 error
+
+This protection level prevents:
+- Host scanning discovery
+- Path brute-force attacks
+- Brute-force access attempts
+
+The panel remains invisible without the correct authentication parameter.
+
+## Features
+
+### Proxy Server Configuration
+- Automatic configuration updates via subscription
+- JSON subscription support with format conversion for popular clients
+- Compatibility with major proxy clients
+
+### NGINX Integration
+- Optimized reverse proxy setup with XRAY
+- Unix socket communication for reduced overhead
+
+### Security Implementation
+- **Firewall**: UFW configuration for access control
+- **SSL Certificates**: Cloudflare or ACME with automatic renewal
+- **IPv6 Management**: Vulnerability prevention measures
+- **TCP Optimization**: BBR congestion control algorithm
+- **Masking**: Random website template selection
 
 ## Issues
 
