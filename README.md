@@ -112,7 +112,7 @@ The script supports two methods for obtaining SSL certificates:
 4. Paste the certificate when prompted
 5. Confirm the successful node connection message
 
------
+---
 
 ## Security Features
 
