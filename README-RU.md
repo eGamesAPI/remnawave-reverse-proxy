@@ -7,7 +7,7 @@
 </a></p>
 
 <p align="center">
-  <img src="./media/ru.png" alt="Русский" /> <strong>Русский</strong> | <a href="/README.md"><img src="./media/us.png" alt="English" /> English</a>
+  <img src="./media/ru.png" alt="Русский" /> <strong>Русский</strong> | <img src="./media/us.png" alt="English" /> <a href="/README.md">English</a>
 </p>
 
 ---
