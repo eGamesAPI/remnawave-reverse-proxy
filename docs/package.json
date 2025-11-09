@@ -16,7 +16,7 @@
     "astro-auto-import": "^0.4.4",
     "sharp": "^0.34.4",
     "starlight-contributor-list": "^0.3.0",
-    "starlight-github-alerts": "^0.1.0",
+    "starlight-github-alerts": "^0.1.1",
     "starlight-kbd": "^0.2.0",
     "starlight-links-validator": "^0.18.0",
     "starlight-package-managers": "^0.11.0",
