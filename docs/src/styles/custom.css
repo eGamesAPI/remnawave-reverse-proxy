@@ -42,3 +42,11 @@
 :root[data-theme='light'] .light-banner {
 	display: block;
 }
+
+/* Fix button text color */
+.sl-link-button.primary {
+	color: black !important;
+}
+.sl-link-button.primary * {
+	color: black !important;
+}
