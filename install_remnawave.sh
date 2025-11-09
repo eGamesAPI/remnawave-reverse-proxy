@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.2b"
+SCRIPT_VERSION="2.2.2c"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2641,8 +2641,8 @@ spinner() {
   local pid=$1
   local text=$2
 
-  export LC_ALL=en_US.UTF-8
-  export LANG=en_US.UTF-8
+  export LC_ALL=C.UTF-8
+  export LANG=C.UTF-8
 
   local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   local text_code="$COLOR_GREEN"
@@ -2844,21 +2844,6 @@ install_packages() {
             echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
             return 1
         fi
-    fi
-
-    if [ ! -f /etc/locale.gen ]; then
-        echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
-    fi
-    if ! grep -q "^en_US.UTF-8 UTF-8" /etc/locale.gen; then
-        if grep -q "^# en_US.UTF-8 UTF-8" /etc/locale.gen; then
-            sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
-        else
-            echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-        fi
-    fi
-    if ! locale-gen || ! update-locale LANG=en_US.UTF-8; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CONFIGURE_LOCALES]}${COLOR_RESET}" >&2
-        return 1
     fi
 
     if ! ping -c 1 download.docker.com >/dev/null 2>&1; then
