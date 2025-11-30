@@ -14,7 +14,7 @@
     "@lorenzo_lewis/starlight-utils": "^0.3.2",
     "astro": "^5.15.9",
     "astro-auto-import": "^0.4.4",
-    "sharp": "^0.34.4",
+    "sharp": "^0.34.5",
     "starlight-contributor-list": "^0.3.1",
     "starlight-github-alerts": "^0.1.1",
     "starlight-kbd": "^0.2.1",
