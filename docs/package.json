@@ -23,7 +23,7 @@
     "starlight-scroll-to-top": "^0.4.0",
     "starlight-showcases": "^0.3.1",
     "starlight-sidebar-topics": "^0.6.2",
-    "starlight-sidebar-topics-dropdown": "^0.5.1",
+    "starlight-sidebar-topics-dropdown": "^0.5.2",
     "starlight-theme-galaxy": "^0.5.1"
   }
 }
