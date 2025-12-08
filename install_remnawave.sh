@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.3"
+SCRIPT_VERSION="2.2.3a"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -4584,7 +4584,7 @@ EOL
 
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
     local attempts=0
-    local max_attempts=3
+    local max_attempts=5
     until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
@@ -5098,7 +5098,7 @@ EOL
     local domain_url="127.0.0.1:3000"
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
     local attempts=0
-    local max_attempts=3
+    local max_attempts=5
     until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
