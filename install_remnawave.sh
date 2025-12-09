@@ -4240,7 +4240,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4297,7 +4297,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -4810,7 +4810,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4867,7 +4867,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
