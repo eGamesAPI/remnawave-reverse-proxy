@@ -1,10 +1,10 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.0"
+SCRIPT_VERSION="DEV"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -184,6 +184,8 @@ set_language() {
                 [ENTER_NODE_DOMAIN]="Enter selfsteal domain for node (e.g. node.example.com):"
                 [ENTER_CF_TOKEN]="Enter your Cloudflare API token or global API key:"
                 [ENTER_CF_EMAIL]="Enter your Cloudflare registered email:"
+                [ENTER_GCORE_TOKEN]="Enter Gcore API token:"
+                [CERT_GCORE_FILE_NOT_FOUND]="Gcore credentials file not found. Please re-enter token."
                 [CHECK_CERTS]="Checking certificates..."
                 [CERT_FOUND]="Certificates found in /etc/letsencrypt/live/"
                 [CF_VALIDATING]="Cloudflare API key and email are valid"
@@ -193,7 +195,8 @@ set_language() {
                 #API
                 [REGISTERING_REMNAWAVE]="Registration in Remnawave"
                 [CHECK_CONTAINERS]="Checking containers availability..."
-                [CONTAINERS_NOT_READY]="Containers are not ready, waiting..."
+                [CONTAINERS_NOT_READY_ATTEMPT]="Containers are not ready, waiting... Attempt %d of %d."
+                [CONTAINERS_TIMEOUT]="Containers not ready after %d attempts.\n\nCheck logs:\n  cd /opt/remnawave && docker compose logs -f\n\nAlso check typical Docker issues:\n  https://wiki.egam.es/troubleshooting/docker-issues/"
                 [REGISTRATION_SUCCESS]="Registration completed successfully!"
                 [GET_PUBLIC_KEY]="Getting public key..."
                 [PUBLIC_KEY_SUCCESS]="Public key successfully obtained"
@@ -269,7 +272,7 @@ set_language() {
                 [SELFSTEAL]="Enter the selfsteal domain for the node specified during panel installation:"
                 [PANEL_IP_PROMPT]="Enter the IP address of the panel to establish a connection between the panel and the node:"
                 [IP_ERROR]="Enter a valid IP address in the format X.X.X.X (e.g., 192.168.1.1)"
-                [CERT_PROMPT]="Enter the certificate obtained from the panel, keeping the SSL_CERT= line (paste the content and press Enter twice):"
+                [CERT_PROMPT]="Enter the certificate obtained from the panel (paste the content and press Enter twice):"
                 [CERT_CONFIRM]="Are you sure the certificate is correct? (y/n):"
                 [ABORT_MESSAGE]="Installation aborted by user"
                 [SUCCESS_MESSAGE]="Node successfully connected"
@@ -327,7 +330,9 @@ set_language() {
                 [CERT_METHOD_PROMPT]="Select certificate generation method for all domains:"
                 [CERT_METHOD_CF]="Cloudflare API (supports wildcard)"
                 [CERT_METHOD_ACME]="ACME HTTP-01 (single domain, no wildcard)"
-                [CERT_METHOD_CHOOSE]="Select action (0-2):"
+                [CERT_METHOD_GCORE]="Gcore DNS API (supports wildcard)"
+                [ERROR_INSTALL_GCORE_PLUGIN]="Failed to install certbot-dns-gcore plugin"
+                [CERT_METHOD_CHOOSE]="Select action (0-3):"
                 [EMAIL_PROMPT]="Enter your email for Let's Encrypt registration:"
                 [CERTS_SKIPPED]="All certificates already exist. Skipping generation."
                 [ACME_METHOD]="Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)..."
@@ -576,6 +581,9 @@ set_language() {
                 [ENTER_NODE_DOMAIN]="Введите selfsteal домен для ноды (например, node.example.com):"
                 [ENTER_CF_TOKEN]="Введите Cloudflare API токен или глобальный ключ:"
                 [ENTER_CF_EMAIL]="Введите зарегистрированную почту Cloudflare:"
+                [ENTER_GCORE_TOKEN]="Введите API‑токен Gcore:"
+                [CERT_GCORE_FILE_NOT_FOUND]="Файл с реквизитами Gcore не найден. Повторно введите токен."
+                [ERROR_INSTALL_GCORE_PLUGIN]="Не удалось установить плагин certbot-dns-gcore"
                 [CHECK_CERTS]="Проверка сертификатов..."
                 [CERT_FOUND]="Сертификаты найдены в /etc/letsencrypt/live/"
                 [CF_VALIDATING]="Cloudflare API ключ и email валидны"
@@ -585,7 +593,8 @@ set_language() {
                 #API
                 [REGISTERING_REMNAWAVE]="Процесс регистрации в Remnawave"
                 [CHECK_CONTAINERS]="Проверка доступности контейнеров..."
-                [CONTAINERS_NOT_READY]="Контейнеры не готовы, ожидание..."
+                [CONTAINERS_NOT_READY_ATTEMPT]="Контейнеры не готовы, ожидание... Попытка %d из %d."
+                [CONTAINERS_TIMEOUT]="Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите типичные ошибки Docker:\n  https://wiki.egam.es/ru/troubleshooting/docker-issues/"
                 [REGISTRATION_SUCCESS]="Регистрация прошла успешно!"
                 [GET_PUBLIC_KEY]="Получаем публичный ключ..."
                 [PUBLIC_KEY_SUCCESS]="Публичный ключ успешно получен"
@@ -660,7 +669,7 @@ set_language() {
                 [SELFSTEAL]="Введите selfsteal домен для ноды, который указали при установке панели:"
                 [PANEL_IP_PROMPT]="Введите IP адрес панели, чтобы установить соединение между панелью и ноды:"
                 [IP_ERROR]="Введите корректный IP-адрес в формате X.X.X.X (например, 192.168.1.1)"
-                [CERT_PROMPT]="Введите сертификат, полученный от панели, сохраняя строку SSL_CERT= (вставьте содержимое и 2 раза нажмите Enter):"
+                [CERT_PROMPT]="Введите сертификат, полученный от панели (вставьте содержимое и 2 раза нажмите Enter):"
                 [CERT_CONFIRM]="Вы уверены, что сертификат правильный? (y/n):"
                 [ABORT_MESSAGE]="Установка прервана пользователем"
                 [SUCCESS_MESSAGE]="Нода успешно подключена"
@@ -718,7 +727,8 @@ set_language() {
                 [CERT_METHOD_PROMPT]="Выберите метод генерации сертификатов для всех доменов:"
                 [CERT_METHOD_CF]="Cloudflare API (поддерживает wildcard)"
                 [CERT_METHOD_ACME]="ACME HTTP-01 (один домен, без wildcard)"
-                [CERT_METHOD_CHOOSE]="Выберите действие (0-2):"
+                [CERT_METHOD_GCORE]="Gcore DNS API (поддерживает wildcard)"
+                [CERT_METHOD_CHOOSE]="Выберите действие (0-3):"
                 [EMAIL_PROMPT]="Введите ваш email для регистрации в Let's Encrypt:"
                 [CERTS_SKIPPED]="Все сертификаты уже существуют. Пропускаем генерацию."
                 [ACME_METHOD]="Используем ACME (Let's Encrypt) с HTTP-01 вызовом (без поддержки wildcard)..."
@@ -902,7 +912,7 @@ start_panel_node() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}...${COLOR_RESET}"
@@ -923,7 +933,7 @@ stop_panel_node() {
     fi
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}...${COLOR_RESET}"
@@ -1495,7 +1505,7 @@ view_logs() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q .; then
+    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
         echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
         exit 1
     fi
@@ -1680,7 +1690,7 @@ manage_warp() {
 
     case $WARP_OPTION in
         1)
-            if [ ! -f "/opt/remnawave/.env-node" ]; then
+            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml; then
                 echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
                 exit 1
             fi
@@ -2641,8 +2651,8 @@ spinner() {
   local pid=$1
   local text=$2
 
-  export LC_ALL=en_US.UTF-8
-  export LANG=en_US.UTF-8
+  export LC_ALL=C.UTF-8
+  export LANG=C.UTF-8
 
   local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
   local text_code="$COLOR_GREEN"
@@ -2821,9 +2831,15 @@ install_packages() {
         return 1
     fi
 
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk; then
+    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk python3-pip; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
+    fi
+
+    if command -v certbot >/dev/null 2>&1; then
+        if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+            return 1
+        fi
     fi
 
     if ! dpkg -l | grep -q '^ii.*cron '; then
@@ -2844,26 +2860,6 @@ install_packages() {
             echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
             return 1
         fi
-    fi
-
-    if [ ! -f /etc/locale.gen ]; then
-        echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
-    fi
-    if ! grep -q "^en_US.UTF-8 UTF-8" /etc/locale.gen; then
-        if grep -q "^# en_US.UTF-8 UTF-8" /etc/locale.gen; then
-            sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
-        else
-            echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-        fi
-    fi
-    if ! locale-gen || ! update-locale LANG=en_US.UTF-8; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CONFIGURE_LOCALES]}${COLOR_RESET}" >&2
-        return 1
-    fi
-
-    if ! ping -c 1 download.docker.com >/dev/null 2>&1; then
-        echo -e "${COLOR_RED}${LANG[ERROR_DOCKER_DNS]}${COLOR_RESET}" >&2
-        return 1
     fi
 
     if grep -q "Ubuntu" /etc/os-release; then
@@ -3184,6 +3180,36 @@ EOL
             ufw delete allow 80/tcp > /dev/null 2>&1
             ufw reload > /dev/null 2>&1
             ;;
+        3)
+            # Gcore DNS-01 (wildcard)
+
+            if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
+                    exit 1
+                fi
+            fi
+
+            reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+
+            mkdir -p ~/.secrets/certbot
+            cat > ~/.secrets/certbot/gcore.ini <<EOL
+dns_gcore_apitoken = $GCORE_API_KEY
+EOL
+            chmod 600 ~/.secrets/certbot/gcore.ini
+
+            certbot certonly \
+                --authenticator dns-gcore \
+                --dns-gcore-credentials ~/.secrets/certbot/gcore.ini \
+                --dns-gcore-propagation-seconds 80 \
+                -d "$BASE_DOMAIN" \
+                -d "$WILDCARD_DOMAIN" \
+                --email "$LETSENCRYPT_EMAIL" \
+                --agree-tos \
+                --non-interactive \
+                --key-type ecdsa \
+                --elliptic-curve secp384r1
+            ;;
         *)
             echo -e "${COLOR_RED}${LANG[INVALID_CERT_METHOD]}${COLOR_RESET}"
             exit 1
@@ -3265,33 +3291,45 @@ update_current_certificates() {
     for domain_dir in "$cert_dir"/*; do
         if [ -d "$domain_dir" ]; then
             local domain=$(basename "$domain_dir")
-            local cert_domain=$(echo "$domain" | sed -E 's/(-[0-9]+)$//')
+            local cert_domain
+            cert_domain=$(echo "$domain" | sed -E 's/(-[0-9]+)$//')
             unique_domains["$cert_domain"]="$domain_dir"
         fi
     done
 
     for cert_domain in "${!unique_domains[@]}"; do
         local domain_dir="${unique_domains[$cert_domain]}"
-        local domain=$(basename "$domain_dir")
-        local cert_method="2" # Default ACME
+        local domain
+        domain=$(basename "$domain_dir")
+
+        local cert_method="2" # 2 = ACME HTTP-01
         local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
-        if [ -f "$renewal_conf" ] && grep -q "dns_cloudflare" "$renewal_conf"; then
-            cert_method="1" # Cloudflare
+
+        if [ -f "$renewal_conf" ]; then
+            if grep -q "dns_cloudflare" "$renewal_conf"; then
+                cert_method="1" # Cloudflare DNS-01
+            elif grep -q "dns-gcore" "$renewal_conf"; then
+                cert_method="3" # Gcore DNS-01
+            fi
         fi
 
         local cert_file="$domain_dir/fullchain.pem"
-        local cert_mtime_before=$(stat -c %Y "$cert_file" 2>/dev/null || echo 0)
+        local cert_mtime_before
+        cert_mtime_before=$(stat -c %Y "$cert_file" 2>/dev/null || echo 0)
 
         fix_letsencrypt_structure "$cert_domain"
 
-        local days_left=$(check_cert_expiry "$domain")
+        local days_left
+        days_left=$(check_cert_expiry "$domain")
         if [ $? -ne 0 ]; then
             cert_status["$cert_domain"]="${LANG[ERROR_PARSING_CERT]}"
             continue
         fi
 
         if [ "$cert_method" == "1" ]; then
-            local cf_credentials_file=$(grep "dns_cloudflare_credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            # Cloudflare
+            local cf_credentials_file
+            cf_credentials_file=$(grep "dns_cloudflare_credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$cf_credentials_file" ] && [ ! -f "$cf_credentials_file" ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_CLOUDFLARE_FILE_NOT_FOUND]}${COLOR_RESET}"
                 reading "${COLOR_YELLOW}${LANG[ENTER_CF_EMAIL]}${COLOR_RESET}" CLOUDFLARE_EMAIL
@@ -3305,6 +3343,20 @@ dns_cloudflare_email = $CLOUDFLARE_EMAIL
 dns_cloudflare_api_key = $CLOUDFLARE_API_KEY
 EOL
                 chmod 600 "$cf_credentials_file"
+            fi
+        elif [ "$cert_method" == "3" ]; then
+            # Gcore
+            local gcore_credentials_file
+            gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
+                echo -e "${COLOR_RED}${LANG[CERT_GCORE_FILE_NOT_FOUND]}${COLOR_RESET}"
+                reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+
+                mkdir -p "$(dirname "$gcore_credentials_file")"
+                cat > "$gcore_credentials_file" <<EOL
+dns_gcore_apitoken = $GCORE_API_KEY
+EOL
+                chmod 600 "$gcore_credentials_file"
             fi
         fi
 
@@ -3328,11 +3380,16 @@ EOL
                 continue
             fi
 
-            local new_cert_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "$cert_domain*" | sort -V | tail -n 1)
-            local new_domain=$(basename "$new_cert_dir")
-            local cert_mtime_after=$(stat -c %Y "$new_cert_dir/fullchain.pem" 2>/dev/null || echo 0)
+            local new_cert_dir
+            new_cert_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "$cert_domain*" | sort -V | tail -n 1)
+            local new_domain
+            new_domain=$(basename "$new_cert_dir")
+            local cert_mtime_after
+            cert_mtime_after=$(stat -c %Y "$new_cert_dir/fullchain.pem" 2>/dev/null || echo 0)
+
             if check_certificates "$new_domain" > /dev/null 2>&1 && [ "$cert_mtime_before" != "$cert_mtime_after" ]; then
-                local new_days_left=$(check_cert_expiry "$new_domain")
+                local new_days_left
+                new_days_left=$(check_cert_expiry "$new_domain")
                 if [ $? -eq 0 ]; then
                     cert_status["$cert_domain"]="${LANG[UPDATED]}"
                 else
@@ -3372,6 +3429,7 @@ generate_new_certificates() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -3383,14 +3441,16 @@ generate_new_certificates() {
     fi
 
     local LETSENCRYPT_EMAIL=""
-    if [ "$CERT_METHOD" == "2" ]; then
+    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ]; then
         reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
     fi
 
-    if [ "$CERT_METHOD" == "1" ]; then
+    if [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
+        # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
-        get_certificates "$NEW_DOMAIN" "1" "" "*.$NEW_DOMAIN"
+        get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
     elif [ "$CERT_METHOD" == "2" ]; then
+        # 2 = ACME HTTP-01
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_CERTS]} $NEW_DOMAIN...${COLOR_RESET}"
         get_certificates "$NEW_DOMAIN" "2" "$LETSENCRYPT_EMAIL"
     else
@@ -4003,6 +4063,7 @@ handle_certificates() {
         echo -e ""
         echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -4011,7 +4072,7 @@ handle_certificates() {
         if [ "$cert_method" == "0" ]; then
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
             exit 1
-        elif [ "$cert_method" == "2" ]; then
+        elif [ "$cert_method" == "2" ] || [ "$cert_method" == "3" ]; then
             reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
         elif [ "$cert_method" != "1" ]; then
             echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
@@ -4023,14 +4084,16 @@ handle_certificates() {
     fi
 
     declare -A cert_domains_added
+
     if [ "$need_certificates" = true ] && [ "$cert_method" == "1" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
-            local base_domain=$(extract_domain "$domain")
+            local base_domain
+            base_domain=$(extract_domain "$domain")
             unique_domains["$base_domain"]="1"
         done
 
         for domain in "${!unique_domains[@]}"; do
-            get_certificates "$domain" "$cert_method" ""
+            get_certificates "$domain" "1" ""
             if [ $? -ne 0 ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
                 return 1
@@ -4042,9 +4105,31 @@ handle_certificates() {
                 cert_domains_added["$domain"]="1"
             fi
         done
+
+    elif [ "$need_certificates" = true ] && [ "$cert_method" == "3" ]; then
+        for domain in "${!domains_to_check_ref[@]}"; do
+            local base_domain
+            base_domain=$(extract_domain "$domain")
+            unique_domains["$base_domain"]="1"
+        done
+
+        for domain in "${!unique_domains[@]}"; do
+            get_certificates "$domain" "3" "$letsencrypt_email"
+            if [ $? -ne 0 ]; then
+                echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
+                return 1
+            fi
+            min_days_left=90
+            if [ -z "${cert_domains_added[$domain]}" ]; then
+                echo "      - /etc/letsencrypt/live/$domain/fullchain.pem:/etc/nginx/ssl/$domain/fullchain.pem:ro" >> "$target_dir/docker-compose.yml"
+                echo "      - /etc/letsencrypt/live/$domain/privkey.pem:/etc/nginx/ssl/$domain/privkey.pem:ro" >> "$target_dir/docker-compose.yml"
+                cert_domains_added["$domain"]="1"
+            fi
+        done
+
     elif [ "$need_certificates" = true ] && [ "$cert_method" == "2" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
-            get_certificates "$domain" "$cert_method" "$letsencrypt_email"
+            get_certificates "$domain" "2" "$letsencrypt_email"
             if [ $? -ne 0 ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
                 continue
@@ -4057,7 +4142,8 @@ handle_certificates() {
         done
     else
         for domain in "${!domains_to_check_ref[@]}"; do
-            local base_domain=$(extract_domain "$domain")
+            local base_domain
+            base_domain=$(extract_domain "$domain")
             local cert_domain="$domain"
             if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
                 cert_domain="$base_domain"
@@ -4079,17 +4165,12 @@ handle_certificates() {
 
     if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
         echo -e "${COLOR_YELLOW}${LANG[ADDING_CRON_FOR_EXISTING_CERTS]}${COLOR_RESET}"
-        if [ "$min_days_left" -le 30 ]; then
-            echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
-            add_cron_rule "0 5 * * * $cron_command"
-        else
-            add_cron_rule "0 5 1 */2 * $cron_command"
-        fi
-    elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * *.*$cron_command"; then
+        add_cron_rule "0 5 * * 0 $cron_command"
+    elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then
         echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}${LANG[UPDATING_CRON]}${COLOR_RESET}"
         crontab -u root -l 2>/dev/null | grep -v "/usr/bin/certbot renew" | crontab -u root -
-        add_cron_rule "0 5 * * * $cron_command"
+        add_cron_rule "0 5 * * 0 $cron_command"
     else
         echo -e "${COLOR_YELLOW}${LANG[CRON_ALREADY_EXISTS]}${COLOR_RESET}"
     fi
@@ -4258,7 +4339,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4315,7 +4396,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -4572,11 +4653,13 @@ server {
 
     root /var/www/html;
     index index.html;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 }
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
     return 444;
 }
@@ -4599,12 +4682,18 @@ EOL
     sleep 20
 
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
-    until curl -s "http://$domain_url/api/auth/register" \
+    local attempts=0
+    local max_attempts=5
+    until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
         > /dev/null; do
-        echo -e "${COLOR_RED}${LANG[CONTAINERS_NOT_READY]}${COLOR_RESET}"
-        sleep 10
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge "$max_attempts" ]; then
+            error "$(printf "${LANG[CONTAINERS_TIMEOUT]}" $max_attempts)"
+        fi
+        echo -e "${COLOR_RED}$(printf "${LANG[CONTAINERS_NOT_READY_ATTEMPT]}" $attempts $max_attempts)${COLOR_RESET}"
+        sleep 60
     done
 
     # Register Remnawave
@@ -4820,7 +4909,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4877,7 +4966,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -5107,12 +5196,18 @@ EOL
 
     local domain_url="127.0.0.1:3000"
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
-    until curl -s "http://$domain_url/api/auth/register" \
+    local attempts=0
+    local max_attempts=5
+    until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
         > /dev/null; do
-        echo -e "${COLOR_RED}${LANG[CONTAINERS_NOT_READY]}${COLOR_RESET}"
-        sleep 5
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge "$max_attempts" ]; then
+            error "$(printf "${LANG[CONTAINERS_TIMEOUT]}" $max_attempts)"
+        fi
+        echo -e "${COLOR_RED}$(printf "${LANG[CONTAINERS_NOT_READY_ATTEMPT]}" $attempts $max_attempts)${COLOR_RESET}"
+        sleep 60
     done
 
     # Register Remnawave
@@ -5314,11 +5409,13 @@ server {
 
     root /var/www/html;
     index index.html;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
 }
 
 server {
     listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
     return 444;
 }
