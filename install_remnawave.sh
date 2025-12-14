@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.2c"
+SCRIPT_VERSION="2.2.3a"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -193,7 +193,8 @@ set_language() {
                 #API
                 [REGISTERING_REMNAWAVE]="Registration in Remnawave"
                 [CHECK_CONTAINERS]="Checking containers availability..."
-                [CONTAINERS_NOT_READY]="Containers are not ready, waiting..."
+                [CONTAINERS_NOT_READY_ATTEMPT]="Containers are not ready, waiting... Attempt %d of %d."
+                [CONTAINERS_TIMEOUT]="Containers not ready after %d attempts.\n\nCheck logs:\n  cd /opt/remnawave && docker compose logs -f\n\nAlso check typical Docker issues:\n  https://wiki.egam.es/troubleshooting/docker-issues/"
                 [REGISTRATION_SUCCESS]="Registration completed successfully!"
                 [GET_PUBLIC_KEY]="Getting public key..."
                 [PUBLIC_KEY_SUCCESS]="Public key successfully obtained"
@@ -585,7 +586,8 @@ set_language() {
                 #API
                 [REGISTERING_REMNAWAVE]="Процесс регистрации в Remnawave"
                 [CHECK_CONTAINERS]="Проверка доступности контейнеров..."
-                [CONTAINERS_NOT_READY]="Контейнеры не готовы, ожидание..."
+                [CONTAINERS_NOT_READY_ATTEMPT]="Контейнеры не готовы, ожидание... Попытка %d из %d."
+                [CONTAINERS_TIMEOUT]="Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите типичные ошибки Docker:\n  https://wiki.egam.es/ru/troubleshooting/docker-issues/"
                 [REGISTRATION_SUCCESS]="Регистрация прошла успешно!"
                 [GET_PUBLIC_KEY]="Получаем публичный ключ..."
                 [PUBLIC_KEY_SUCCESS]="Публичный ключ успешно получен"
@@ -2846,11 +2848,6 @@ install_packages() {
         fi
     fi
 
-    if ! ping -c 1 download.docker.com >/dev/null 2>&1; then
-        echo -e "${COLOR_RED}${LANG[ERROR_DOCKER_DNS]}${COLOR_RESET}" >&2
-        return 1
-    fi
-
     if grep -q "Ubuntu" /etc/os-release; then
         install -m 0755 -d /etc/apt/keyrings
         if ! curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null; then
@@ -4243,7 +4240,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4300,7 +4297,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -4586,12 +4583,18 @@ EOL
     sleep 20
 
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
-    until curl -s "http://$domain_url/api/auth/register" \
+    local attempts=0
+    local max_attempts=5
+    until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
         > /dev/null; do
-        echo -e "${COLOR_RED}${LANG[CONTAINERS_NOT_READY]}${COLOR_RESET}"
-        sleep 10
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge "$max_attempts" ]; then
+            error "$(printf "${LANG[CONTAINERS_TIMEOUT]}" $max_attempts)"
+        fi
+        echo -e "${COLOR_RED}$(printf "${LANG[CONTAINERS_NOT_READY_ATTEMPT]}" $attempts $max_attempts)${COLOR_RESET}"
+        sleep 60
     done
 
     # Register Remnawave
@@ -4807,7 +4810,7 @@ EOL
     cat > docker-compose.yml <<EOL
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.1
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
@@ -4864,7 +4867,7 @@ services:
         max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:8.1.4-alpine
+    image: valkey/valkey:9.0.0-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
@@ -5094,12 +5097,18 @@ EOL
 
     local domain_url="127.0.0.1:3000"
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
-    until curl -s "http://$domain_url/api/auth/register" \
+    local attempts=0
+    local max_attempts=5
+    until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
         --header 'X-Forwarded-For: 127.0.0.1' \
         --header 'X-Forwarded-Proto: https' \
         > /dev/null; do
-        echo -e "${COLOR_RED}${LANG[CONTAINERS_NOT_READY]}${COLOR_RESET}"
-        sleep 5
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge "$max_attempts" ]; then
+            error "$(printf "${LANG[CONTAINERS_TIMEOUT]}" $max_attempts)"
+        fi
+        echo -e "${COLOR_RED}$(printf "${LANG[CONTAINERS_NOT_READY_ATTEMPT]}" $attempts $max_attempts)${COLOR_RESET}"
+        sleep 60
     done
 
     # Register Remnawave
