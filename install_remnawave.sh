@@ -444,6 +444,12 @@ set_language() {
                 [YQ_DOESNT_WORK_AFTER_INSTALLATION]="Error: yq doesn't work after installation!"
                 [ERROR_DOWNLOADING_YQ]="Error downloading yq!"
                 [FAST_START]="Quick start: remnawave_reverse"
+                [CREATING_API_TOKEN]="Creating API token for Subscription Page..."
+                [API_TOKEN_ADDED]="API token Subscription Page successfully added to docker-compose.yml"
+                [ERROR_CREATE_API_TOKEN]="Error creating API token"
+                [ERROR_API_TOKEN]="Failed to add API token"
+                [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Stopping Remnawave Subscription Page..."
+                [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Starting Remnawave Subscription Page..."
             )
             ;;
         ru)
@@ -591,7 +597,7 @@ set_language() {
                 [CF_INVALID_ATTEMPT]="Неверный Cloudflare API ключ или email. Попытка %d из %d."
                 [WAITING]="Пожалуйста, подождите..."
                 #API
-                [REGISTERING_REMNAWAVE]="Процесс регистрации в Remnawave"
+                [REGISTERING_REMNAWAVE]="Регистрируем пользователя в панели Remnawave"
                 [CHECK_CONTAINERS]="Проверка доступности контейнеров..."
                 [CONTAINERS_NOT_READY_ATTEMPT]="Контейнеры не готовы, ожидание... Попытка %d из %d."
                 [CONTAINERS_TIMEOUT]="Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите типичные ошибки Docker:\n  https://wiki.egam.es/ru/troubleshooting/docker-issues/"
@@ -606,14 +612,14 @@ set_language() {
                 [NODE_CREATED]="Нода успешно создана"
                 [CREATE_HOST]="Создаем хост"
                 [HOST_CREATED]="Хост успешно создан"
-                [GET_DEFAULT_SQUAD]="Получение default squad"
-                [UPDATE_SQUAD]="Squad успешно обновлен"
-                [NO_SQUADS_FOUND]="Нет squadов"
+                [GET_DEFAULT_SQUAD]="Получение внутреннего сквада"
+                [UPDATE_SQUAD]="Сквад успешно обновлен"
+                [NO_SQUADS_FOUND]="Нет внутренних сквадов"
                 [INVALID_UUID_FORMAT]="Неверный формат UUID"
-                [NO_VALID_SQUADS_FOUND]="Нет валидных squadов"
-                [ERROR_GET_SQUAD]="Не удалось получить squad"
-                [INVALID_SQUAD_UUID]="Неверный UUID squad"
-                [INVALID_INBOUND_UUID]="Неверный UUID inbound"
+                [NO_VALID_SQUADS_FOUND]="Нет валидных сквадов"
+                [ERROR_GET_SQUAD]="Не удалось получить сквад"
+                [INVALID_SQUAD_UUID]="Неверный UUID сквада"
+                [INVALID_INBOUND_UUID]="Неверный UUID входа"
                 #Stop/Start/Update
                 [CHANGE_DIR_FAILED]="Не удалось перейти в директорию %s"
                 [DIR_NOT_FOUND]="Директория /opt/remnawave не найдена"
@@ -840,6 +846,12 @@ set_language() {
                 [YQ_DOESNT_WORK_AFTER_INSTALLATION]="Ошибка: yq не работает после установки!"
                 [ERROR_DOWNLOADING_YQ]="Ошибка загрузки yq!"
                 [FAST_START]="Быстрый запуск: remnawave_reverse"
+                [CREATING_API_TOKEN]="Создание API токена для Subscription Page..."
+                [API_TOKEN_ADDED]="API токен Subscription Page успешно добавлен в docker-compose.yml"
+                [ERROR_CREATE_API_TOKEN]="Ошибка создания API токена"
+                [ERROR_API_TOKEN]="Не удалось добавить API токен"
+                [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Остановка Remnawave Subscription Page..."
+                [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Запуск Remnawave Subscription Page..."
             )
             ;;
     esac
@@ -4026,6 +4038,29 @@ update_squad() {
     return 0
 }
 
+create_api_token() {
+    local domain_url=$1
+    local token=$2
+    local token_name="${3:-subscription-page-token}"
+
+    local token_data='{"tokenName":"'"$token_name"'"}'
+    local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+
+    if [ -z "$api_response" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if echo "$api_response" | jq -e '.response.token' > /dev/null 2>&1; then
+        local api_token=$(echo "$api_response" | jq -r '.response.token')
+        echo "$api_token"
+        return 0
+    else
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"') ${COLOR_RESET}"
+        return 1
+    fi
+}
+
 ### API Functions ###
 
 handle_certificates() {
@@ -4368,14 +4403,15 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:2
+    image: remnawave/backend:dev
     container_name: remnawave
     hostname: remnawave
     restart: always
     env_file:
       - .env
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3000:\${APP_PORT:-3000}'
+      - '127.0.0.1:3001:\${METRICS_PORT:-3001}'
     networks:
       - remnawave-network
     healthcheck:
@@ -4402,8 +4438,12 @@ services:
     restart: always
     networks:
       - remnawave-network
-    volumes:
-      - remnawave-redis-data:/data
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory-policy noeviction
+      --loglevel warning
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
@@ -4476,15 +4516,20 @@ installation() {
         max-file: '5'
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:latest
+    image: remnawave/subscription-page:dev
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    depends_on:
+      remnawave:
+        condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
+      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE=Remnawave Subscription
-      - META_DESCRIPTION=page
+      - META_TITLE="Remnawave Subscription"
+      - META_DESCRIPTION="page"
+      - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
     networks:
@@ -4526,13 +4571,11 @@ volumes:
     driver: local
     external: false
     name: remnawave-db-data
-  remnawave-redis-data:
-    driver: local
-    external: false
-    name: remnawave-redis-data
 EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 upstream remnawave {
     server 127.0.0.1:3000;
 }
@@ -4631,6 +4674,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_set_header X-Real-IP $proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         proxy_intercept_errors on;
@@ -4638,7 +4683,7 @@ server {
     }
 
     location @redirect {
-        return 404;
+        return 444;
     }
 }
 
@@ -4734,6 +4779,19 @@ EOL
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
     echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
+
+    # Create API token for subscription page
+    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
+    local api_token
+    api_token=$(create_api_token "$domain_url" "$token" "subscription-page")
+
+    if [ -n "$api_token" ]; then
+
+    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" /opt/remnawave/docker-compose.yml
+
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
+    
+    fi
 
     # Stop and start Remnawave
     echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
@@ -4938,14 +4996,15 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:2
+    image: remnawave/backend:dev
     container_name: remnawave
     hostname: remnawave
     restart: always
     env_file:
       - .env
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3000:\${APP_PORT:-3000}'
+      - '127.0.0.1:3001:\${METRICS_PORT:-3001}'
     networks:
       - remnawave-network
     healthcheck:
@@ -4972,8 +5031,12 @@ services:
     restart: always
     networks:
       - remnawave-network
-    volumes:
-      - remnawave-redis-data:/data
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory-policy noeviction
+      --loglevel warning
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
@@ -5039,15 +5102,20 @@ installation_panel() {
         max-file: '5'
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:latest
+    image: remnawave/subscription-page:dev
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    depends_on:
+      remnawave:
+        condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
+      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE=Remnawave Subscription
-      - META_DESCRIPTION=page
+      - META_TITLE="Remnawave Subscription"
+      - META_DESCRIPTION="page"
+      - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
     networks:
@@ -5069,13 +5137,11 @@ volumes:
     driver: local
     external: false
     name: remnawave-db-data
-  remnawave-redis-data:
-    driver: local
-    external: false
-    name: remnawave-redis-data
 EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 upstream remnawave {
     server 127.0.0.1:3000;
 }
@@ -5173,7 +5239,7 @@ server {
     }
 
     location @redirect {
-        return 404;
+        return 444;
     }
 }
 
@@ -5243,6 +5309,30 @@ EOL
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
     echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
+
+    # Create API token for subscription page
+    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
+    local api_token
+    api_token=$(create_api_token "$domain_url" "$token" "subscription-page")
+
+    if [ -n "$api_token" ]; then
+
+    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" /opt/remnawave/docker-compose.yml
+
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
+    
+    fi
+
+    # Stop and start Remnawave Subscription Page
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    sleep 1
+    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
+
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    sleep 1
+    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
 
     clear
 
