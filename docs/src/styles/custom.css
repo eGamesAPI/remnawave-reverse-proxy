@@ -42,3 +42,26 @@
 :root[data-theme='light'] .light-banner {
 	display: block;
 }
+
+/* Fix button text color */
+.sl-link-button.primary {
+	color: black !important;
+}
+.sl-link-button.primary * {
+	color: black !important;
+}
+
+/* Fix splash page overflow */
+html[data-has-hero] {
+	overflow-y: hidden;
+}
+
+html[data-has-hero] body {
+	overflow-y: hidden;
+	max-height: 100vh;
+}
+
+.page[data-has-hero] {
+	max-height: 100vh;
+	overflow-y: hidden;
+}

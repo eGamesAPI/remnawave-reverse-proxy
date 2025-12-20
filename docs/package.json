@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "type": "module",
-  "version": "v2.1.10a",
+  "version": "v2.2.2",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
@@ -10,20 +10,20 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.36.0",
+    "@astrojs/starlight": "^0.37.0",
     "@lorenzo_lewis/starlight-utils": "^0.3.2",
-    "astro": "^5.14.3",
+    "astro": "^5.16.4",
     "astro-auto-import": "^0.4.4",
-    "sharp": "^0.34.4",
-    "starlight-contributor-list": "^0.3.0",
-    "starlight-github-alerts": "^0.1.0",
-    "starlight-kbd": "^0.2.0",
-    "starlight-links-validator": "^0.18.0",
-    "starlight-package-managers": "^0.11.0",
+    "sharp": "^0.34.5",
+    "starlight-contributor-list": "^0.3.1",
+    "starlight-github-alerts": "^0.1.1",
+    "starlight-kbd": "^0.2.1",
+    "starlight-links-validator": "^0.19.1",
+    "starlight-package-managers": "^0.11.1",
     "starlight-scroll-to-top": "^0.4.0",
-    "starlight-showcases": "^0.3.0",
-    "starlight-sidebar-topics": "^0.6.1",
-    "starlight-sidebar-topics-dropdown": "^0.5.1",
-    "starlight-theme-galaxy": "^0.5.1"
+    "starlight-showcases": "^0.3.1",
+    "starlight-sidebar-topics": "^0.6.2",
+    "starlight-sidebar-topics-dropdown": "^0.5.2",
+    "starlight-theme-galaxy": "^0.5.2"
   }
 }

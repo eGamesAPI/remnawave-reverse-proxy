@@ -34,27 +34,32 @@ import { Steps } from '@astrojs/starlight/components';
 `Remnawave Node` by itself does not require much resources, but Xray-core can consume a lot of CPU and RAM under heavy load.
 :::
 
-## Domain configuration
-The script supports two methods of domain configuration: via [Cloudflare](https://dash.cloudflare.com/) or using ACME with your hosting provider.
+## Domain Setup
 
-### DNS Records setup for Panel + Node on the Same Server
+The script supports two methods for obtaining SSL certificates:
+- **Cloudflare**: Management through Cloudflare API
+- **ACME**: Direct integration with hosting provider
 
-| Type  | Name              | Content          | Proxy status  |
-| ----- | ----------------- | ---------------- | ------------- |
-| A     | example.com       | your_server_ip   | DNS only      |
-| CNAME | panel.example.com | example.com      | DNS only      |
-| CNAME | sub.example.com   | example.com      | DNS only      |
-| CNAME | node.example.com  | example.com      | DNS only      |
+### DNS Configuration Examples
+
+#### Single Server Installation (panel + node together)
+
+| Record Type | Name              | Value            | Proxy Status |
+|-------------|-------------------|------------------|--------------|
+| A           | example.com       | your_server_ip   | DNS only     |
+| CNAME       | panel.example.com | example.com      | DNS only     |
+| CNAME       | sub.example.com   | example.com      | DNS only     |
+| CNAME       | node.example.com  | example.com      | DNS only     |
 
 :::tip
-The node.example.com record is not mandatory for a selfsteal node — you can also use example.com for selfsteal.
+The `node.example.com` record is optional for SelfSteal functionality. You can use the root domain `example.com` instead.
 :::
 
-### DNS Records Setup for Panel and Node on Separate Servers
+#### Distributed Installation (panel and node on different servers)
 
-| Type  | Name              | Content                 | Proxy status  |
-| ----- | ----------------- | ----------------------- | ------------- |
-| A     | example.com       | your_server_ip          | DNS only      |
-| CNAME | panel.example.com | example.com             | DNS only      |
-| CNAME | sub.example.com   | example.com             | DNS only      |
-| A     | node.example.com  | your_server_ip_vps_node | DNS only      |
+| Record Type | Name              | Value                | Proxy Status |
+|-------------|-------------------|----------------------|--------------|
+| A           | example.com       | panel_server_ip      | DNS only     |
+| CNAME       | panel.example.com | example.com          | DNS only     |
+| CNAME       | sub.example.com   | example.com          | DNS only     |
+| A           | node.example.com  | node_server_ip       | DNS only     |

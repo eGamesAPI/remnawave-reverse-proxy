@@ -34,27 +34,32 @@ import { Steps } from '@astrojs/starlight/components';
 `Remnawave Node` сам по себе не требует много ресурсов, но Xray-core может потреблять много CPU и RAM под нагрузкой.
 :::
 
-## Настройка домена
-Скрипт поддерживает два метода настройки домена: через [Cloudflare](https://dash.cloudflare.com/) или с использованием ACME с вашим хостинг-провайдером.
+## Настройка доменов
 
-### DNS записи для панели и ноды на одном сервере
+Скрипт поддерживает два метода получения SSL-сертификатов:
+- **Cloudflare**: Управление через API Cloudflare
+- **ACME**: Прямая интеграция с хостинг-провайдером
 
-| Type  | Name              | Content          | Proxy status  |
-| ----- | ----------------- | ---------------- | ------------- |
-| A     | example.com       | your_server_ip   | DNS only      |
-| CNAME | panel.example.com | example.com      | DNS only      |
-| CNAME | sub.example.com   | example.com      | DNS only      |
-| CNAME | node.example.com  | example.com      | DNS only      |
+### Примеры конфигурации DNS
+
+#### Установка на одном сервере (панель + нода вместе)
+
+| Тип записи | Имя               | Значение         | Статус прокси |
+|------------|-------------------|------------------|---------------|
+| A          | example.com       | your_server_ip   | DNS only      |
+| CNAME      | panel.example.com | example.com      | DNS only      |
+| CNAME      | sub.example.com   | example.com      | DNS only      |
+| CNAME      | node.example.com  | example.com      | DNS only      |
 
 :::tip
-Запись node.example.com не является обязательной для selfsteal ноды — вы также можете использовать example.com для selfsteal.
+Запись `node.example.com` является необязательной для функциональности SelfSteal. Вы можете использовать корневой домен `example.com` вместо нее.
 :::
 
-### DNS записи для панели и ноды на разных серверах
+#### Распределенная установка (панель и нода на разных серверах)
 
-| Type  | Name              | Content                 | Proxy status  |
-| ----- | ----------------- | ----------------------- | ------------- |
-| A     | example.com       | your_server_ip          | DNS only      |
-| CNAME | panel.example.com | example.com             | DNS only      |
-| CNAME | sub.example.com   | example.com             | DNS only      |
-| A     | node.example.com  | your_server_ip_vps_node | DNS only      |
+| Тип записи | Имя               | Значение                | Статус прокси |
+|------------|-------------------|-------------------------|---------------|
+| A          | example.com       | panel_server_ip         | DNS only      |
+| CNAME      | panel.example.com | example.com             | DNS only      |
+| CNAME      | sub.example.com   | example.com             | DNS only      |
+| A          | node.example.com  | node_server_ip          | DNS only      |
