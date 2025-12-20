@@ -1,10 +1,10 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV"
+SCRIPT_VERSION="2.3.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -4338,20 +4338,14 @@ IS_DOCS_ENABLED=false
 METRICS_USER=$METRICS_USER
 METRICS_PASS=$METRICS_PASS
 
-### WEBHOOK ###
+### Webhook configuration
+### Enable webhook notifications (true/false, defaults to false if not set or empty)
 WEBHOOK_ENABLED=false
-### Only https:// is allowed
-WEBHOOK_URL=https://webhook.site/1234567890
+### Webhook URL to send notifications to (can specify multiple URLs separated by commas if needed)
+### Only http:// or https:// are allowed.
+WEBHOOK_URL=https://your-webhook-url.com/endpoint
 ### This secret is used to sign the webhook payload, must be exact 64 characters. Only a-z, 0-9, A-Z are allowed.
 WEBHOOK_SECRET_HEADER=vsmu67Kmg6R8FjIOF1WUY8LWBHie4scdEqrfsKmyf4IAf8dY3nFS0wwYHkhh6ZvQ
-
-### HWID DEVICE DETECTION AND LIMITATION ###
-# Don't enable this if you don't know what you are doing.
-# Review documentation before enabling this feature.
-# https://remna.st/docs/features/hwid-device-limit/
-HWID_DEVICE_LIMIT_ENABLED=false
-HWID_FALLBACK_DEVICE_LIMIT=5
-HWID_MAX_DEVICES_ANNOUNCE="You have reached the maximum number of devices for your subscription."
 
 ### Bandwidth usage reached notifications
 BANDWIDTH_USAGE_NOTIFICATIONS_ENABLED=false
@@ -4403,7 +4397,7 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:dev
+    image: remnawave/backend:2
     container_name: remnawave
     hostname: remnawave
     restart: always
@@ -4516,7 +4510,7 @@ installation() {
         max-file: '5'
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:dev
+    image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
@@ -4674,8 +4668,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
-        proxy_set_header X-Real-IP $proxy_protocol_addr;
-        proxy_set_header X-Forwarded-For $proxy_protocol_addr;
+        proxy_set_header X-Real-IP \$proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For \$proxy_protocol_addr;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         proxy_intercept_errors on;
@@ -4931,20 +4925,14 @@ IS_DOCS_ENABLED=false
 METRICS_USER=$METRICS_USER
 METRICS_PASS=$METRICS_PASS
 
-### WEBHOOK ###
+### Webhook configuration
+### Enable webhook notifications (true/false, defaults to false if not set or empty)
 WEBHOOK_ENABLED=false
-### Only https:// is allowed
-WEBHOOK_URL=https://webhook.site/1234567890
+### Webhook URL to send notifications to (can specify multiple URLs separated by commas if needed)
+### Only http:// or https:// are allowed.
+WEBHOOK_URL=https://your-webhook-url.com/endpoint
 ### This secret is used to sign the webhook payload, must be exact 64 characters. Only a-z, 0-9, A-Z are allowed.
 WEBHOOK_SECRET_HEADER=vsmu67Kmg6R8FjIOF1WUY8LWBHie4scdEqrfsKmyf4IAf8dY3nFS0wwYHkhh6ZvQ
-
-### HWID DEVICE DETECTION AND LIMITATION ###
-# Don't enable this if you don't know what you are doing.
-# Review documentation before enabling this feature.
-# https://remna.st/docs/features/hwid-device-limit/
-HWID_DEVICE_LIMIT_ENABLED=false
-HWID_FALLBACK_DEVICE_LIMIT=5
-HWID_MAX_DEVICES_ANNOUNCE="You have reached the maximum number of devices for your subscription."
 
 ### Bandwidth usage reached notifications
 BANDWIDTH_USAGE_NOTIFICATIONS_ENABLED=false
@@ -4996,7 +4984,7 @@ services:
         max-file: '5'
 
   remnawave:
-    image: remnawave/backend:dev
+    image: remnawave/backend:2
     container_name: remnawave
     hostname: remnawave
     restart: always
@@ -5102,7 +5090,7 @@ installation_panel() {
         max-file: '5'
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:dev
+    image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
@@ -5475,6 +5463,8 @@ installation_node() {
 EOL
 
 cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
     ""      close;
