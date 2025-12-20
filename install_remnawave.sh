@@ -4519,10 +4519,7 @@ installation() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
-      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE="Remnawave Subscription"
-      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
@@ -5099,10 +5096,7 @@ installation_panel() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
-      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE="Remnawave Subscription"
-      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
