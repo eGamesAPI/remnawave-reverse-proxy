@@ -4047,7 +4047,7 @@ create_api_token() {
     local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
 
     if [ -z "$api_response" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
         return 1
     fi
 
@@ -4056,7 +4056,7 @@ create_api_token() {
         echo "$api_token"
         return 0
     else
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"') ${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"') ${COLOR_RESET}" >&2
         return 1
     fi
 }
