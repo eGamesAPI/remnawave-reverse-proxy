@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.1"
+SCRIPT_VERSION="2.3.1a"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -4047,7 +4047,6 @@ create_api_token() {
         return 1
     fi
 
-    # сразу правим docker-compose.yml как в get_public_key
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
 
     echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
@@ -4512,10 +4511,7 @@ installation() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
-      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE="Remnawave Subscription"
-      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
@@ -5083,10 +5079,7 @@ installation_panel() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
-      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
-      - META_TITLE="Remnawave Subscription"
-      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
