@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.0"
+SCRIPT_VERSION="2.3.1"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2874,32 +2874,18 @@ install_packages() {
         fi
     fi
 
-    if grep -q "Ubuntu" /etc/os-release; then
-        install -m 0755 -d /etc/apt/keyrings
-        if ! curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null; then
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
+
+        if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
             return 1
         fi
-        chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    elif grep -q "Debian" /etc/os-release; then
-        install -m 0755 -d /etc/apt/keyrings
-        if ! curl -fsSL https://download.docker.com/linux/debian/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null; then
-            echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
+
+        if ! sh /tmp/get-docker.sh; then
+            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
             return 1
         fi
-        chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    fi
-
-    if ! apt-get update; then
-        echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_DOCKER_LIST]}${COLOR_RESET}" >&2
-        return 1
-    fi
-
-    if ! apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
-        echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
-        return 1
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -4041,25 +4027,32 @@ update_squad() {
 create_api_token() {
     local domain_url=$1
     local token=$2
-    local token_name="${3:-subscription-page-token}"
+    local target_dir=$3
+    local token_name="${4:-subscription-page}"
 
     local token_data='{"tokenName":"'"$token_name"'"}'
-    local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+    local api_response
+    api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
 
     if [ -z "$api_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
         return 1
     fi
 
-    if echo "$api_response" | jq -e '.response.token' > /dev/null 2>&1; then
-        local api_token=$(echo "$api_response" | jq -r '.response.token')
-        echo "$api_token"
-        return 0
-    else
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"') ${COLOR_RESET}" >&2
+    local api_token
+    api_token=$(echo "$api_response" | jq -r '.response.token')
+
+    if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
         return 1
     fi
+
+    # сразу правим docker-compose.yml как в get_public_key
+    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
+
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
 }
+
 
 ### API Functions ###
 
@@ -4519,7 +4512,10 @@ installation() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
+      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
+      - META_TITLE="Remnawave Subscription"
+      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
@@ -4773,16 +4769,7 @@ EOL
 
     # Create API token for subscription page
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
-    local api_token
-    api_token=$(create_api_token "$domain_url" "$token" "subscription-page")
-
-    if [ -n "$api_token" ]; then
-
-    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" /opt/remnawave/docker-compose.yml
-
-    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
-    
-    fi
+    create_api_token "$domain_url" "$token" "$target_dir"
 
     # Stop and start Remnawave
     echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
@@ -5096,7 +5083,10 @@ installation_panel() {
         condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
+      - SUBSCRIPTION_UI_DISPLAY_RAW_KEYS=true
       - APP_PORT=3010
+      - META_TITLE="Remnawave Subscription"
+      - META_DESCRIPTION="page"
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
