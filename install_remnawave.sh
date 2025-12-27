@@ -450,6 +450,17 @@ set_language() {
                 [ERROR_API_TOKEN]="Failed to add API token"
                 [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Stopping Remnawave Subscription Page..."
                 [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Starting Remnawave Subscription Page..."
+                [DOWNLOAD_FALLBACK]="Trying fallback download method..."
+                [WARP_DELETE_SUCCESS]="WARP deleted successfully"
+                [UPDATING_SQUAD]="Updating squad"
+                [ALIAS_EXISTS]="Alias already exists in %s"
+                [PORT_8443_NOT_CONFIGURED]="Port 8443 is not configured in docker-compose.yml"
+                [ARCHIVE_NOT_FOUND]="Archive directory not found"
+                [FILE_NOT_FOUND]="File not found:"
+                [UPDATED_RENEW_AUTH]="Updated certificate renewal hook"
+                [ERROR_CREATE_CONFIG_PROFILE]="Error creating config profile"
+                [ERROR_EXTRACT_PRIVATE_KEY]="Failed to extract private key"
+                [INVALID_CERT_METHOD]="Invalid certificate method"
             )
             ;;
         ru)
@@ -474,13 +485,13 @@ set_language() {
                 [ERROR_INSTALL_DOCKER]="Ошибка: Не удалось установить Docker"
                 [ERROR_DOCKER_NOT_INSTALLED]="Ошибка: Docker не установлен"
                 [ERROR_START_DOCKER]="Ошибка: Не удалось запустить Docker"
-                [ERROR_ENABLE_AUTOSTART_DOCKER]="Ошибка: Не удалось включить автозапуск Docker"
+                [ERROR_ENABLE_DOCKER]="Ошибка: Не удалось включить автозапуск Docker"
                 [ERROR_DOCKER_NOT_WORKING]="Ошибка: Docker не работает корректно"
                 [ERROR_CONFIGURE_UFW]="Ошибка: Не удалось настроить UFW"
                 [ERROR_CONFIGURE_UPGRADES]="Ошибка: Не удалось настроить unattended-upgrades"
                 [ERROR_DOCKER_DNS]="Ошибка: Не удалось разрешить домен download.docker.com. Проверьте настройки DNS."
                 [ERROR_INSTALL_CERTBOT]="Ошибка: Не удалось установить certbot"
-                [SUCCESSFUL_INSTALL]="Все пакеты успешно установлены"
+                [SUCCESS_INSTALL]="Все пакеты успешно установлены"
                 #Main menu
                 [EXIT]="Выход"
                 [MENU_1]="Установка компонентов Remnawave"
@@ -852,6 +863,17 @@ set_language() {
                 [ERROR_API_TOKEN]="Не удалось добавить API токен"
                 [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Остановка Remnawave Subscription Page..."
                 [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Запуск Remnawave Subscription Page..."
+                [DOWNLOAD_FALLBACK]="Попытка резервного метода загрузки..."
+                [WARP_DELETE_SUCCESS]="WARP успешно удалён"
+                [UPDATING_SQUAD]="Обновление squad"
+                [ALIAS_EXISTS]="Алиас уже существует в %s"
+                [PORT_8443_NOT_CONFIGURED]="Порт 8443 не настроен в docker-compose.yml"
+                [ARCHIVE_NOT_FOUND]="Директория archive не найдена"
+                [FILE_NOT_FOUND]="Файл не найден:"
+                [UPDATED_RENEW_AUTH]="Обновлён hook обновления сертификата"
+                [ERROR_CREATE_CONFIG_PROFILE]="Ошибка создания профиля конфигурации"
+                [ERROR_EXTRACT_PRIVATE_KEY]="Не удалось извлечь приватный ключ"
+                [INVALID_CERT_METHOD]="Неверный метод получения сертификата"
             )
             ;;
     esac
@@ -4493,7 +4515,7 @@ installation() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     depends_on:
       - remnawave
       - remnawave-subscription-page
@@ -5411,7 +5433,7 @@ installation_node() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     network_mode: host
     depends_on:
       - remnanode
