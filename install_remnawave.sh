@@ -4493,7 +4493,7 @@ installation() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     depends_on:
       - remnawave
       - remnawave-subscription-page
@@ -5411,7 +5411,7 @@ installation_node() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     network_mode: host
     depends_on:
       - remnanode
