@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.2.3a"
+SCRIPT_VERSION="2.3.1c"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -184,6 +184,8 @@ set_language() {
                 [ENTER_NODE_DOMAIN]="Enter selfsteal domain for node (e.g. node.example.com):"
                 [ENTER_CF_TOKEN]="Enter your Cloudflare API token or global API key:"
                 [ENTER_CF_EMAIL]="Enter your Cloudflare registered email:"
+                [ENTER_GCORE_TOKEN]="Enter Gcore API token:"
+                [CERT_GCORE_FILE_NOT_FOUND]="Gcore credentials file not found. Please re-enter token."
                 [CHECK_CERTS]="Checking certificates..."
                 [CERT_FOUND]="Certificates found in /etc/letsencrypt/live/"
                 [CF_VALIDATING]="Cloudflare API key and email are valid"
@@ -328,7 +330,9 @@ set_language() {
                 [CERT_METHOD_PROMPT]="Select certificate generation method for all domains:"
                 [CERT_METHOD_CF]="Cloudflare API (supports wildcard)"
                 [CERT_METHOD_ACME]="ACME HTTP-01 (single domain, no wildcard)"
-                [CERT_METHOD_CHOOSE]="Select action (0-2):"
+                [CERT_METHOD_GCORE]="Gcore DNS API (supports wildcard)"
+                [ERROR_INSTALL_GCORE_PLUGIN]="Failed to install certbot-dns-gcore plugin"
+                [CERT_METHOD_CHOOSE]="Select action (0-3):"
                 [EMAIL_PROMPT]="Enter your email for Let's Encrypt registration:"
                 [CERTS_SKIPPED]="All certificates already exist. Skipping generation."
                 [ACME_METHOD]="Using ACME (Let's Encrypt) with HTTP-01 challenge (no wildcard support)..."
@@ -440,6 +444,12 @@ set_language() {
                 [YQ_DOESNT_WORK_AFTER_INSTALLATION]="Error: yq doesn't work after installation!"
                 [ERROR_DOWNLOADING_YQ]="Error downloading yq!"
                 [FAST_START]="Quick start: remnawave_reverse"
+                [CREATING_API_TOKEN]="Creating API token for Subscription Page..."
+                [API_TOKEN_ADDED]="API token Subscription Page successfully added to docker-compose.yml"
+                [ERROR_CREATE_API_TOKEN]="Error creating API token"
+                [ERROR_API_TOKEN]="Failed to add API token"
+                [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Stopping Remnawave Subscription Page..."
+                [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Starting Remnawave Subscription Page..."
             )
             ;;
         ru)
@@ -577,6 +587,9 @@ set_language() {
                 [ENTER_NODE_DOMAIN]="Введите selfsteal домен для ноды (например, node.example.com):"
                 [ENTER_CF_TOKEN]="Введите Cloudflare API токен или глобальный ключ:"
                 [ENTER_CF_EMAIL]="Введите зарегистрированную почту Cloudflare:"
+                [ENTER_GCORE_TOKEN]="Введите API‑токен Gcore:"
+                [CERT_GCORE_FILE_NOT_FOUND]="Файл с реквизитами Gcore не найден. Повторно введите токен."
+                [ERROR_INSTALL_GCORE_PLUGIN]="Не удалось установить плагин certbot-dns-gcore"
                 [CHECK_CERTS]="Проверка сертификатов..."
                 [CERT_FOUND]="Сертификаты найдены в /etc/letsencrypt/live/"
                 [CF_VALIDATING]="Cloudflare API ключ и email валидны"
@@ -584,7 +597,7 @@ set_language() {
                 [CF_INVALID_ATTEMPT]="Неверный Cloudflare API ключ или email. Попытка %d из %d."
                 [WAITING]="Пожалуйста, подождите..."
                 #API
-                [REGISTERING_REMNAWAVE]="Процесс регистрации в Remnawave"
+                [REGISTERING_REMNAWAVE]="Регистрируем пользователя в панели Remnawave"
                 [CHECK_CONTAINERS]="Проверка доступности контейнеров..."
                 [CONTAINERS_NOT_READY_ATTEMPT]="Контейнеры не готовы, ожидание... Попытка %d из %d."
                 [CONTAINERS_TIMEOUT]="Контейнеры не готовы после %d попыток.\n\nПроверьте логи:\n  cd /opt/remnawave && docker compose logs -f\n\nТакже посмотрите типичные ошибки Docker:\n  https://wiki.egam.es/ru/troubleshooting/docker-issues/"
@@ -599,14 +612,14 @@ set_language() {
                 [NODE_CREATED]="Нода успешно создана"
                 [CREATE_HOST]="Создаем хост"
                 [HOST_CREATED]="Хост успешно создан"
-                [GET_DEFAULT_SQUAD]="Получение default squad"
-                [UPDATE_SQUAD]="Squad успешно обновлен"
-                [NO_SQUADS_FOUND]="Нет squadов"
+                [GET_DEFAULT_SQUAD]="Получение внутреннего сквада"
+                [UPDATE_SQUAD]="Сквад успешно обновлен"
+                [NO_SQUADS_FOUND]="Нет внутренних сквадов"
                 [INVALID_UUID_FORMAT]="Неверный формат UUID"
-                [NO_VALID_SQUADS_FOUND]="Нет валидных squadов"
-                [ERROR_GET_SQUAD]="Не удалось получить squad"
-                [INVALID_SQUAD_UUID]="Неверный UUID squad"
-                [INVALID_INBOUND_UUID]="Неверный UUID inbound"
+                [NO_VALID_SQUADS_FOUND]="Нет валидных сквадов"
+                [ERROR_GET_SQUAD]="Не удалось получить сквад"
+                [INVALID_SQUAD_UUID]="Неверный UUID сквада"
+                [INVALID_INBOUND_UUID]="Неверный UUID входа"
                 #Stop/Start/Update
                 [CHANGE_DIR_FAILED]="Не удалось перейти в директорию %s"
                 [DIR_NOT_FOUND]="Директория /opt/remnawave не найдена"
@@ -720,7 +733,8 @@ set_language() {
                 [CERT_METHOD_PROMPT]="Выберите метод генерации сертификатов для всех доменов:"
                 [CERT_METHOD_CF]="Cloudflare API (поддерживает wildcard)"
                 [CERT_METHOD_ACME]="ACME HTTP-01 (один домен, без wildcard)"
-                [CERT_METHOD_CHOOSE]="Выберите действие (0-2):"
+                [CERT_METHOD_GCORE]="Gcore DNS API (поддерживает wildcard)"
+                [CERT_METHOD_CHOOSE]="Выберите действие (0-3):"
                 [EMAIL_PROMPT]="Введите ваш email для регистрации в Let's Encrypt:"
                 [CERTS_SKIPPED]="Все сертификаты уже существуют. Пропускаем генерацию."
                 [ACME_METHOD]="Используем ACME (Let's Encrypt) с HTTP-01 вызовом (без поддержки wildcard)..."
@@ -832,6 +846,12 @@ set_language() {
                 [YQ_DOESNT_WORK_AFTER_INSTALLATION]="Ошибка: yq не работает после установки!"
                 [ERROR_DOWNLOADING_YQ]="Ошибка загрузки yq!"
                 [FAST_START]="Быстрый запуск: remnawave_reverse"
+                [CREATING_API_TOKEN]="Создание API токена для Subscription Page..."
+                [API_TOKEN_ADDED]="API токен Subscription Page успешно добавлен в docker-compose.yml"
+                [ERROR_CREATE_API_TOKEN]="Ошибка создания API токена"
+                [ERROR_API_TOKEN]="Не удалось добавить API токен"
+                [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Остановка Remnawave Subscription Page..."
+                [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Запуск Remnawave Subscription Page..."
             )
             ;;
     esac
@@ -2823,9 +2843,15 @@ install_packages() {
         return 1
     fi
 
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk; then
+    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk python3-pip; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
+    fi
+
+    if command -v certbot >/dev/null 2>&1; then
+        if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+            return 1
+        fi
     fi
 
     if ! dpkg -l | grep -q '^ii.*cron '; then
@@ -2848,32 +2874,18 @@ install_packages() {
         fi
     fi
 
-    if grep -q "Ubuntu" /etc/os-release; then
-        install -m 0755 -d /etc/apt/keyrings
-        if ! curl -fsSL https://download.docker.com/linux/ubuntu/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null; then
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
+
+        if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
             return 1
         fi
-        chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    elif grep -q "Debian" /etc/os-release; then
-        install -m 0755 -d /etc/apt/keyrings
-        if ! curl -fsSL https://download.docker.com/linux/debian/gpg | tee /etc/apt/keyrings/docker.asc > /dev/null; then
-            echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
+
+        if ! sh /tmp/get-docker.sh; then
+            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
             return 1
         fi
-        chmod a+r /etc/apt/keyrings/docker.asc
-        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-    fi
-
-    if ! apt-get update; then
-        echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_DOCKER_LIST]}${COLOR_RESET}" >&2
-        return 1
-    fi
-
-    if ! apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
-        echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
-        return 1
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -3166,6 +3178,36 @@ EOL
             ufw delete allow 80/tcp > /dev/null 2>&1
             ufw reload > /dev/null 2>&1
             ;;
+        3)
+            # Gcore DNS-01 (wildcard)
+
+            if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
+                    exit 1
+                fi
+            fi
+
+            reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+
+            mkdir -p ~/.secrets/certbot
+            cat > ~/.secrets/certbot/gcore.ini <<EOL
+dns_gcore_apitoken = $GCORE_API_KEY
+EOL
+            chmod 600 ~/.secrets/certbot/gcore.ini
+
+            certbot certonly \
+                --authenticator dns-gcore \
+                --dns-gcore-credentials ~/.secrets/certbot/gcore.ini \
+                --dns-gcore-propagation-seconds 80 \
+                -d "$BASE_DOMAIN" \
+                -d "$WILDCARD_DOMAIN" \
+                --email "$LETSENCRYPT_EMAIL" \
+                --agree-tos \
+                --non-interactive \
+                --key-type ecdsa \
+                --elliptic-curve secp384r1
+            ;;
         *)
             echo -e "${COLOR_RED}${LANG[INVALID_CERT_METHOD]}${COLOR_RESET}"
             exit 1
@@ -3247,33 +3289,45 @@ update_current_certificates() {
     for domain_dir in "$cert_dir"/*; do
         if [ -d "$domain_dir" ]; then
             local domain=$(basename "$domain_dir")
-            local cert_domain=$(echo "$domain" | sed -E 's/(-[0-9]+)$//')
+            local cert_domain
+            cert_domain=$(echo "$domain" | sed -E 's/(-[0-9]+)$//')
             unique_domains["$cert_domain"]="$domain_dir"
         fi
     done
 
     for cert_domain in "${!unique_domains[@]}"; do
         local domain_dir="${unique_domains[$cert_domain]}"
-        local domain=$(basename "$domain_dir")
-        local cert_method="2" # Default ACME
+        local domain
+        domain=$(basename "$domain_dir")
+
+        local cert_method="2" # 2 = ACME HTTP-01
         local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
-        if [ -f "$renewal_conf" ] && grep -q "dns_cloudflare" "$renewal_conf"; then
-            cert_method="1" # Cloudflare
+
+        if [ -f "$renewal_conf" ]; then
+            if grep -q "dns_cloudflare" "$renewal_conf"; then
+                cert_method="1" # Cloudflare DNS-01
+            elif grep -q "dns-gcore" "$renewal_conf"; then
+                cert_method="3" # Gcore DNS-01
+            fi
         fi
 
         local cert_file="$domain_dir/fullchain.pem"
-        local cert_mtime_before=$(stat -c %Y "$cert_file" 2>/dev/null || echo 0)
+        local cert_mtime_before
+        cert_mtime_before=$(stat -c %Y "$cert_file" 2>/dev/null || echo 0)
 
         fix_letsencrypt_structure "$cert_domain"
 
-        local days_left=$(check_cert_expiry "$domain")
+        local days_left
+        days_left=$(check_cert_expiry "$domain")
         if [ $? -ne 0 ]; then
             cert_status["$cert_domain"]="${LANG[ERROR_PARSING_CERT]}"
             continue
         fi
 
         if [ "$cert_method" == "1" ]; then
-            local cf_credentials_file=$(grep "dns_cloudflare_credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            # Cloudflare
+            local cf_credentials_file
+            cf_credentials_file=$(grep "dns_cloudflare_credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$cf_credentials_file" ] && [ ! -f "$cf_credentials_file" ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_CLOUDFLARE_FILE_NOT_FOUND]}${COLOR_RESET}"
                 reading "${COLOR_YELLOW}${LANG[ENTER_CF_EMAIL]}${COLOR_RESET}" CLOUDFLARE_EMAIL
@@ -3287,6 +3341,20 @@ dns_cloudflare_email = $CLOUDFLARE_EMAIL
 dns_cloudflare_api_key = $CLOUDFLARE_API_KEY
 EOL
                 chmod 600 "$cf_credentials_file"
+            fi
+        elif [ "$cert_method" == "3" ]; then
+            # Gcore
+            local gcore_credentials_file
+            gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
+                echo -e "${COLOR_RED}${LANG[CERT_GCORE_FILE_NOT_FOUND]}${COLOR_RESET}"
+                reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+
+                mkdir -p "$(dirname "$gcore_credentials_file")"
+                cat > "$gcore_credentials_file" <<EOL
+dns_gcore_apitoken = $GCORE_API_KEY
+EOL
+                chmod 600 "$gcore_credentials_file"
             fi
         fi
 
@@ -3310,11 +3378,16 @@ EOL
                 continue
             fi
 
-            local new_cert_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "$cert_domain*" | sort -V | tail -n 1)
-            local new_domain=$(basename "$new_cert_dir")
-            local cert_mtime_after=$(stat -c %Y "$new_cert_dir/fullchain.pem" 2>/dev/null || echo 0)
+            local new_cert_dir
+            new_cert_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "$cert_domain*" | sort -V | tail -n 1)
+            local new_domain
+            new_domain=$(basename "$new_cert_dir")
+            local cert_mtime_after
+            cert_mtime_after=$(stat -c %Y "$new_cert_dir/fullchain.pem" 2>/dev/null || echo 0)
+
             if check_certificates "$new_domain" > /dev/null 2>&1 && [ "$cert_mtime_before" != "$cert_mtime_after" ]; then
-                local new_days_left=$(check_cert_expiry "$new_domain")
+                local new_days_left
+                new_days_left=$(check_cert_expiry "$new_domain")
                 if [ $? -eq 0 ]; then
                     cert_status["$cert_domain"]="${LANG[UPDATED]}"
                 else
@@ -3354,6 +3427,7 @@ generate_new_certificates() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -3365,14 +3439,16 @@ generate_new_certificates() {
     fi
 
     local LETSENCRYPT_EMAIL=""
-    if [ "$CERT_METHOD" == "2" ]; then
+    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ]; then
         reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
     fi
 
-    if [ "$CERT_METHOD" == "1" ]; then
+    if [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
+        # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
-        get_certificates "$NEW_DOMAIN" "1" "" "*.$NEW_DOMAIN"
+        get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
     elif [ "$CERT_METHOD" == "2" ]; then
+        # 2 = ACME HTTP-01
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_CERTS]} $NEW_DOMAIN...${COLOR_RESET}"
         get_certificates "$NEW_DOMAIN" "2" "$LETSENCRYPT_EMAIL"
     else
@@ -3948,6 +4024,37 @@ update_squad() {
     return 0
 }
 
+create_api_token() {
+    local domain_url=$1
+    local token=$2
+    local target_dir=$3
+    local token_name="${4:-subscription-page}"
+
+    local token_data='{"tokenName":"'"$token_name"'"}'
+    local api_response
+    api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+
+    if [ -z "$api_response" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
+        return 1
+    fi
+
+    local api_token
+    api_token=$(echo "$api_response" | jq -r '.response.token')
+
+    if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
+        return 1
+    fi
+
+    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
+
+    sleep 1
+    
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}" >&2
+}
+
+
 ### API Functions ###
 
 handle_certificates() {
@@ -3985,6 +4092,7 @@ handle_certificates() {
         echo -e ""
         echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -3993,7 +4101,7 @@ handle_certificates() {
         if [ "$cert_method" == "0" ]; then
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
             exit 1
-        elif [ "$cert_method" == "2" ]; then
+        elif [ "$cert_method" == "2" ] || [ "$cert_method" == "3" ]; then
             reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
         elif [ "$cert_method" != "1" ]; then
             echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
@@ -4005,14 +4113,16 @@ handle_certificates() {
     fi
 
     declare -A cert_domains_added
+
     if [ "$need_certificates" = true ] && [ "$cert_method" == "1" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
-            local base_domain=$(extract_domain "$domain")
+            local base_domain
+            base_domain=$(extract_domain "$domain")
             unique_domains["$base_domain"]="1"
         done
 
         for domain in "${!unique_domains[@]}"; do
-            get_certificates "$domain" "$cert_method" ""
+            get_certificates "$domain" "1" ""
             if [ $? -ne 0 ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
                 return 1
@@ -4024,9 +4134,31 @@ handle_certificates() {
                 cert_domains_added["$domain"]="1"
             fi
         done
+
+    elif [ "$need_certificates" = true ] && [ "$cert_method" == "3" ]; then
+        for domain in "${!domains_to_check_ref[@]}"; do
+            local base_domain
+            base_domain=$(extract_domain "$domain")
+            unique_domains["$base_domain"]="1"
+        done
+
+        for domain in "${!unique_domains[@]}"; do
+            get_certificates "$domain" "3" "$letsencrypt_email"
+            if [ $? -ne 0 ]; then
+                echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
+                return 1
+            fi
+            min_days_left=90
+            if [ -z "${cert_domains_added[$domain]}" ]; then
+                echo "      - /etc/letsencrypt/live/$domain/fullchain.pem:/etc/nginx/ssl/$domain/fullchain.pem:ro" >> "$target_dir/docker-compose.yml"
+                echo "      - /etc/letsencrypt/live/$domain/privkey.pem:/etc/nginx/ssl/$domain/privkey.pem:ro" >> "$target_dir/docker-compose.yml"
+                cert_domains_added["$domain"]="1"
+            fi
+        done
+
     elif [ "$need_certificates" = true ] && [ "$cert_method" == "2" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
-            get_certificates "$domain" "$cert_method" "$letsencrypt_email"
+            get_certificates "$domain" "2" "$letsencrypt_email"
             if [ $? -ne 0 ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
                 continue
@@ -4039,7 +4171,8 @@ handle_certificates() {
         done
     else
         for domain in "${!domains_to_check_ref[@]}"; do
-            local base_domain=$(extract_domain "$domain")
+            local base_domain
+            base_domain=$(extract_domain "$domain")
             local cert_domain="$domain"
             if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
                 cert_domain="$base_domain"
@@ -4061,12 +4194,7 @@ handle_certificates() {
 
     if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
         echo -e "${COLOR_YELLOW}${LANG[ADDING_CRON_FOR_EXISTING_CERTS]}${COLOR_RESET}"
-        if [ "$min_days_left" -le 30 ]; then
-            echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
-            add_cron_rule "0 5 * * 0 $cron_command"
-        else
-            add_cron_rule "0 5 * * 0 $cron_command"
-        fi
+        add_cron_rule "0 5 * * 0 $cron_command"
     elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then
         echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}${LANG[UPDATING_CRON]}${COLOR_RESET}"
@@ -4204,20 +4332,14 @@ IS_DOCS_ENABLED=false
 METRICS_USER=$METRICS_USER
 METRICS_PASS=$METRICS_PASS
 
-### WEBHOOK ###
+### Webhook configuration
+### Enable webhook notifications (true/false, defaults to false if not set or empty)
 WEBHOOK_ENABLED=false
-### Only https:// is allowed
-WEBHOOK_URL=https://webhook.site/1234567890
+### Webhook URL to send notifications to (can specify multiple URLs separated by commas if needed)
+### Only http:// or https:// are allowed.
+WEBHOOK_URL=https://your-webhook-url.com/endpoint
 ### This secret is used to sign the webhook payload, must be exact 64 characters. Only a-z, 0-9, A-Z are allowed.
 WEBHOOK_SECRET_HEADER=vsmu67Kmg6R8FjIOF1WUY8LWBHie4scdEqrfsKmyf4IAf8dY3nFS0wwYHkhh6ZvQ
-
-### HWID DEVICE DETECTION AND LIMITATION ###
-# Don't enable this if you don't know what you are doing.
-# Review documentation before enabling this feature.
-# https://remna.st/docs/features/hwid-device-limit/
-HWID_DEVICE_LIMIT_ENABLED=false
-HWID_FALLBACK_DEVICE_LIMIT=5
-HWID_MAX_DEVICES_ANNOUNCE="You have reached the maximum number of devices for your subscription."
 
 ### Bandwidth usage reached notifications
 BANDWIDTH_USAGE_NOTIFICATIONS_ENABLED=false
@@ -4276,7 +4398,8 @@ services:
     env_file:
       - .env
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3000:\${APP_PORT:-3000}'
+      - '127.0.0.1:3001:\${METRICS_PORT:-3001}'
     networks:
       - remnawave-network
     healthcheck:
@@ -4303,8 +4426,12 @@ services:
     restart: always
     networks:
       - remnawave-network
-    volumes:
-      - remnawave-redis-data:/data
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory-policy noeviction
+      --loglevel warning
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
@@ -4381,11 +4508,13 @@ installation() {
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    depends_on:
+      remnawave:
+        condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
-      - META_TITLE=Remnawave Subscription
-      - META_DESCRIPTION=page
+      - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
     networks:
@@ -4427,13 +4556,11 @@ volumes:
     driver: local
     external: false
     name: remnawave-db-data
-  remnawave-redis-data:
-    driver: local
-    external: false
-    name: remnawave-redis-data
 EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 upstream remnawave {
     server 127.0.0.1:3000;
 }
@@ -4527,8 +4654,8 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP \$proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For \$proxy_protocol_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
@@ -4539,7 +4666,7 @@ server {
     }
 
     location @redirect {
-        return 404;
+        return 444;
     }
 }
 
@@ -4635,6 +4762,10 @@ EOL
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
     echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
+
+    # Create API token for subscription page
+    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
+    create_api_token "$domain_url" "$token" "$target_dir"
 
     # Stop and start Remnawave
     echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
@@ -4774,20 +4905,14 @@ IS_DOCS_ENABLED=false
 METRICS_USER=$METRICS_USER
 METRICS_PASS=$METRICS_PASS
 
-### WEBHOOK ###
+### Webhook configuration
+### Enable webhook notifications (true/false, defaults to false if not set or empty)
 WEBHOOK_ENABLED=false
-### Only https:// is allowed
-WEBHOOK_URL=https://webhook.site/1234567890
+### Webhook URL to send notifications to (can specify multiple URLs separated by commas if needed)
+### Only http:// or https:// are allowed.
+WEBHOOK_URL=https://your-webhook-url.com/endpoint
 ### This secret is used to sign the webhook payload, must be exact 64 characters. Only a-z, 0-9, A-Z are allowed.
 WEBHOOK_SECRET_HEADER=vsmu67Kmg6R8FjIOF1WUY8LWBHie4scdEqrfsKmyf4IAf8dY3nFS0wwYHkhh6ZvQ
-
-### HWID DEVICE DETECTION AND LIMITATION ###
-# Don't enable this if you don't know what you are doing.
-# Review documentation before enabling this feature.
-# https://remna.st/docs/features/hwid-device-limit/
-HWID_DEVICE_LIMIT_ENABLED=false
-HWID_FALLBACK_DEVICE_LIMIT=5
-HWID_MAX_DEVICES_ANNOUNCE="You have reached the maximum number of devices for your subscription."
 
 ### Bandwidth usage reached notifications
 BANDWIDTH_USAGE_NOTIFICATIONS_ENABLED=false
@@ -4846,7 +4971,8 @@ services:
     env_file:
       - .env
     ports:
-      - '127.0.0.1:3000:3000'
+      - '127.0.0.1:3000:\${APP_PORT:-3000}'
+      - '127.0.0.1:3001:\${METRICS_PORT:-3001}'
     networks:
       - remnawave-network
     healthcheck:
@@ -4873,8 +4999,12 @@ services:
     restart: always
     networks:
       - remnawave-network
-    volumes:
-      - remnawave-redis-data:/data
+    command: >
+      valkey-server
+      --save ""
+      --appendonly no
+      --maxmemory-policy noeviction
+      --loglevel warning
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
@@ -4944,11 +5074,13 @@ installation_panel() {
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    depends_on:
+      remnawave:
+        condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
-      - META_TITLE=Remnawave Subscription
-      - META_DESCRIPTION=page
+      - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
     networks:
@@ -4970,13 +5102,11 @@ volumes:
     driver: local
     external: false
     name: remnawave-db-data
-  remnawave-redis-data:
-    driver: local
-    external: false
-    name: remnawave-redis-data
 EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 upstream remnawave {
     server 127.0.0.1:3000;
 }
@@ -5074,7 +5204,7 @@ server {
     }
 
     location @redirect {
-        return 404;
+        return 444;
     }
 }
 
@@ -5144,6 +5274,30 @@ EOL
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
     echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
+
+    # Create API token for subscription page
+    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
+    local api_token
+    api_token=$(create_api_token "$domain_url" "$token" "subscription-page")
+
+    if [ -n "$api_token" ]; then
+
+    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" /opt/remnawave/docker-compose.yml
+
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
+    
+    fi
+
+    # Stop and start Remnawave Subscription Page
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    sleep 1
+    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
+
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    sleep 1
+    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
 
     clear
 
@@ -5286,6 +5440,8 @@ installation_node() {
 EOL
 
 cat > /opt/remnawave/nginx.conf <<EOL
+server_names_hash_bucket_size 64;
+
 map \$http_upgrade \$connection_upgrade {
     default upgrade;
     ""      close;
