@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.1a"
+SCRIPT_VERSION="2.3.1b"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -4049,7 +4049,9 @@ create_api_token() {
 
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
 
-    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
+    sleep 1
+    
+    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}" >&2
 }
 
 
