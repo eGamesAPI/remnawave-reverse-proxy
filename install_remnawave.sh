@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.1c"
+SCRIPT_VERSION="2.3.2"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2865,14 +2865,34 @@ install_packages() {
         return 1
     fi
 
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk python3-pip; then
+    # Обязательные пакеты
+    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot unattended-upgrades locales dnsutils coreutils grep gawk; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
     fi
 
+    # Опциональные пакеты (могут отсутствовать на старых Ubuntu)
+    apt-get install -y python3-pip python3-certbot-dns-cloudflare >/dev/null 2>&1 || true
+
     if command -v certbot >/dev/null 2>&1; then
-        if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
-            return 1
+        local pip_cmd=""
+        if command -v pip3 >/dev/null 2>&1; then
+            pip_cmd="pip3"
+        elif command -v pip >/dev/null 2>&1; then
+            pip_cmd="pip"
+        fi
+        
+        if [[ -n "$pip_cmd" ]]; then
+            # Установка certbot-dns-cloudflare через pip если apt не установил
+            if ! certbot plugins 2>/dev/null | grep -q "dns-cloudflare"; then
+                $pip_cmd install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || \
+                $pip_cmd install certbot-dns-cloudflare >/dev/null 2>&1 || true
+            fi
+            
+            # Установка certbot-dns-gcore
+            if ! $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                $pip_cmd install certbot-dns-gcore >/dev/null 2>&1 || true
+            fi
         fi
     fi
 
@@ -3204,7 +3224,21 @@ EOL
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                local pip_cmd=""
+                if command -v pip3 >/dev/null 2>&1; then
+                    pip_cmd="pip3"
+                elif command -v pip >/dev/null 2>&1; then
+                    pip_cmd="pip"
+                fi
+                
+                if [[ -n "$pip_cmd" ]]; then
+                    if ! $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                        if ! $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
+                            exit 1
+                        fi
+                    fi
+                else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                     exit 1
                 fi
