@@ -2865,11 +2865,14 @@ install_packages() {
         return 1
     fi
 
-    # Обязательные пакеты
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot unattended-upgrades locales dnsutils coreutils grep gawk; then
+    # Обязательные пакеты (без dnsutils - устанавливается отдельно)
+    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot unattended-upgrades locales coreutils grep gawk; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
     fi
+
+    # dnsutils или bind9-dnsutils (разные имена на разных дистрибутивах)
+    apt-get install -y dnsutils >/dev/null 2>&1 || apt-get install -y bind9-dnsutils >/dev/null 2>&1 || true
 
     # Опциональные пакеты (могут отсутствовать на старых Ubuntu)
     apt-get install -y python3-pip python3-certbot-dns-cloudflare >/dev/null 2>&1 || true
