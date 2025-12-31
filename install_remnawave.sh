@@ -2891,11 +2891,6 @@ install_packages() {
                 $pip_cmd install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || \
                 $pip_cmd install certbot-dns-cloudflare >/dev/null 2>&1 || true
             fi
-            
-            # Установка certbot-dns-gcore
-            if ! $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
-                $pip_cmd install certbot-dns-gcore >/dev/null 2>&1 || true
-            fi
         fi
     fi
 
@@ -3226,20 +3221,31 @@ EOL
         3)
             # Gcore DNS-01 (wildcard)
 
+            # Проверяем установлен ли плагин gcore
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                local pip_cmd=""
-                if command -v pip3 >/dev/null 2>&1; then
-                    pip_cmd="pip3"
-                elif command -v pip >/dev/null 2>&1; then
-                    pip_cmd="pip"
-                fi
-                
-                if [[ -n "$pip_cmd" ]]; then
-                    if ! $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
-                        if ! $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                # Проверяем флаг установки (чтобы не ставить повторно)
+                if [[ ! -f "${DIR_REMNAWAVE}.gcore_installed" ]]; then
+                    local pip_cmd=""
+                    if command -v pip3 >/dev/null 2>&1; then
+                        pip_cmd="pip3"
+                    elif command -v pip >/dev/null 2>&1; then
+                        pip_cmd="pip"
+                    fi
+                    
+                    if [[ -n "$pip_cmd" ]]; then
+                        echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                        if $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1 || \
+                           $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                            # Создаём флаг успешной установки
+                            mkdir -p "${DIR_REMNAWAVE}"
+                            touch "${DIR_REMNAWAVE}.gcore_installed"
+                        else
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                             exit 1
                         fi
+                    else
+                        echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
+                        exit 1
                     fi
                 else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
@@ -3402,7 +3408,27 @@ EOL
                 chmod 600 "$cf_credentials_file"
             fi
         elif [ "$cert_method" == "3" ]; then
-            # Gcore
+            # Gcore - проверяем и устанавливаем плагин если нужно
+            if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                if [[ ! -f "${DIR_REMNAWAVE}.gcore_installed" ]]; then
+                    local pip_cmd=""
+                    if command -v pip3 >/dev/null 2>&1; then
+                        pip_cmd="pip3"
+                    elif command -v pip >/dev/null 2>&1; then
+                        pip_cmd="pip"
+                    fi
+                    
+                    if [[ -n "$pip_cmd" ]]; then
+                        echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                        if $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1 || \
+                           $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                            mkdir -p "${DIR_REMNAWAVE}"
+                            touch "${DIR_REMNAWAVE}.gcore_installed"
+                        fi
+                    fi
+                fi
+            fi
+            
             local gcore_credentials_file
             gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
