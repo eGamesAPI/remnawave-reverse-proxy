@@ -2878,22 +2878,13 @@ install_packages() {
     apt-get install -y python3-pip python3-certbot-dns-cloudflare >/dev/null 2>&1 || true
 
     if command -v certbot >/dev/null 2>&1; then
-        local pip_cmd=""
-        if command -v pip3 >/dev/null 2>&1; then
-            pip_cmd="pip3"
-        elif command -v pip >/dev/null 2>&1; then
-            pip_cmd="pip"
-        fi
-        
-        if [[ -n "$pip_cmd" ]]; then
-            # Установка certbot-dns-cloudflare через pip если apt не установил
-            if ! certbot plugins 2>/dev/null | grep -q "dns-cloudflare"; then
-                # Проверяем поддержку --break-system-packages (pip 23.0+)
-                if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
-                    $pip_cmd install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || true
-                else
-                    $pip_cmd install certbot-dns-cloudflare >/dev/null 2>&1 || true
-                fi
+        # Установка certbot-dns-cloudflare через pip если apt не установил
+        if ! certbot plugins 2>/dev/null | grep -q "dns-cloudflare"; then
+            # Используем python3 -m pip (более надёжно на старых системах)
+            if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                python3 -m pip install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || true
+            else
+                python3 -m pip install certbot-dns-cloudflare >/dev/null 2>&1 || true
             fi
         fi
     fi
@@ -3229,30 +3220,18 @@ EOL
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
                 # Проверяем флаг установки (чтобы не ставить повторно)
                 if [[ ! -f "${DIR_REMNAWAVE}.gcore_installed" ]]; then
-                    local pip_cmd=""
-                    if command -v pip3 >/dev/null 2>&1; then
-                        pip_cmd="pip3"
-                    elif command -v pip >/dev/null 2>&1; then
-                        pip_cmd="pip"
+                    echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                    # Используем python3 -m pip (более надёжно на старых системах)
+                    if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                        python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                    else
+                        python3 -m pip install certbot-dns-gcore >/dev/null 2>&1
                     fi
                     
-                    if [[ -n "$pip_cmd" ]]; then
-                        echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
-                        # Проверяем поддержку --break-system-packages (pip 23.0+)
-                        if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
-                            $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
-                        else
-                            $pip_cmd install certbot-dns-gcore >/dev/null 2>&1
-                        fi
-                        
-                        if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                            # Создаём флаг успешной установки
-                            mkdir -p "${DIR_REMNAWAVE}"
-                            touch "${DIR_REMNAWAVE}.gcore_installed"
-                        else
-                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
-                            exit 1
-                        fi
+                    if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                        # Создаём флаг успешной установки
+                        mkdir -p "${DIR_REMNAWAVE}"
+                        touch "${DIR_REMNAWAVE}.gcore_installed"
                     else
                         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                         exit 1
@@ -3421,26 +3400,17 @@ EOL
             # Gcore - проверяем и устанавливаем плагин если нужно
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
                 if [[ ! -f "${DIR_REMNAWAVE}.gcore_installed" ]]; then
-                    local pip_cmd=""
-                    if command -v pip3 >/dev/null 2>&1; then
-                        pip_cmd="pip3"
-                    elif command -v pip >/dev/null 2>&1; then
-                        pip_cmd="pip"
+                    echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                    # Используем python3 -m pip (более надёжно на старых системах)
+                    if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                        python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                    else
+                        python3 -m pip install certbot-dns-gcore >/dev/null 2>&1
                     fi
                     
-                    if [[ -n "$pip_cmd" ]]; then
-                        echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
-                        # Проверяем поддержку --break-system-packages (pip 23.0+)
-                        if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
-                            $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
-                        else
-                            $pip_cmd install certbot-dns-gcore >/dev/null 2>&1
-                        fi
-                        
-                        if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                            mkdir -p "${DIR_REMNAWAVE}"
-                            touch "${DIR_REMNAWAVE}.gcore_installed"
-                        fi
+                    if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                        mkdir -p "${DIR_REMNAWAVE}"
+                        touch "${DIR_REMNAWAVE}.gcore_installed"
                     fi
                 fi
             fi
