@@ -2888,8 +2888,12 @@ install_packages() {
         if [[ -n "$pip_cmd" ]]; then
             # Установка certbot-dns-cloudflare через pip если apt не установил
             if ! certbot plugins 2>/dev/null | grep -q "dns-cloudflare"; then
-                $pip_cmd install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || \
-                $pip_cmd install certbot-dns-cloudflare >/dev/null 2>&1 || true
+                # Проверяем поддержку --break-system-packages (pip 23.0+)
+                if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
+                    $pip_cmd install --break-system-packages certbot-dns-cloudflare >/dev/null 2>&1 || true
+                else
+                    $pip_cmd install certbot-dns-cloudflare >/dev/null 2>&1 || true
+                fi
             fi
         fi
     fi
@@ -3234,8 +3238,14 @@ EOL
                     
                     if [[ -n "$pip_cmd" ]]; then
                         echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
-                        if $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1 || \
-                           $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                        # Проверяем поддержку --break-system-packages (pip 23.0+)
+                        if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
+                            $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                        else
+                            $pip_cmd install certbot-dns-gcore >/dev/null 2>&1
+                        fi
+                        
+                        if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
                             # Создаём флаг успешной установки
                             mkdir -p "${DIR_REMNAWAVE}"
                             touch "${DIR_REMNAWAVE}.gcore_installed"
@@ -3420,8 +3430,14 @@ EOL
                     
                     if [[ -n "$pip_cmd" ]]; then
                         echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
-                        if $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1 || \
-                           $pip_cmd install certbot-dns-gcore >/dev/null 2>&1; then
+                        # Проверяем поддержку --break-system-packages (pip 23.0+)
+                        if $pip_cmd install --help 2>&1 | grep -q "break-system-packages"; then
+                            $pip_cmd install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                        else
+                            $pip_cmd install certbot-dns-gcore >/dev/null 2>&1
+                        fi
+                        
+                        if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
                             mkdir -p "${DIR_REMNAWAVE}"
                             touch "${DIR_REMNAWAVE}.gcore_installed"
                         fi
