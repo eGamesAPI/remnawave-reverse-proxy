@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.2"
+SCRIPT_VERSION="2.3.3"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -454,7 +454,6 @@ set_language() {
                 [DOWNLOAD_FALLBACK]="Trying fallback download method..."
                 [WARP_DELETE_SUCCESS]="WARP deleted successfully"
                 [UPDATING_SQUAD]="Updating squad"
-                [ALIAS_EXISTS]="Alias already exists in %s"
                 [PORT_8443_NOT_CONFIGURED]="Port 8443 is not configured in docker-compose.yml"
                 [ARCHIVE_NOT_FOUND]="Archive directory not found"
                 [FILE_NOT_FOUND]="File not found:"
@@ -868,7 +867,6 @@ set_language() {
                 [DOWNLOAD_FALLBACK]="Попытка резервного метода загрузки..."
                 [WARP_DELETE_SUCCESS]="WARP успешно удалён"
                 [UPDATING_SQUAD]="Обновление squad"
-                [ALIAS_EXISTS]="Алиас уже существует в %s"
                 [PORT_8443_NOT_CONFIGURED]="Порт 8443 не настроен в docker-compose.yml"
                 [ARCHIVE_NOT_FOUND]="Директория archive не найдена"
                 [FILE_NOT_FOUND]="Файл не найден:"
@@ -1178,8 +1176,6 @@ install_script_if_missing() {
         echo "$alias_line" >> "$bashrc_file"
         printf "${COLOR_GREEN}${LANG[ALIAS_ADDED]}${COLOR_RESET}\n" "$bashrc_file"
         printf "${COLOR_YELLOW}${LANG[ALIAS_ACTIVATE_GLOBAL]}${COLOR_RESET}\n" "$bashrc_file"
-    else
-        printf "${COLOR_YELLOW}${LANG[ALIAS_EXISTS]}${COLOR_RESET}\n" "$bashrc_file"
     fi
 }
 
@@ -2713,12 +2709,6 @@ install_packages() {
         return 1
     fi
 
-    if command -v certbot >/dev/null 2>&1; then
-        if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
-            return 1
-        fi
-    fi
-
     if ! dpkg -l | grep -q '^ii.*cron '; then
         if ! apt-get install -y cron; then
             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CRON]}" "${COLOR_RESET}" >&2
@@ -3047,10 +3037,22 @@ EOL
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                
+                if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                    python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                else
+                python3 -m pip install certbot-dns-gcore >/dev/null 2>&1
+                fi
+                    
+                if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                    echo -e "${COLOR_GREEN}Plugin installed successfully.${COLOR_RESET}"
+                else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                     exit 1
                 fi
+            else
+                echo -e "${COLOR_GREEN}Gcore plugin already available.${COLOR_RESET}"
             fi
 
             reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
