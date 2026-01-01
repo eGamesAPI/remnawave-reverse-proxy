@@ -93,7 +93,7 @@ set_language() {
                 [PROMPT_ACTION]="Select action (0-10):"
                 [INVALID_CHOICE]="Invalid choice. Please select 0-10"
                 [WARNING_LABEL]="WARNING:"
-                [CONFIRM_PROMPT]="Enter 'y' to continue or 'n' to exit (y/n):"
+                [CONFIRM_PROMPT]="Enter 'y' to continue, 'n' to re-enter, or press Enter to abort:"
                 [WARNING_NODE_PANEL]="Adding a node should only be done on the server where the panel is installed, not on the node server."
                 [CONFIRM_SERVER_PANEL]="Are you sure you are on the server with the installed panel?"
                 #Remove Script
@@ -182,6 +182,7 @@ set_language() {
                 [ENTER_PANEL_DOMAIN]="Enter panel domain (e.g. panel.example.com):"
                 [ENTER_SUB_DOMAIN]="Enter subscription domain (e.g. sub.example.com):"
                 [ENTER_NODE_DOMAIN]="Enter selfsteal domain for node (e.g. node.example.com):"
+                [INVALID_DOMAIN]="Invalid domain. Please enter a valid domain (Latin characters only, e.g. example.com):"
                 [ENTER_CF_TOKEN]="Enter your Cloudflare API token or global API key:"
                 [ENTER_CF_EMAIL]="Enter your Cloudflare registered email:"
                 [ENTER_GCORE_TOKEN]="Enter Gcore API token:"
@@ -507,7 +508,7 @@ set_language() {
                 [PROMPT_ACTION]="Выберите действие (0-10):"
                 [INVALID_CHOICE]="Неверный выбор. Выберите 0-10."
                 [WARNING_LABEL]="ВНИМАНИЕ:"
-                [CONFIRM_PROMPT]="Введите 'y' для продолжения или 'n' для выхода (y/n):"
+                [CONFIRM_PROMPT]="Введите 'y' для продолжения, 'n' для повторного ввода, или Enter для отмены:"
                 [WARNING_NODE_PANEL]="Добавление ноды должно выполняться только на сервере, где установлена панель, а не на сервере ноды."
                 [CONFIRM_SERVER_PANEL]="Вы уверены, что находитесь на сервере с установленной панелью?"
                 #Remove Script
@@ -596,6 +597,7 @@ set_language() {
                 [ENTER_PANEL_DOMAIN]="Введите домен панели (например, panel.example.com):"
                 [ENTER_SUB_DOMAIN]="Введите домен подписки (например, sub.example.com):"
                 [ENTER_NODE_DOMAIN]="Введите selfsteal домен для ноды (например, node.example.com):"
+                [INVALID_DOMAIN]="Некорректный домен. Введите домен латиницей (например, example.com):"
                 [ENTER_CF_TOKEN]="Введите Cloudflare API токен или глобальный ключ:"
                 [ENTER_CF_EMAIL]="Введите зарегистрированную почту Cloudflare:"
                 [ENTER_GCORE_TOKEN]="Введите API‑токен Gcore:"
@@ -884,7 +886,53 @@ question() {
 }
 
 reading() {
-    read -rp " $(question "$1")" "$2"
+    local prompt=" $(question "$1")"
+    local varname="$2"
+    # read -e enables readline for proper UTF-8/arrow key support
+    read -rep "$prompt" "$varname"
+}
+
+# reading for domain input with retry loop on check failure
+# Usage: reading_domain "prompt" VARNAME show_warning allow_cf_proxy
+# Return codes: 0 = success, 1 = success with warning, 2 = user aborted
+reading_domain() {
+    local prompt="$1"
+    local varname="$2"
+    local show_warning="${3:-true}"
+    local allow_cf_proxy="${4:-true}"
+    local domain_value
+    local check_result
+    
+    while true; do
+        reading "$prompt" domain_value
+        # Sanitize domain: keep only valid domain characters (a-z, 0-9, -, .)
+        domain_value=$(echo "$domain_value" | LC_ALL=C sed 's/[^a-zA-Z0-9.-]//g' | xargs)
+        
+        # Check if domain is empty or invalid format
+        if [ -z "$domain_value" ] || ! echo "$domain_value" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$'; then
+            echo -e "${COLOR_RED}${LANG[INVALID_DOMAIN]}${COLOR_RESET}"
+            continue
+        fi
+        
+        check_domain "$domain_value" "$show_warning" "$allow_cf_proxy"
+        check_result=$?
+        
+        if [ $check_result -eq 0 ]; then
+            # Domain check passed
+            printf -v "$varname" '%s' "$domain_value"
+            return 0
+        elif [ $check_result -eq 1 ]; then
+            # Warning shown, user chose to continue (y)
+            printf -v "$varname" '%s' "$domain_value"
+            return 1
+        elif [ $check_result -eq 2 ]; then
+            # User wants to re-enter domain (n)
+            continue
+        else
+            # check_result -eq 3: user wants to abort (Enter or other)
+            return 2
+        fi
+    done
 }
 
 error() {
@@ -1314,6 +1362,12 @@ manage_install() {
                 }
             fi
             installation
+            if [ $? -ne 0 ]; then
+                sleep 2
+                log_clear
+                manage_install
+                return
+            fi
             sleep 2
             log_clear
             ;;
@@ -1326,6 +1380,12 @@ manage_install() {
                 }
             fi
             installation_panel
+            if [ $? -ne 0 ]; then
+                sleep 2
+                log_clear
+                manage_install
+                return
+            fi
             sleep 2
             log_clear
             ;;
@@ -1342,6 +1402,12 @@ manage_install() {
                 }
             fi
             installation_node
+            if [ $? -ne 0 ]; then
+                sleep 2
+                log_clear
+                manage_install
+                return
+            fi
             sleep 2
             log_clear
             ;;
@@ -2814,8 +2880,12 @@ check_domain() {
             echo -e "${COLOR_RED}${LANG[CHECK_DOMAIN_IP_FAIL]}${COLOR_RESET}"
             printf "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_IP_FAIL_INSTRUCTION]}${COLOR_RESET}\n" "$domain" "$server_ip"
             reading "${LANG[CONFIRM_PROMPT]}" confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                return 2
+            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                return 1  # continue with warning
+            elif [[ "$confirm" == "n" || "$confirm" == "N" ]]; then
+                return 2  # re-enter domain
+            else
+                return 3  # abort (Enter or other)
             fi
         fi
         return 1
@@ -2865,9 +2935,11 @@ check_domain() {
                 echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]}${COLOR_RESET}"
                 reading "${LANG[CONFIRM_PROMPT]}" confirm
                 if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                    return 1
+                    return 1  # continue with warning
+                elif [[ "$confirm" == "n" || "$confirm" == "N" ]]; then
+                    return 2  # re-enter domain
                 else
-                    return 2
+                    return 3  # abort (Enter or other)
                 fi
             fi
             return 1
@@ -2879,9 +2951,11 @@ check_domain() {
             echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
             reading "${LANG[CONFIRM_PROMPT]}" confirm
             if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                return 1
+                return 1  # continue with warning
+            elif [[ "$confirm" == "n" || "$confirm" == "N" ]]; then
+                return 2  # re-enter domain
             else
-                return 2
+                return 3  # abort (Enter or other)
             fi
         fi
         return 1
@@ -4088,33 +4162,30 @@ handle_certificates() {
 install_remnawave() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
-    reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
-    check_domain "$PANEL_DOMAIN" true true
+    reading_domain "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN true true
     local panel_check_result=$?
     if [ $panel_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
-    check_domain "$SUB_DOMAIN" true true
+    reading_domain "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN true true
     local sub_check_result=$?
     if [ $sub_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
-    check_domain "$SELFSTEAL_DOMAIN" true false
+    reading_domain "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN true false
     local node_check_result=$?
     if [ $node_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     if [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     PANEL_BASE_DOMAIN=$(extract_domain "$PANEL_DOMAIN")
@@ -4327,6 +4398,9 @@ installation() {
 
     declare -A unique_domains
     install_remnawave
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
@@ -4669,27 +4743,25 @@ EOL
 install_remnawave_panel() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
-    reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
-    check_domain "$PANEL_DOMAIN" true true
+    reading_domain "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN true true
     local panel_check_result=$?
     if [ $panel_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
-    check_domain "$SUB_DOMAIN" true true
+    reading_domain "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN true true
     local sub_check_result=$?
     if [ $sub_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
 
     if [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     PANEL_BASE_DOMAIN=$(extract_domain "$PANEL_DOMAIN")
@@ -4899,6 +4971,9 @@ installation_panel() {
 
     declare -A unique_domains
     install_remnawave_panel
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
@@ -5189,13 +5264,11 @@ EOL
 install_remnawave_node() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
-    reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
-
-    check_domain "$SELFSTEAL_DOMAIN" true false
+    reading_domain "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN true false
     local domain_check_result=$?
     if [ $domain_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     while true; do
@@ -5253,6 +5326,9 @@ installation_node() {
 
     declare -A unique_domains
     install_remnawave_node
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
 
     declare -A domains_to_check
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
@@ -5511,7 +5587,8 @@ case $OPTION in
     4)
         if [ ! -d "/opt/remnawave" ]; then
             echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
-            exit 1
+            sleep 2
+            remnawave_reverse
         else
             show_template_source_options
             reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
@@ -5540,7 +5617,8 @@ case $OPTION in
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
-                    exit 1
+                    sleep 1
+                    remnawave_reverse
                     ;;
             esac
         fi
@@ -5584,7 +5662,8 @@ case $OPTION in
         ;;
     *)
         echo -e "${COLOR_YELLOW}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
-        exit 1
+        sleep 1
+        remnawave_reverse
         ;;
 esac
 exit 0
