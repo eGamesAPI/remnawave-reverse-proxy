@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.1c"
+SCRIPT_VERSION="2.3.3"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -84,7 +84,7 @@ set_language() {
                 [MENU_2]="Reinstall panel/node"
                 [MENU_3]="Manage Panel/Node"
                 [MENU_4]="Install random template for selfsteal node"
-                [MENU_5]="Custom subscriptions by legiz"
+                [MENU_5]="Custom extensions by legiz"
                 [MENU_6]="Extensions by distillium"
                 [MENU_7]="Manage IPv6"
                 [MENU_8]="Manage certificates domain"
@@ -375,12 +375,12 @@ set_language() {
                 [UPLOADING_SUB_PAGE]="Uploading custom sub page template..."
                 [ERROR_FETCH_SUB_PAGE]="Failed to fetch custom sub page template."
                 [SUB_PAGE_UPDATED_SUCCESS]="Custom sub page template successfully updated."
-                [SELECT_SUB_PAGE_CUSTOM]="Select action (0-7):"
+                [SELECT_SUB_PAGE_CUSTOM]="Select action (0-2):"
                 [SELECT_SUB_PAGE_CUSTOM1]="Custom Sub Page Templates"
                 [SELECT_SUB_PAGE_CUSTOM2]="Custom Sub Page Templates\nOnly run on panel server"
                 [SELECT_SUB_PAGE_CUSTOM3]="Custom App Lists for original sub page:"
                 [SELECT_SUB_PAGE_CUSTOM4]="Custom Sub Page:"
-                [SUB_PAGE_SELECT_CHOICE]="Invalid choice. Please select 0-7."
+                [SUB_PAGE_SELECT_CHOICE]="Invalid choice. Please select 0-2."
                 [RESTORE_SUB_PAGE]="Restore default sub page"
                 [CONTAINER_NOT_FOUND]="Container %s not found"
                 [SUB_WITH_APPCONFIG_ASK]="Do you want to include app-config.json?"
@@ -399,6 +399,7 @@ set_language() {
                 [BRANDING_LOGO_URL_PROMPT]="Enter your brand logo URL:"
                 [BRANDING_ADDED_SUCCESS]="Branding configuration successfully added"
                 [CUSTOM_APP_LIST_MENU]="Edit custom application list and branding"
+                [CUSTOM_APP_LIST_PANEL_MESSAGE]="Editing custom application list and branding is now done on the panel side"
                 [CUSTOM_APP_LIST_NOT_FOUND]="Custom application list not found"
                 [EDIT_BRANDING]="Edit branding"
                 [EDIT_LOGO]="Change logo"
@@ -450,6 +451,16 @@ set_language() {
                 [ERROR_API_TOKEN]="Failed to add API token"
                 [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Stopping Remnawave Subscription Page..."
                 [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Starting Remnawave Subscription Page..."
+                [DOWNLOAD_FALLBACK]="Trying fallback download method..."
+                [WARP_DELETE_SUCCESS]="WARP deleted successfully"
+                [UPDATING_SQUAD]="Updating squad"
+                [PORT_8443_NOT_CONFIGURED]="Port 8443 is not configured in docker-compose.yml"
+                [ARCHIVE_NOT_FOUND]="Archive directory not found"
+                [FILE_NOT_FOUND]="File not found:"
+                [UPDATED_RENEW_AUTH]="Updated certificate renewal hook"
+                [ERROR_CREATE_CONFIG_PROFILE]="Error creating config profile"
+                [ERROR_EXTRACT_PRIVATE_KEY]="Failed to extract private key"
+                [INVALID_CERT_METHOD]="Invalid certificate method"
             )
             ;;
         ru)
@@ -474,20 +485,20 @@ set_language() {
                 [ERROR_INSTALL_DOCKER]="Ошибка: Не удалось установить Docker"
                 [ERROR_DOCKER_NOT_INSTALLED]="Ошибка: Docker не установлен"
                 [ERROR_START_DOCKER]="Ошибка: Не удалось запустить Docker"
-                [ERROR_ENABLE_AUTOSTART_DOCKER]="Ошибка: Не удалось включить автозапуск Docker"
+                [ERROR_ENABLE_DOCKER]="Ошибка: Не удалось включить автозапуск Docker"
                 [ERROR_DOCKER_NOT_WORKING]="Ошибка: Docker не работает корректно"
                 [ERROR_CONFIGURE_UFW]="Ошибка: Не удалось настроить UFW"
                 [ERROR_CONFIGURE_UPGRADES]="Ошибка: Не удалось настроить unattended-upgrades"
                 [ERROR_DOCKER_DNS]="Ошибка: Не удалось разрешить домен download.docker.com. Проверьте настройки DNS."
                 [ERROR_INSTALL_CERTBOT]="Ошибка: Не удалось установить certbot"
-                [SUCCESSFUL_INSTALL]="Все пакеты успешно установлены"
+                [SUCCESS_INSTALL]="Все пакеты успешно установлены"
                 #Main menu
                 [EXIT]="Выход"
                 [MENU_1]="Установка компонентов Remnawave"
                 [MENU_2]="Переустановить панель/ноду"
                 [MENU_3]="Управление панелью/нодой"
                 [MENU_4]="Установить случайный шаблон для selfsteal ноды"
-                [MENU_5]="Кастомные подписки от legiz"
+                [MENU_5]="Кастомные расширения от legiz"
                 [MENU_6]="Управление расширениями от distillium"
                 [MENU_7]="Управление IPv6"
                 [MENU_8]="Управление сертификатами домена"
@@ -777,12 +788,12 @@ set_language() {
                 [UPLOADING_SUB_PAGE]="Загрузка пользовательского шаблона страницы подписки..."
                 [ERROR_FETCH_SUB_PAGE]="Не удалось получить пользовательский шаблон страницы подписки."
                 [SUB_PAGE_UPDATED_SUCCESS]="Пользовательский шаблон страницы подписки успешно обновлён."
-                [SELECT_SUB_PAGE_CUSTOM]="Выберите действие (0-7):"
+                [SELECT_SUB_PAGE_CUSTOM]="Выберите действие (0-2):"
                 [SELECT_SUB_PAGE_CUSTOM1]="Шаблоны страниц подписки"
                 [SELECT_SUB_PAGE_CUSTOM2]="Шаблоны страниц подписки\nЗапускать только на сервере с панелью"
                 [SELECT_SUB_PAGE_CUSTOM3]="Списки приложений для оригинальной страницы подписки:"
                 [SELECT_SUB_PAGE_CUSTOM4]="Кастомные страницы подписки:"
-                [SUB_PAGE_SELECT_CHOICE]="Недопустимый выбор. Пожалуйста, выберите от 0 до 7."
+                [SUB_PAGE_SELECT_CHOICE]="Недопустимый выбор. Пожалуйста, выберите от 0 до 2."
                 [RESTORE_SUB_PAGE]="Восстановить шаблон страницы подписки по умолчанию"
                 [CONTAINER_NOT_FOUND]="Контейнер %s не найден"
                 [SUB_WITH_APPCONFIG_ASK]="Добавить файл конфигурации app-config.json?"
@@ -801,6 +812,7 @@ set_language() {
                 [BRANDING_LOGO_URL_PROMPT]="Введите ссылку на логотип вашего бренда:"
                 [BRANDING_ADDED_SUCCESS]="Конфигурация брендирования успешно добавлена"
                 [CUSTOM_APP_LIST_MENU]="Редактирование кастомного списка приложений и брендирования"
+                [CUSTOM_APP_LIST_PANEL_MESSAGE]="Редактирование кастомного списка приложений и брендирования теперь осуществляется на стороне панели"
                 [CUSTOM_APP_LIST_NOT_FOUND]="Кастомный список приложений не найден"
                 [EDIT_BRANDING]="Редактирование брендирования"
                 [EDIT_LOGO]="Изменить логотип"
@@ -852,6 +864,16 @@ set_language() {
                 [ERROR_API_TOKEN]="Не удалось добавить API токен"
                 [STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]="Остановка Remnawave Subscription Page..."
                 [STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]="Запуск Remnawave Subscription Page..."
+                [DOWNLOAD_FALLBACK]="Попытка резервного метода загрузки..."
+                [WARP_DELETE_SUCCESS]="WARP успешно удалён"
+                [UPDATING_SQUAD]="Обновление squad"
+                [PORT_8443_NOT_CONFIGURED]="Порт 8443 не настроен в docker-compose.yml"
+                [ARCHIVE_NOT_FOUND]="Директория archive не найдена"
+                [FILE_NOT_FOUND]="Файл не найден:"
+                [UPDATED_RENEW_AUTH]="Обновлён hook обновления сертификата"
+                [ERROR_CREATE_CONFIG_PROFILE]="Ошибка создания профиля конфигурации"
+                [ERROR_EXTRACT_PRIVATE_KEY]="Не удалось извлечь приватный ключ"
+                [INVALID_CERT_METHOD]="Неверный метод получения сертификата"
             )
             ;;
     esac
@@ -1154,8 +1176,6 @@ install_script_if_missing() {
         echo "$alias_line" >> "$bashrc_file"
         printf "${COLOR_GREEN}${LANG[ALIAS_ADDED]}${COLOR_RESET}\n" "$bashrc_file"
         printf "${COLOR_YELLOW}${LANG[ALIAS_ACTIVATE_GLOBAL]}${COLOR_RESET}\n" "$bashrc_file"
-    else
-        printf "${COLOR_YELLOW}${LANG[ALIAS_EXISTS]}${COLOR_RESET}\n" "$bashrc_file"
     fi
 }
 
@@ -2092,7 +2112,10 @@ manage_custom_legiz() {
             manage_custom_legiz
             ;;
         2)
-            manage_custom_app_list
+            echo -e ""
+            echo -e "${COLOR_GREEN}${LANG[CUSTOM_APP_LIST_PANEL_MESSAGE]}${COLOR_RESET}"
+            echo -e ""
+            sleep 2
             log_clear
             manage_custom_legiz
             ;;
@@ -2113,17 +2136,9 @@ show_sub_page_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[SELECT_SUB_PAGE_CUSTOM2]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[SELECT_SUB_PAGE_CUSTOM3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}1. Simple custom app list (clash and sing)${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. Multiapp custom app list${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}3. HWID only custom app list${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}1. Orion web page template (support custom app list)${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[SELECT_SUB_PAGE_CUSTOM4]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. Orion web page template (support custom app list)${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}5. Material web page template (support custom app list)${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}6. Marzbanify web page template (clash and sing)${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}7. ${LANG[RESTORE_SUB_PAGE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[RESTORE_SUB_PAGE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -2208,35 +2223,7 @@ manage_sub_page_upload() {
     local docker_compose_file="/opt/remnawave/docker-compose.yml"
 
     case $SUB_PAGE_OPTION in
-        1|2|3)
-            [ -f "$index_file" ] && rm -f "$index_file"
-
-            echo -e "${COLOR_YELLOW}${LANG[UPLOADING_SUB_PAGE]}${COLOR_RESET}"
-            echo -e ""
-            local primary_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/app-config.json"
-            local fallback_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/app-config.json"
-            if [ "$SUB_PAGE_OPTION" == "2" ]; then
-                primary_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/multiapp/app-config.json"
-                fallback_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/multiapp/app-config.json"
-            elif [ "$SUB_PAGE_OPTION" == "3" ]; then
-                primary_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/hwid/app-config.json"
-                fallback_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/hwid/app-config.json"
-            fi
-
-            if ! download_with_fallback "$primary_url" "$fallback_url" "$config_file"; then
-                echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
-                sleep 2
-                log_clear
-                return 1
-            fi
-
-            branding_add_to_appconfig "$config_file"
-
-            /usr/bin/yq eval 'del(.services."remnawave-subscription-page".volumes)' -i "$docker_compose_file"
-            /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./app-config.json:/opt/app/frontend/assets/app-config.json"]' -i "$docker_compose_file"
-            ;;
-
-        4)
+        1)
             [ -f "$config_file" ] && rm -f "$config_file"
             [ -f "$index_file" ] && rm -f "$index_file"
 
@@ -2251,137 +2238,11 @@ manage_sub_page_upload() {
                 return 1
             fi
 
-            echo -e "${COLOR_GREEN}${LANG[SUB_WITH_APPCONFIG_ASK]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}1. ${LANG[SUB_WITH_APPCONFIG_OPTION1]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}2. ${LANG[SUB_WITH_APPCONFIG_OPTION2]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}3. ${LANG[SUB_WITH_APPCONFIG_OPTION3]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}0. ${LANG[SUB_WITH_APPCONFIG_SKIP]}${COLOR_RESET}"
-            echo -e ""
-            reading "${LANG[SUB_WITH_APPCONFIG_INPUT]}" SUB_WITH_APPCONFIG
-
-            case $SUB_WITH_APPCONFIG in
-                1|2|3)
-                    local primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/app-config.json"
-                    local fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/app-config.json"
-                    if [ "$SUB_WITH_APPCONFIG" == "2" ]; then
-                        primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/multiapp/app-config.json"
-                        fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/multiapp/app-config.json"
-                    elif [ "$SUB_WITH_APPCONFIG" == "3" ]; then
-                        primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/hwid/app-config.json"
-                        fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/hwid/app-config.json"
-                    fi
-                    
-                    if ! download_with_fallback "$primary_config_url" "$fallback_config_url" "$config_file"; then
-                        echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
-                        sleep 2
-                        log_clear
-                        return 1
-                    fi
-
-                    branding_add_to_appconfig "$config_file"
-                    ;;
-                0)
-                    [ -f "$config_file" ] && rm -f "$config_file"
-                    [ -f "$index_file" ] && rm -f "$index_file"
-                    ;;
-                *)
-                    echo -e "${COLOR_RED}${LANG[SUB_WITH_APPCONFIG_INVALID]}${COLOR_RESET}"
-                    [ -f "$config_file" ] && rm -f "$config_file"
-                    ;;
-            esac
-
-            /usr/bin/yq eval 'del(.services."remnawave-subscription-page".volumes)' -i "$docker_compose_file"
-            /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./index.html:/opt/app/frontend/index.html"]' -i "$docker_compose_file"
-
-            if [ -f "$config_file" ]; then
-                /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./app-config.json:/opt/app/frontend/assets/app-config.json"]' -i "$docker_compose_file"
-            fi
-            ;;
-
-        5)
-            [ -f "$config_file" ] && rm -f "$config_file"
-            [ -f "$index_file" ] && rm -f "$index_file"
-
-            echo -e "${COLOR_YELLOW}${LANG[UPLOADING_SUB_PAGE]}${COLOR_RESET}"
-            echo -e ""
-            local primary_index_url="https://raw.githubusercontent.com/legiz-ru/material-remnawave-subscription-page/refs/heads/main/index.html"
-            local fallback_index_url="https://cdn.jsdelivr.net/gh/legiz-ru/material-remnawave-subscription-page@main/index.html"
-            if ! download_with_fallback "$primary_index_url" "$fallback_index_url" "$index_file"; then
-                echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
-                sleep 2
-                log_clear
-                return 1
-            fi
-
-            echo -e "${COLOR_GREEN}${LANG[SUB_WITH_APPCONFIG_ASK]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}1. ${LANG[SUB_WITH_APPCONFIG_OPTION1]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}2. ${LANG[SUB_WITH_APPCONFIG_OPTION2]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}3. ${LANG[SUB_WITH_APPCONFIG_OPTION3]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}0. ${LANG[SUB_WITH_APPCONFIG_SKIP]}${COLOR_RESET}"
-            echo -e ""
-            reading "${LANG[SUB_WITH_APPCONFIG_INPUT]}" SUB_WITH_APPCONFIG
-
-            case $SUB_WITH_APPCONFIG in
-                1|2|3)
-                    local primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/app-config.json"
-                    local fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/app-config.json"
-                    if [ "$SUB_WITH_APPCONFIG" == "2" ]; then
-                        primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/multiapp/app-config.json"
-                        fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/multiapp/app-config.json"
-                    elif [ "$SUB_WITH_APPCONFIG" == "3" ]; then
-                        primary_config_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/hwid/app-config.json"
-                        fallback_config_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/hwid/app-config.json"
-                    fi
-
-                    if ! download_with_fallback "$primary_config_url" "$fallback_config_url" "$config_file"; then
-                        echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
-                        sleep 2
-                        log_clear
-                        return 1
-                    fi
-                    branding_add_to_appconfig "$config_file"
-                    ;;
-                0)
-                    [ -f "$config_file" ] && rm -f "$config_file"
-                    [ -f "$index_file" ] && rm -f "$index_file"
-                    ;;
-                *)
-                    echo -e "${COLOR_RED}${LANG[SUB_WITH_APPCONFIG_INVALID]}${COLOR_RESET}"
-                    [ -f "$config_file" ] && rm -f "$config_file"
-                    ;;
-            esac
-
-            /usr/bin/yq eval 'del(.services."remnawave-subscription-page".volumes)' -i "$docker_compose_file"
-            /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./index.html:/opt/app/frontend/index.html"]' -i "$docker_compose_file"
-
-            if [ -f "$config_file" ]; then
-                /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./app-config.json:/opt/app/frontend/assets/app-config.json"]' -i "$docker_compose_file"
-            fi
-            ;;
-
-        6)
-            [ -f "$config_file" ] && rm -f "$config_file"
-
-            echo -e "${COLOR_YELLOW}${LANG[UPLOADING_SUB_PAGE]}${COLOR_RESET}"
-            echo -e ""
-            local primary_url="https://raw.githubusercontent.com/legiz-ru/my-remnawave/refs/heads/main/sub-page/customweb/clash-sing/index.html"
-            local fallback_url="https://cdn.jsdelivr.net/gh/legiz-ru/my-remnawave@main/sub-page/customweb/clash-sing/index.html"
-            if ! download_with_fallback "$primary_url" "$fallback_url" "$index_file"; then
-                echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
-                sleep 2
-                log_clear
-                return 1
-            fi
-
             /usr/bin/yq eval 'del(.services."remnawave-subscription-page".volumes)' -i "$docker_compose_file"
             /usr/bin/yq eval '.services."remnawave-subscription-page".volumes += ["./index.html:/opt/app/frontend/index.html"]' -i "$docker_compose_file"
             ;;
-        
-        7)
+
+        2)
             [ -f "$config_file" ] && rm -f "$config_file"
             [ -f "$index_file" ] && rm -f "$index_file"
 
@@ -2848,12 +2709,6 @@ install_packages() {
         return 1
     fi
 
-    if command -v certbot >/dev/null 2>&1; then
-        if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
-            return 1
-        fi
-    fi
-
     if ! dpkg -l | grep -q '^ii.*cron '; then
         if ! apt-get install -y cron; then
             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CRON]}" "${COLOR_RESET}" >&2
@@ -3182,10 +3037,22 @@ EOL
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                if ! pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1; then
+                echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                
+                if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                    python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
+                else
+                python3 -m pip install certbot-dns-gcore >/dev/null 2>&1
+                fi
+                    
+                if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
+                    echo -e "${COLOR_GREEN}Plugin installed successfully.${COLOR_RESET}"
+                else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                     exit 1
                 fi
+            else
+                echo -e "${COLOR_GREEN}Gcore plugin already available.${COLOR_RESET}"
             fi
 
             reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
@@ -4493,7 +4360,7 @@ installation() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     depends_on:
       - remnawave
       - remnawave-subscription-page
@@ -5411,7 +5278,7 @@ installation_node() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && nginx -g "daemon off;"'
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
     network_mode: host
     depends_on:
       - remnanode
