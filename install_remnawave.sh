@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.3"
+SCRIPT_VERSION="2.3.4"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -5144,16 +5144,7 @@ EOL
 
     # Create API token for subscription page
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
-    local api_token
-    api_token=$(create_api_token "$domain_url" "$token" "subscription-page")
-
-    if [ -n "$api_token" ]; then
-
-    sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" /opt/remnawave/docker-compose.yml
-
-    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}"
-    
-    fi
+    create_api_token "$domain_url" "$token" "$target_dir"
 
     # Stop and start Remnawave Subscription Page
     echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
