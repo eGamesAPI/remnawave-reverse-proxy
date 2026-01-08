@@ -5089,10 +5089,12 @@ EOL
 
     spinner $! "${LANG[WAITING]}"
 
+    local domain_url="127.0.0.1:3000"
+    local target_dir="/opt/remnawave"
+	
     echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 20
-
-    local domain_url="127.0.0.1:3000"
+	
     echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
     local attempts=0
     local max_attempts=5
