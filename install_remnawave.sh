@@ -4233,6 +4233,10 @@ services:
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     env_file:
       - .env
     environment:
@@ -4262,6 +4266,10 @@ services:
     container_name: remnawave
     hostname: remnawave
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     env_file:
       - .env
     ports:
@@ -4291,6 +4299,10 @@ services:
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     networks:
       - remnawave-network
     command: >
@@ -4316,6 +4328,10 @@ services:
     hostname: remnawave-nginx
     network_mode: host
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 EOL
@@ -4375,6 +4391,10 @@ installation() {
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     depends_on:
       remnawave:
         condition: service_healthy
@@ -4397,6 +4417,10 @@ installation() {
     container_name: remnanode
     hostname: remnanode
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     network_mode: host
     environment:
       - NODE_PORT=2222
@@ -4806,6 +4830,10 @@ services:
     container_name: 'remnawave-db'
     hostname: remnawave-db
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     env_file:
       - .env
     environment:
@@ -4835,6 +4863,10 @@ services:
     container_name: remnawave
     hostname: remnawave
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     env_file:
       - .env
     ports:
@@ -4864,6 +4896,10 @@ services:
     container_name: remnawave-redis
     hostname: remnawave-redis
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     networks:
       - remnawave-network
     command: >
@@ -4888,6 +4924,10 @@ services:
     container_name: remnawave-nginx
     hostname: remnawave-nginx
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 EOL
@@ -4941,6 +4981,10 @@ installation_panel() {
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     depends_on:
       remnawave:
         condition: service_healthy
@@ -5235,6 +5279,10 @@ services:
     container_name: remnawave-nginx
     hostname: remnawave-nginx
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 EOL
@@ -5286,6 +5334,10 @@ installation_node() {
     container_name: remnanode
     hostname: remnanode
     restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     network_mode: host
     environment:
       - NODE_PORT=2222
