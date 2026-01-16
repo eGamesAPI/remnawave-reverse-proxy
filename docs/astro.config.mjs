@@ -37,6 +37,21 @@ export default defineConfig({
 					]
 				})
 			],
+			head: [
+				// Plausible Analytics
+				{
+				tag: 'script',
+				attrs: {
+					async: true,
+					src: 'https://ps.log.rw/js/pa-TLPk4Xvnye6Dh8hvwvH9n.js',
+				},
+				},
+				{
+				tag: 'script',
+				content:
+					'window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()',
+				},
+			],
 			title: 'Remnawave Reverse-Proxy',
 			logo: {
 				src: './src/assets/logo.webp',
