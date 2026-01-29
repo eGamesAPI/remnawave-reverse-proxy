@@ -16,6 +16,15 @@
 > **THIS REPOSITORY IS AN EDUCATIONAL EXAMPLE FOR LEARNING NGINX, REVERSE PROXY, AND NETWORK SECURITY BASICS. THIS SCRIPT DEMONSTRATES NGINX SETUP AS A REVERSE PROXY. NOT FOR PRODUCTION AND NOT FOR PRODUCTION USE! IF YOU DON'T UNDERSTAND HOW THE CONTROL PANEL WORKS - THAT'S YOUR PROBLEM, NOT THE SCRIPT AUTHOR'S. USE AT YOUR OWN RISK!**
 
 ---
+# This is a slightly modified script from eGames.
+
+### The main differences from the original script
+
+### - Removed English language support
+
+### - Installation takes place according to the correct paths in the system, as if installed according to the instructions from the RemnaWave website. The panel is installed in the /opt/remnawave folder, and the node is installed in the /opt/remnanode folder.
+
+### The functionality of the original script is intact.
 
 ## Overview
 
@@ -192,16 +201,4 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 >
 > **If you are unsure whether using this tool or its components violates the laws of your country - refrain from any interaction with this tool.**
 
-## Community
 
-Join our Telegram community for support and discussions:
-
-**Telegram chat**: [https://t.me/remnawave_reverse](https://t.me/remnawave_reverse)
-
-## Donations
-
-If you like this project and want to support its further development, please consider making a donation. Your contribution helps fund future updates and improvements!
-
-**Donation Methods:**
-
-- **TON USDT:** `UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS`
