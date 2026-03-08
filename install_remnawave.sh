@@ -525,16 +525,12 @@ show_install_menu() {
 }
 
 manage_install() {
-    load_install_panel_node_module
-    load_install_panel_module
-    load_install_node_module
-    load_add_node_module
-    load_api_module
-
     show_install_menu
     reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
     case $INSTALL_OPTION in
         1)
+            load_install_panel_node_module
+            load_api_module
             if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                 install_packages || {
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
@@ -547,6 +543,8 @@ manage_install() {
             log_clear
             ;;
         2)
+            load_install_panel_module
+            load_api_module
             if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                 install_packages || {
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
@@ -559,10 +557,13 @@ manage_install() {
             log_clear
             ;;
         3)
+            load_add_node_module
+            load_api_module
             add_node_to_panel
             log_clear
             ;;
         4)
+            load_install_node_module
             if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                 install_packages || {
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
