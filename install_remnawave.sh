@@ -268,14 +268,14 @@ update_remnawave_reverse() {
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
 
-    local modules=("install_panel_node.sh" "install_panel.sh" "install_node.sh" "add_node.sh")
+    local modules=("install_panel_node" "install_panel" "install_node" "add_node")
     for module in "${modules[@]}"; do
-        local module_file="${DIR_REMNAWAVE}modules/${module}"
+        local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
         if [ -f "$module_file" ]; then
             if load_module "$module" "modules" "true"; then
-                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${module}.sh"
             else
-                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "$module"
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${module}.sh"
             fi
         fi
     done
@@ -2855,8 +2855,9 @@ load_module() {
 
         local download_success=false
         if command -v curl &> /dev/null; then
-            curl -sL "$module_url" -o "$module_file" 2>/dev/null
-            if [ -s "$module_file" ]; then
+            local http_code
+            http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
+            if [ "$http_code" = "200" ] && [ -s "$module_file" ]; then
                 download_success=true
             fi
         elif command -v wget &> /dev/null; then
