@@ -1,6 +1,8 @@
 #!/bin/bash
 #Russian translations
 
+declare -gA LANG
+
 #Alias
 [ALIAS_ADDED]="Алиас 'rr' для 'remnawave_reverse' добавлен в %s"
 [ALIAS_ACTIVATE_GLOBAL]="Алиас 'rr' теперь доступен для всех пользователей. Выполните 'source %s' или перезапустите терминал, чтобы применить алиас."
