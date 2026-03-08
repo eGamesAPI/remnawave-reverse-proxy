@@ -37,7 +37,7 @@ LANG[LANG_FILE_UPDATED]="✓ %s updated"
 LANG[LANG_FILE_UPDATE_FAILED]="✗ Failed to update %s"
 #Menu
 LANG[MENU_TITLE]="REMNAWAVE REVERSE-PROXY by eGames"
-LANG[AVAILABLE_UPDATE]="update available"
+LANG[AVAILABLE_UPDATE]="script update available"
 LANG[VERSION_LABEL]="Version: %s"
 LANG[EXIT]="Exit"
 LANG[MENU_1]="Install Remnawave Components"
