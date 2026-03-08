@@ -102,7 +102,7 @@ LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]="Invalid choice. Please select 0-6."
 #Manage Certificates
 LANG[CERT_UPDATE]="Update current certificates"
 LANG[CERT_GENERATE]="Generate new certificates for another domain"
-[CERT_PROMPT1]="Select action (0-2):"
+LANG[CERT_PROMPT1]="Select action (0-2):"
 LANG[CERT_INVALID_CHOICE]="Invalid choice. Please select 0-2."
 LANG[CERT_UPDATE_CHECK]="Checking certificate generation method..."
 LANG[CERT_UPDATE_SUCCESS]="Certificates successfully updated."
