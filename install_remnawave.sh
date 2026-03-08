@@ -272,24 +272,16 @@ update_remnawave_reverse() {
 
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
-    local modules=("install_panel_node.sh" "install_panel.sh" "remnawave_api.sh")
+    
+    local modules=("install_panel_node.sh" "install_panel.sh" "install_node.sh" "add_node.sh")
     for module in "${modules[@]}"; do
-        local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/modules/${module}"
-
-        if [ "$module" == "remnawave_api.sh" ]; then
-            module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/api/${module}"
-            local module_file="${DIR_REMNAWAVE}api/${module}"
-            mkdir -p "${DIR_REMNAWAVE}api"
-        else
-            local module_file="${DIR_REMNAWAVE}modules/${module}"
-            mkdir -p "${DIR_REMNAWAVE}modules"
-        fi
-        if wget -q -O "$module_file" "$module_url"; then
-            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
-        else
-            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "$module"
-        fi
+        load_module "$module" "modules" 2>/dev/null || true
+        printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
     done
+    
+    load_module "remnawave_api" "api" 2>/dev/null || true
+    printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "remnawave_api.sh"
+    
     echo -e ""
 
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
@@ -540,6 +532,8 @@ show_install_menu() {
 manage_install() {
     load_install_panel_node_module
     load_install_panel_module
+    load_install_node_module
+    load_add_node_module
     load_api_module
 
     show_install_menu
@@ -947,7 +941,9 @@ manage_extensions() {
 }
 
 manage_warp() {
-    echo -e ""
+    load_api_module
+	
+	echo -e ""
     echo -e "${COLOR_GREEN}${LANG[WARP_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
@@ -2833,371 +2829,36 @@ handle_certificates() {
     done
 }
 
-# Module: Install Panel + Node
-load_install_panel_node_module() {
-    local module_file="${DIR_REMNAWAVE}modules/install_panel_node.sh"
-
-    if [ ! -f "$module_file" ]; then
-        local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/modules/install_panel_node.sh"
-        mkdir -p "${DIR_REMNAWAVE}modules"
-        if command -v curl &> /dev/null; then
-            curl -sL "$module_url" -o "$module_file" 2>/dev/null
-        elif command -v wget &> /dev/null; then
-            wget -q "$module_url" -O "$module_file" 2>/dev/null
-        fi
-    fi
-
-    if [ -f "$module_file" ]; then
-        source "$module_file"
-    else
-        error "Failed to load install panel/node module"
-        exit 1
-    fi
-}
-
-# Module: Install Panel Only
-load_install_panel_module() {
-    local module_file="${DIR_REMNAWAVE}modules/install_panel.sh"
-
-    if [ ! -f "$module_file" ]; then
-        local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/modules/install_panel.sh"
-        mkdir -p "${DIR_REMNAWAVE}modules"
-        if command -v curl &> /dev/null; then
-            curl -sL "$module_url" -o "$module_file" 2>/dev/null
-        elif command -v wget &> /dev/null; then
-            wget -q "$module_url" -O "$module_file" 2>/dev/null
-        fi
-    fi
-
-    if [ -f "$module_file" ]; then
-        source "$module_file"
-    else
-        error "Failed to load install panel module"
-        exit 1
-    fi
-}
-
-# Module: Remnawave API
-load_api_module() {
-    local api_file="${DIR_REMNAWAVE}api/remnawave_api.sh"
-
-    if [ ! -f "$api_file" ]; then
-        local api_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/api/remnawave_api.sh"
-        mkdir -p "${DIR_REMNAWAVE}api"
-        if command -v curl &> /dev/null; then
-            curl -sL "$api_url" -o "$api_file" 2>/dev/null
-        elif command -v wget &> /dev/null; then
-            wget -q "$api_url" -O "$api_file" 2>/dev/null
-        fi
-    fi
-
-    if [ -f "$api_file" ]; then
-        source "$api_file"
-    else
-        error "Failed to load Remnawave API module"
-        exit 1
-    fi
-}
-
-#Install Node
-install_remnawave_node() {
-    mkdir -p /opt/remnawave && cd /opt/remnawave
-
-    reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
-
-    check_domain "$SELFSTEAL_DOMAIN" true false
-    local domain_check_result=$?
-    if [ $domain_check_result -eq 2 ]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
-    fi
-
-    while true; do
-        reading "${LANG[PANEL_IP_PROMPT]}" PANEL_IP
-        if echo "$PANEL_IP" | grep -E '^([0-9]{1,3}\.){3}[0-9]{1,3}$' >/dev/null && \
-           [[ $(echo "$PANEL_IP" | tr '.' '\n' | wc -l) -eq 4 ]] && \
-           [[ ! $(echo "$PANEL_IP" | tr '.' '\n' | grep -vE '^[0-9]{1,3}$') ]] && \
-           [[ ! $(echo "$PANEL_IP" | tr '.' '\n' | grep -E '^(25[6-9]|2[6-9][0-9]|[3-9][0-9]{2})$') ]]; then
-            break
-        else
-            echo -e "${COLOR_RED}${LANG[IP_ERROR]}${COLOR_RESET}"
-        fi
-    done
-
-    echo -n "$(question "${LANG[CERT_PROMPT]}")"
-    CERTIFICATE=""
-    while IFS= read -r line; do
-        if [ -z "$line" ]; then
-            if [ -n "$CERTIFICATE" ]; then
-                break
-            fi
-        else
-            CERTIFICATE="$CERTIFICATE$line\n"
-        fi
-    done
-
-    echo -e "${COLOR_YELLOW}${LANG[CERT_CONFIRM]}${COLOR_RESET}"
-    read confirm
-    echo
-
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
-    fi
-
-SELFSTEAL_BASE_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
-
-unique_domains["$SELFSTEAL_BASE_DOMAIN"]=1
-
-cat > docker-compose.yml <<EOL
-services:
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-EOL
-}
-
-installation_node() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
-    sleep 1
-
-    declare -A unique_domains
-    install_remnawave_node
-
-    declare -A domains_to_check
-    domains_to_check["$SELFSTEAL_DOMAIN"]=1
-
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
-
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
-    fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        NODE_CERT_DOMAIN="$base_domain"
-    else
-        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
-    fi
-
-    cat >> /opt/remnawave/docker-compose.yml <<EOL
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-    network_mode: host
-    depends_on:
-      - remnanode
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
-
-  remnanode:
-    image: remnawave/node:latest
-    container_name: remnanode
-    hostname: remnanode
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    network_mode: host
-    environment:
-      - NODE_PORT=2222
-      - SECRET_KEY=$(echo -e "$CERTIFICATE")
-    volumes:
-      - /dev/shm:/dev/shm:rw
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
-EOL
-
-cat > /opt/remnawave/nginx.conf <<EOL
-server_names_hash_bucket_size 64;
-
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ""      close;
-}
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-ssl_session_tickets off;
-
-server {
-    server_name $SELFSTEAL_DOMAIN;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$NODE_CERT_DOMAIN/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
-
-    root /var/www/html;
-    index index.html;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-}
-
-server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
-    server_name _;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-    ssl_reject_handshake on;
-    return 444;
-}
-EOL
-
-    ufw allow from $PANEL_IP to any port 2222 > /dev/null 2>&1
-    ufw reload > /dev/null 2>&1
-
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_NODE]}${COLOR_RESET}"
-    sleep 3
-    cd /opt/remnawave
-    docker compose up -d > /dev/null 2>&1 &
-
-    spinner $! "${LANG[WAITING]}"
-
-    randomhtml
-
-    printf "${COLOR_YELLOW}${LANG[NODE_CHECK]}${COLOR_RESET}\n" "$SELFSTEAL_DOMAIN"
-    local max_attempts=5
-    local attempt=1
-    local delay=15
-
-    while [ $attempt -le $max_attempts ]; do
-        printf "${COLOR_YELLOW}${LANG[NODE_ATTEMPT]}${COLOR_RESET}\n" "$attempt" "$max_attempts"
-        if curl -s --fail --max-time 10 "https://$SELFSTEAL_DOMAIN" | grep -q "html"; then
-            echo -e "${COLOR_GREEN}${LANG[NODE_LAUNCHED]}${COLOR_RESET}"
-            break
-        else
-            printf "${COLOR_RED}${LANG[NODE_UNAVAILABLE]}${COLOR_RESET}\n" "$attempt"
-            if [ $attempt -eq $max_attempts ]; then
-                printf "${COLOR_RED}${LANG[NODE_NOT_CONNECTED]}${COLOR_RESET}\n" "$max_attempts"
-                echo -e "${COLOR_YELLOW}${LANG[CHECK_CONFIG]}${COLOR_RESET}"
-                exit 1
-            fi
-            sleep $delay
-        fi
-        ((attempt++))
-    done
-
-}
-#Install Node
-
-#Add Node to Panel
-add_node_to_panel() {
-    local domain_url="127.0.0.1:3000"
-
-    echo -e ""
-    echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[WARNING_NODE_PANEL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
-    read confirm
-    echo
-
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-        exit 0
-    fi
-
-    echo -e "${COLOR_YELLOW}${LANG[ADD_NODE_TO_PANEL]}${COLOR_RESET}"
-    sleep 1
-
-    get_panel_token
-    token=$(cat "$TOKEN_FILE")
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"
-        return 1
-    fi
-
-    while true; do
-        reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
-        check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
-        if [ $? -eq 0 ]; then
-            break
-        fi
-        echo -e "${COLOR_YELLOW}${LANG[TRY_ANOTHER_DOMAIN]}${COLOR_RESET}"
-    done
+# Module loader
+load_module() {
+    local module_name="$1"
+    local module_type="${2:-modules}"
+    local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
+    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
     
-    while true; do
-        reading "${LANG[ENTER_NODE_NAME]}" entity_name
-        if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
-            if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                local response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
-                
-                if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null; then
-                    echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_NAME]}" "$entity_name")${COLOR_RESET}"
-                else
-                    break
-                fi
-            else
-                echo -e "${COLOR_RED}${LANG[CF_INVALID_LENGTH]}${COLOR_RESET}"
-            fi
-        else
-            echo -e "${COLOR_RED}${LANG[CF_INVALID_CHARS]}${COLOR_RESET}"
+    if [ ! -f "$module_file" ]; then
+        mkdir -p "${DIR_REMNAWAVE}${module_type}"
+        if command -v curl &> /dev/null; then
+            curl -sL "$module_url" -o "$module_file" 2>/dev/null
+        elif command -v wget &> /dev/null; then
+            wget -q "$module_url" -O "$module_file" 2>/dev/null
         fi
-    done
-
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
-    local private_key=$(generate_xray_keys "$domain_url" "$token")
-    printf "${COLOR_GREEN}${LANG[GENERATE_KEYS_SUCCESS]}${COLOR_RESET}\n"
-
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_CONFIG_PROFILE]}${COLOR_RESET}"
-    read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name")
-    echo -e "${COLOR_GREEN}${LANG[CONFIG_PROFILE_CREATED]}: $entity_name${COLOR_RESET}"
-
-    printf "${COLOR_YELLOW}${LANG[CREATE_NEW_NODE]}$SELFSTEAL_DOMAIN${COLOR_RESET}\n"
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"
-
-    echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
-    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name"
-
-    echo -e "${COLOR_YELLOW}${LANG[GET_DEFAULT_SQUAD]}${COLOR_RESET}"
-    local squad_uuids=$(get_default_squad "$domain_url" "$token")
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_GET_SQUAD_LIST]}${COLOR_RESET}"
-    elif [ -z "$squad_uuids" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_TO_UPDATE]}${COLOR_RESET}"
-    else
-        for squad_uuid in $squad_uuids; do
-            echo -e "${COLOR_YELLOW}${LANG[UPDATING_SQUAD]} $squad_uuid${COLOR_RESET}"
-            update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-            if [ $? -eq 0 ]; then
-                echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]} $squad_uuid${COLOR_RESET}"
-            else
-                echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_SQUAD]} $squad_uuid${COLOR_RESET}"
-            fi
-        done
     fi
-
-    echo -e "${COLOR_GREEN}${LANG[NODE_ADDED_SUCCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_RED}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
-    echo -e "${COLOR_RED}-------------------------------------------------${COLOR_RESET}"
+    
+    if [ -f "$module_file" ]; then
+        source "$module_file"
+    else
+        error "Failed to load ${module_name} module"
+        exit 1
+    fi
 }
-#Add Node to Panel
+
+# Module loaders
+load_install_panel_node_module() { load_module "install_panel_node" "modules"; }
+load_install_panel_module() { load_module "install_panel" "modules"; }
+load_install_node_module() { load_module "install_node" "modules"; }
+load_add_node_module() { load_module "add_node" "modules"; }
+load_api_module() { load_module "remnawave_api" "api"; }
 
 log_entry
 
