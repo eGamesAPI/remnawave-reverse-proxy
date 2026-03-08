@@ -270,12 +270,24 @@ update_remnawave_reverse() {
 
     local modules=("install_panel_node.sh" "install_panel.sh" "install_node.sh" "add_node.sh")
     for module in "${modules[@]}"; do
-        load_module "$module" "modules" "true"  # force_update=true
-        printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
+        local module_file="${DIR_REMNAWAVE}modules/${module}"
+        if [ -f "$module_file" ]; then
+            if load_module "$module" "modules" "true"; then
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
+            else
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "$module"
+            fi
+        fi
     done
 
-    load_module "remnawave_api" "api" "true"  # force_update=true
-    printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "remnawave_api.sh"
+    local api_file="${DIR_REMNAWAVE}api/remnawave_api.sh"
+    if [ -f "$api_file" ]; then
+        if load_module "remnawave_api" "api" "true"; then
+            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "remnawave_api.sh"
+        else
+            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "remnawave_api.sh"
+        fi
+    fi
 
     echo -e ""
 
@@ -2832,21 +2844,27 @@ load_module() {
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
     local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
-
+    
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
         if command -v curl &> /dev/null; then
-            curl -sL "$module_url" -o "$module_file" 2>/dev/null
+            curl -sLf "$module_url" -o "$module_file" 2>/dev/null
         elif command -v wget &> /dev/null; then
             wget -q "$module_url" -O "$module_file" 2>/dev/null
         fi
+        
+        if [ -f "$module_file" ] && grep -q "404: Not Found" "$module_file" 2>/dev/null; then
+            rm -f "$module_file"
+            return 1
+        fi
     fi
-
+    
     if [ -f "$module_file" ]; then
         source "$module_file"
+        return 0
     else
         error "Failed to load ${module_name} module"
-        exit 1
+        return 1
     fi
 }
 
