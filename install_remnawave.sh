@@ -47,11 +47,12 @@ show_language() {
 set_language() {
      local lang="$1"
      local lang_file="${DIR_REMNAWAVE}lang/${lang}.sh"
+     local force_update="${2:-false}"
 
      unset LANG
      declare -gA LANG
 
-     if [ ! -f "$lang_file" ]; then
+     if [ "$force_update" = "true" ] || [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
          mkdir -p "${DIR_REMNAWAVE}lang"
          if command -v curl &> /dev/null; then
@@ -260,28 +261,22 @@ update_remnawave_reverse() {
 
 	#Update LANG
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_LANG_FILES]}${COLOR_RESET}"
-    local lang_url="${LANG_BASE_URL}/${current_lang}.sh"
-    local lang_file="${DIR_REMNAWAVE}lang/${current_lang}.sh"
-    mkdir -p "${DIR_REMNAWAVE}lang"
-    if wget -q -O "$lang_file" "$lang_url"; then
-        printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${current_lang}.sh"
-    else
-        printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${current_lang}.sh"
-    fi
+    set_language "$current_lang" "true"  # force_update=true
+    printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${current_lang}.sh"
     echo -e ""
 
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
-    
+
     local modules=("install_panel_node.sh" "install_panel.sh" "install_node.sh" "add_node.sh")
     for module in "${modules[@]}"; do
-        load_module "$module" "modules" 2>/dev/null || true
+        load_module "$module" "modules" "true"  # force_update=true
         printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "$module"
     done
-    
-    load_module "remnawave_api" "api" 2>/dev/null || true
+
+    load_module "remnawave_api" "api" "true"  # force_update=true
     printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "remnawave_api.sh"
-    
+
     echo -e ""
 
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
@@ -2835,8 +2830,9 @@ load_module() {
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
     local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
-    
-    if [ ! -f "$module_file" ]; then
+    local force_update="${3:-false}"
+
+    if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
         if command -v curl &> /dev/null; then
             curl -sL "$module_url" -o "$module_file" 2>/dev/null
@@ -2844,7 +2840,7 @@ load_module() {
             wget -q "$module_url" -O "$module_file" 2>/dev/null
         fi
     fi
-    
+
     if [ -f "$module_file" ]; then
         source "$module_file"
     else
@@ -2853,12 +2849,12 @@ load_module() {
     fi
 }
 
-# Module loaders
-load_install_panel_node_module() { load_module "install_panel_node" "modules"; }
-load_install_panel_module() { load_module "install_panel" "modules"; }
-load_install_node_module() { load_module "install_node" "modules"; }
-load_add_node_module() { load_module "add_node" "modules"; }
-load_api_module() { load_module "remnawave_api" "api"; }
+# Module loaders (wrappers for load_module)
+load_install_panel_node_module() { load_module "install_panel_node" "modules" "${1:-false}"; }
+load_install_panel_module() { load_module "install_panel" "modules" "${1:-false}"; }
+load_install_node_module() { load_module "install_node" "modules" "${1:-false}"; }
+load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
+load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 
 log_entry
 
