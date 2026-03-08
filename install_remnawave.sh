@@ -2844,21 +2844,38 @@ load_module() {
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
     local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
-    
+
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
+
+        local backup_file="${module_file}.bak"
+        if [ -f "$module_file" ]; then
+            cp "$module_file" "$backup_file"
+        fi
+
+        local download_success=false
         if command -v curl &> /dev/null; then
-            curl -sLf "$module_url" -o "$module_file" 2>/dev/null
+            curl -sL "$module_url" -o "$module_file" 2>/dev/null
+            if [ -s "$module_file" ] && ! grep -q "404: Not Found" "$module_file" 2>/dev/null; then
+                download_success=true
+            fi
         elif command -v wget &> /dev/null; then
             wget -q "$module_url" -O "$module_file" 2>/dev/null
+            if [ -s "$module_file" ]; then
+                download_success=true
+            fi
         fi
-        
-        if [ -f "$module_file" ] && grep -q "404: Not Found" "$module_file" 2>/dev/null; then
-            rm -f "$module_file"
+
+        if [ "$download_success" = "false" ]; then
+            if [ -f "$backup_file" ]; then
+                mv "$backup_file" "$module_file"
+            fi
             return 1
         fi
+
+        rm -f "$backup_file"
     fi
-    
+
     if [ -f "$module_file" ]; then
         source "$module_file"
         return 0
