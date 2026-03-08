@@ -2856,7 +2856,7 @@ load_module() {
         local download_success=false
         if command -v curl &> /dev/null; then
             curl -sL "$module_url" -o "$module_file" 2>/dev/null
-            if [ -s "$module_file" ] && ! grep -q "404: Not Found" "$module_file" 2>/dev/null; then
+            if [ -s "$module_file" ]; then
                 download_success=true
             fi
         elif command -v wget &> /dev/null; then
