@@ -30,7 +30,7 @@ load_language() {
 }
 
 # Language variables
-declare -A LANG=(
+declare -gA LANG
 
 show_language() {
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_LANG]}${COLOR_RESET}"
@@ -60,14 +60,10 @@ set_language() {
          source "$lang_file"
      else
          local en_url="${LANG_BASE_URL}/en.sh"
-         local en_content
          if command -v curl &> /dev/null; then
-             en_content=$(curl -sL "$en_url" 2>/dev/null)
+             source <(curl -sL "$en_url" 2>/dev/null)
          elif command -v wget &> /dev/null; then
-             en_content=$(wget -qO- "$en_url" 2>/dev/null)
-         fi
-         if [ -n "$en_content" ]; then
-             eval "$en_content"
+             source <(wget -qO- "$en_url" 2>/dev/null)
          fi
      fi
 }
