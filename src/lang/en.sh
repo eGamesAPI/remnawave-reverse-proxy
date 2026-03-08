@@ -1,6 +1,8 @@
 #!/bin/bash
 #English translations
 
+declare -gA LANG
+
 #Alias
 [ALIAS_ADDED]="Alias 'rr' for 'remnawave_reverse' added to %s"
 [ALIAS_ACTIVATE_GLOBAL]="Alias 'rr' is now available for all users. Run 'source %s' or open a new terminal to apply."
