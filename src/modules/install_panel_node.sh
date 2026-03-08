@@ -1,6 +1,8 @@
 #!/bin/bash
 # Module: Install Panel + Node
+# Requires: API module (src/api/remnawave_api.sh)
 
+#Install Panel + Node
 install_remnawave() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
