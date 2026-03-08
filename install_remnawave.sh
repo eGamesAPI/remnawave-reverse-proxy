@@ -249,16 +249,22 @@ update_remnawave_reverse() {
 
     mkdir -p "${DIR_REMNAWAVE}"
 
+    local current_lang="en"
+    if [ -f "$LANG_FILE" ]; then
+        case $(cat "$LANG_FILE") in
+            1) current_lang="en" ;;
+            2) current_lang="ru" ;;
+        esac
+    fi
+    
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_LANG_FILES]}${COLOR_RESET}"
-    for lang in en ru; do
-        local lang_url="${LANG_BASE_URL}/${lang}.sh"
-        local lang_file="${DIR_REMNAWAVE}${lang}.sh"
-        if wget -q -O "$lang_file" "$lang_url"; then
-            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${lang}.sh"
-        else
-            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${lang}.sh"
-        fi
-    done
+    local lang_url="${LANG_BASE_URL}/${current_lang}.sh"
+    local lang_file="${DIR_REMNAWAVE}${current_lang}.sh"
+    if wget -q -O "$lang_file" "$lang_url"; then
+        printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${current_lang}.sh"
+    else
+        printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${current_lang}.sh"
+    fi
     echo -e ""
 
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
