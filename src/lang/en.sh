@@ -31,6 +31,10 @@ LANG[ERROR_CONFIGURE_UPGRADES]="Failed to configure unattended-upgrades"
 LANG[ERROR_DOCKER_DNS]="Error: Unable to resolve download.docker.com. Check your DNS settings."
 LANG[ERROR_INSTALL_CERTBOT]="Error: Failed to install certbot"
 LANG[SUCCESS_INSTALL]="All packages installed successfully"
+#Update Script
+LANG[UPDATING_LANG_FILES]="Updating language files..."
+LANG[LANG_FILE_UPDATED]="✓ %s updated"
+LANG[LANG_FILE_UPDATE_FAILED]="✗ Failed to update %s"
 #Menu
 LANG[MENU_TITLE]="REMNAWAVE REVERSE-PROXY by eGames"
 LANG[AVAILABLE_UPDATE]="update available"
