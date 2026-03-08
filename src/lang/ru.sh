@@ -30,6 +30,10 @@ LANG[ERROR_CONFIGURE_UPGRADES]="Ошибка: Не удалось настрои
 LANG[ERROR_DOCKER_DNS]="Ошибка: Не удалось разрешить домен download.docker.com. Проверьте настройки DNS."
 LANG[ERROR_INSTALL_CERTBOT]="Ошибка: Не удалось установить certbot"
 LANG[SUCCESS_INSTALL]="Все пакеты успешно установлены"
+#Update Script
+LANG[UPDATING_LANG_FILES]="Обновление языковых файлов..."
+LANG[LANG_FILE_UPDATED]="✓ %s обновлён"
+LANG[LANG_FILE_UPDATE_FAILED]="✗ Не удалось обновить %s"
 #Main menu
 LANG[EXIT]="Выход"
 LANG[MENU_1]="Установка компонентов Remnawave"
