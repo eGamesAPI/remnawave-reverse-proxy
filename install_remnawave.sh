@@ -3265,7 +3265,7 @@ handle_certificates() {
 
     local cron_command
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload"
+        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd /opt/remnawave && docker compose down && docker compose up"
     else
         cron_command="/usr/bin/certbot renew --quiet"
     fi
