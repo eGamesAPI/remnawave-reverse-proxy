@@ -249,6 +249,18 @@ update_remnawave_reverse() {
 
     mkdir -p "${DIR_REMNAWAVE}"
 
+    echo -e "${COLOR_YELLOW}${LANG[UPDATING_LANG_FILES]}${COLOR_RESET}"
+    for lang in en ru; do
+        local lang_url="${LANG_BASE_URL}/${lang}.sh"
+        local lang_file="${DIR_REMNAWAVE}${lang}.sh"
+        if wget -q -O "$lang_file" "$lang_url"; then
+            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${lang}.sh"
+        else
+            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${lang}.sh"
+        fi
+    done
+    echo -e ""
+
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
     if wget -q -O "$temp_script" "$SCRIPT_URL"; then
         local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
