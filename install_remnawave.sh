@@ -30,7 +30,11 @@ load_language() {
 }
 
 # Language variables
-declare -gA LANG
+declare -gA LANG=(
+    [CHOOSE_LANG]="Select language:"
+    [LANG_EN]="English"
+    [LANG_RU]="Русский"
+)
 
 show_language() {
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_LANG]}${COLOR_RESET}"
