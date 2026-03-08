@@ -1,7 +1,6 @@
 #!/bin/bash
 # Module: Install Panel + Node
 
-#Install Panel + Node
 install_remnawave() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
