@@ -46,13 +46,14 @@ show_language() {
 
 set_language() {
      local lang="$1"
-     local lang_file="${DIR_REMNAWAVE}${lang}.sh"
+     local lang_file="${DIR_REMNAWAVE}lang/${lang}.sh"
 
      unset LANG
      declare -gA LANG
 
      if [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
+         mkdir -p "${DIR_REMNAWAVE}lang"
          if command -v curl &> /dev/null; then
              curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
          elif command -v wget &> /dev/null; then
@@ -260,7 +261,8 @@ update_remnawave_reverse() {
 	#Update LANG
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_LANG_FILES]}${COLOR_RESET}"
     local lang_url="${LANG_BASE_URL}/${current_lang}.sh"
-    local lang_file="${DIR_REMNAWAVE}${current_lang}.sh"
+    local lang_file="${DIR_REMNAWAVE}lang/${current_lang}.sh"
+    mkdir -p "${DIR_REMNAWAVE}lang"
     if wget -q -O "$lang_file" "$lang_url"; then
         printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${current_lang}.sh"
     else
@@ -273,7 +275,7 @@ update_remnawave_reverse() {
     local modules=("install_panel_node.sh" "remnawave_api.sh")
     for module in "${modules[@]}"; do
         local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/modules/${module}"
-        # Для API модуля используем папку api/
+
         if [ "$module" == "remnawave_api.sh" ]; then
             module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/api/${module}"
             local module_file="${DIR_REMNAWAVE}api/${module}"
@@ -2669,8 +2671,6 @@ fix_letsencrypt_structure() {
     return 0
 }
 #Manage Certificates
-
-# API functions are now loaded from module: api/remnawave_api.sh
 
 handle_certificates() {
     local -n domains_to_check_ref=$1
