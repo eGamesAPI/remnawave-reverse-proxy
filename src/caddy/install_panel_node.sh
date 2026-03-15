@@ -1,8 +1,7 @@
 #!/bin/bash
-# Module: Install Panel + Node with Caddy
+# Module: Install Panel + Node
 
-#Install Panel + Node (Caddy)
-install_remnawave_panel_node_caddy() {
+install_panel_node_caddy() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -386,12 +385,12 @@ EOL
 }
 
 installation_panel_node_caddy() {
-    install_remnawave_panel_node_caddy
+    install_panel_node_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
-    ufw allow 80/tcp comment 'HTTP'
+    ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"

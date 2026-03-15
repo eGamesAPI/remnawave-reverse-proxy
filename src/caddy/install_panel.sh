@@ -1,8 +1,7 @@
 #!/bin/bash
 # Module: Install Panel
 
-#Install Panel (Caddy)
-install_remnawave_panel_caddy() {
+install_panel_caddy() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -244,8 +243,6 @@ services:
           - caddy_data:/data
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
-          - CADDY_SOCKET_PATH=/dev/shm/nginx.sock
-          - SELF_STEAL_DOMAIN=${SELFSTEAL_DOMAIN}
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
@@ -334,12 +331,12 @@ EOL
 }
 
 installation_panel_caddy() {
-    install_remnawave_panel_caddy
+    install_panel_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
-    ufw allow 80/tcp comment 'HTTP'
+    ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
