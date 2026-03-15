@@ -1,7 +1,7 @@
 #!/bin/bash
 # Module: Install Node Only
 
-install_remnawave_node() {
+install_node_nginx() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
@@ -71,7 +71,7 @@ installation_node() {
     sleep 1
 
     declare -A unique_domains
-    install_remnawave_node
+    install_node_nginx
 
     declare -A domains_to_check
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
@@ -201,5 +201,4 @@ EOL
         fi
         ((attempt++))
     done
-
 }

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Module: Install Panel Only
 
-install_remnawave_panel() {
+install_panel_nginx() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -249,7 +249,7 @@ installation_panel() {
     sleep 1
 
     declare -A unique_domains
-    install_remnawave_panel
+    install_panel_nginx
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
