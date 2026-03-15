@@ -336,7 +336,7 @@ EOL
 installation_panel_caddy() {
     install_remnawave_panel_caddy
 	
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
     ufw allow 80/tcp comment 'HTTP'
@@ -369,11 +369,6 @@ installation_panel_caddy() {
     local token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
     echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
-    # Get public key
-    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
-    sleep 1
-    get_public_key "$domain_url" "$token" "$target_dir"
-
     # Generate Xray keys
     echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
@@ -390,7 +385,7 @@ installation_panel_caddy() {
 
     # Create node with config profile binding
     echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
 
     # Create host
     echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
@@ -408,15 +403,15 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
     create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
+    # Stop and start Remnawave Subscription Page
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
     sleep 1
-    docker compose down > /dev/null 2>&1 &
+    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
     sleep 1
-    docker compose up -d > /dev/null 2>&1 &
+    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
@@ -434,6 +429,5 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-
-    randomhtml
+    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
 }
