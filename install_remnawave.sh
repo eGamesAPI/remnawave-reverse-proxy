@@ -950,8 +950,8 @@ choose_reinstall_type() {
                             ;;
                         2)
                             case $REINSTALL_OPTION in
-                                1) load_caddy_module; installation_panel_node_caddy ;;
-                                2) load_caddy_panel_module; installation_panel_caddy ;;
+                                1) load_caddy_module; load_api_module; installation_panel_node_caddy ;;
+                                2) load_caddy_panel_module; load_api_module; installation_panel_caddy ;;
                                 *)
                                     echo -e "${COLOR_YELLOW}Caddy поддерживается только для панели и ноды${COLOR_RESET}"
                                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
