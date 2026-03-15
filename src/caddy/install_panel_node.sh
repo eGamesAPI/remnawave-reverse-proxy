@@ -1,8 +1,8 @@
 #!/bin/bash
-# Module: Install Panel
+# Module: Install Panel + Node with Caddy
 
-#Install Panel (Caddy)
-install_remnawave_panel_caddy() {
+#Install Panel + Node (Caddy)
+install_remnawave_panel_node_caddy() {
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -226,6 +226,27 @@ services:
         max-size: '30m'
         max-file: '5'
 
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    restart: always
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    network_mode: host
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+    volumes:
+      - /dev/shm:/dev/shm:rw
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '30m'
+        max-file: '5'
+
   caddy:
       image: caddy:2.9.1
       container_name: caddy-remnawave
@@ -269,6 +290,9 @@ networks:
   remnawave-network:
     name: remnawave-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
     external: false
 
 volumes:
@@ -278,11 +302,32 @@ volumes:
     name: remnawave-db-data
   caddy_data:
     driver: local
+  caddy_config:
+    driver: local
 EOL
 
     cat > /opt/remnawave/Caddyfile <<EOL
 {
     admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
+
+http://{\$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{\$SELF_STEAL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    root * /var/www/html
+    try_files {path} /index.html
+    file_server
 }
 
 http://{\$PANEL_DOMAIN} {
@@ -291,6 +336,7 @@ http://{\$PANEL_DOMAIN} {
 }
 
 https://{\$PANEL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
 
     @has_token_param {
         query $cookies_random1=$cookies_random2
@@ -317,7 +363,13 @@ https://{\$PANEL_DOMAIN} {
     }
 }
 
+http://{\$SUB_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SUB_DOMAIN}{uri} permanent
+}
+
 https://{\$SUB_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
     handle {
         reverse_proxy {\$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}
@@ -333,8 +385,8 @@ https://{\$SUB_DOMAIN} {
 EOL
 }
 
-installation_panel_caddy() {
-    install_remnawave_panel_caddy
+installation_panel_node_caddy() {
+    install_remnawave_panel_node_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
@@ -343,6 +395,9 @@ installation_panel_caddy() {
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
+
+    remnawave_network_subnet=172.30.0.0/16
+    ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp > /dev/null 2>&1
 
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
