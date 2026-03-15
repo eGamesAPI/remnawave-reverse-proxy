@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.9 dev"
+SCRIPT_VERSION="2.3.6 dev"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -295,7 +295,7 @@ update_remnawave_reverse() {
     done
 
     # Caddy modules
-    local caddy_modules=("install_panel_node" "install_panel")
+    local caddy_modules=("install_panel_node" "install_panel" "install_node")
     for module in "${caddy_modules[@]}"; do
         local module_file="${DIR_REMNAWAVE}caddy/${module}.sh"
         if [ -f "$module_file" ]; then
@@ -307,6 +307,7 @@ update_remnawave_reverse() {
         fi
     done
 
+    # API module
     local api_file="${DIR_REMNAWAVE}api/remnawave_api.sh"
     if [ -f "$api_file" ]; then
         if load_module "remnawave_api" "api" "true"; then
@@ -689,11 +690,15 @@ manage_install() {
                     installation_node
                     ;;
                 2)
-                    echo -e "${COLOR_YELLOW}Caddy для только ноды не поддерживается${COLOR_RESET}"
-                    sleep 2
-                    log_clear
-                    manage_install
-                    return
+                    load_caddy_node_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_node_caddy
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -952,11 +957,7 @@ choose_reinstall_type() {
                             case $REINSTALL_OPTION in
                                 1) load_caddy_module; load_api_module; installation_panel_node_caddy ;;
                                 2) load_caddy_panel_module; load_api_module; installation_panel_caddy ;;
-                                *)
-                                    echo -e "${COLOR_YELLOW}Caddy поддерживается только для панели и ноды${COLOR_RESET}"
-                                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                                    exit 0
-                                    ;;
+                                3) load_caddy_node_module; installation_node_caddy ;;
                             esac
                             ;;
                         0)
@@ -3043,6 +3044,7 @@ load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
 load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 load_caddy_module() { load_module "install_panel_node" "caddy" "${1:-false}"; }
 load_caddy_panel_module() { load_module "install_panel" "caddy" "${1:-false}"; }
+load_caddy_node_module() { load_module "install_node" "caddy" "${1:-false}"; }
 
 log_entry
 
