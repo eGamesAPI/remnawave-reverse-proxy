@@ -268,27 +268,44 @@ update_remnawave_reverse() {
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
 
-    local modules=("install_panel_node" "install_panel" "install_node" "add_node")
-    for module in "${modules[@]}"; do
-        local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
+    # Nginx modules
+    local nginx_modules=("install_panel_node" "install_panel" "install_node")
+    for module in "${nginx_modules[@]}"; do
+        local module_file="${DIR_REMNAWAVE}nginx/${module}.sh"
         if [ -f "$module_file" ]; then
-            if load_module "$module" "modules" "true"; then
-                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${module}.sh"
+            if load_module "$module" "nginx" "true"; then
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "nginx/${module}.sh"
             else
-                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${module}.sh"
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "nginx/${module}.sh"
             fi
         fi
     done
 
-    # Caddy module
-    local caddy_file="${DIR_REMNAWAVE}caddy/install_panel_node.sh"
-    if [ -f "$caddy_file" ]; then
-        if load_module "install_panel_node" "caddy" "true"; then
-            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "caddy/install_panel_node.sh"
-        else
-            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "caddy/install_panel_node.sh"
+    # Modules (common)
+    local common_modules=("add_node")
+    for module in "${common_modules[@]}"; do
+        local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
+        if [ -f "$module_file" ]; then
+            if load_module "$module" "modules" "true"; then
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "modules/${module}.sh"
+            else
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "modules/${module}.sh"
+            fi
         fi
-    fi
+    done
+
+    # Caddy modules
+    local caddy_modules=("install_panel_node" "install_panel")
+    for module in "${caddy_modules[@]}"; do
+        local module_file="${DIR_REMNAWAVE}caddy/${module}.sh"
+        if [ -f "$module_file" ]; then
+            if load_module "$module" "caddy" "true"; then
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "caddy/${module}.sh"
+            else
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "caddy/${module}.sh"
+            fi
+        fi
+    done
 
     local api_file="${DIR_REMNAWAVE}api/remnawave_api.sh"
     if [ -f "$api_file" ]; then
