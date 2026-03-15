@@ -1457,7 +1457,7 @@ open_panel_access() {
     docker compose up -d remnawave-nginx > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
     
-    ufw allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
+    ufw allow from 0.0.0.0/0 to any port 8443 proto tcp comment "PANEL_CONNECT" > /dev/null 2>&1
     ufw reload > /dev/null 2>&1
     sleep 1
 
