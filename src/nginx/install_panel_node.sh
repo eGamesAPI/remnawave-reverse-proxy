@@ -292,9 +292,6 @@ installation() {
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-    depends_on:
-      - remnawave
-      - remnawave-subscription-page
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -316,6 +313,9 @@ installation() {
     container_name: remnanode
     hostname: remnanode
     <<: [*common, *logging]
+    depends_on:
+      remnawave:
+        condition: service_healthy
     network_mode: host
     environment:
       - NODE_PORT=2222

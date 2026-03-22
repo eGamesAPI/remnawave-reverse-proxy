@@ -51,16 +51,27 @@ SELFSTEAL_BASE_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
 unique_domains["$SELFSTEAL_BASE_DOMAIN"]=1
 
 cat > docker-compose.yml <<EOL
+x-common: &common
+  ulimits:
+    nofile:
+      soft: 1048576
+      hard: 1048576
+  restart: always
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: 5
+
 services:
   remnawave-nginx:
     image: nginx:1.28
     container_name: remnawave-nginx
     hostname: remnawave-nginx
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
+    <<: [*common, *logging]
+    network_mode: host
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 EOL
@@ -98,35 +109,18 @@ installation_node() {
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-    network_mode: host
-    depends_on:
-      - remnanode
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
     hostname: remnanode
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
+    <<: [*common, *logging]
     network_mode: host
     environment:
       - NODE_PORT=2222
       - SECRET_KEY=$(echo -e "$CERTIFICATE")
     volumes:
       - /dev/shm:/dev/shm:rw
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 EOL
 
 cat > /opt/remnawave/nginx.conf <<EOL
