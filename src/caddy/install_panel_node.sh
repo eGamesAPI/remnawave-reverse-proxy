@@ -234,10 +234,10 @@ services:
       timeout: 10s
       retries: 3
 
-    caddy:
+  remnawave-caddy:
       image: caddy:2.11.2
-      container_name: caddy-remnawave
-      hostname: caddy-remnawave
+      container_name: remnawave-caddy
+      hostname: remnawave-caddy
       <<: [*common, *logging]
       network_mode: host
       volumes:
@@ -259,24 +259,21 @@ services:
           timeout: 5s
           retries: 15
           start_period: 5s
-      depends_on:
-        - remnawave
-        - remnawave-subscription-page
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]
-    depends_on:
-      remnawave:
-        condition: service_healthy
     environment:
       - REMNAWAVE_PANEL_URL=http://remnawave:3000
       - APP_PORT=3010
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
+    depends_on:
+      remnawave:
+        condition: service_healthy
 
   remnanode:
     image: remnawave/node:latest
@@ -312,7 +309,9 @@ volumes:
     driver: local
     external: false
   caddy_data:
+    name: caddy_data
     driver: local
+    external: false
 EOL
 
     cat > /opt/remnawave/Caddyfile <<EOL

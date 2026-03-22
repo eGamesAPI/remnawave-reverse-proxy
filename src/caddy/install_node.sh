@@ -47,21 +47,30 @@ install_node_caddy() {
     fi
 
     cat > docker-compose.yml <<EOL
+x-common: &common
+  ulimits:
+    nofile:
+      soft: 1048576
+      hard: 1048576
+  restart: always
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: 5
+
 services:
     caddy:
-      image: caddy:2.9.1
+      image: caddy:2.11.2
       container_name: caddy-remnawave
       hostname: caddy-remnawave
+      <<: [*common, *logging]
       network_mode: host
-      restart: always
-      ulimits:
-        nofile:
-          soft: 1048576
-          hard: 1048576
       volumes:
           - ./Caddyfile:/etc/caddy/Caddyfile
           - /var/www/html:/var/www/html:ro
-          - ./logs:/var/log/caddy
           - /dev/shm:/dev/shm:rw
           - caddy_data:/data
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
@@ -74,40 +83,24 @@ services:
           timeout: 5s
           retries: 15
           start_period: 5s
-      depends_on:
-        - remnanode
-      logging:
-          driver: 'json-file'
-          options:
-              max-size: '30m'
-              max-file: '5'
 
     remnanode:
       image: remnawave/node:latest
       container_name: remnanode
       hostname: remnanode
-      restart: always
-      ulimits:
-        nofile:
-            soft: 1048576
-            hard: 1048576
+      <<: [*common, *logging]
       network_mode: host
       environment:
         - NODE_PORT=2222
         - SECRET_KEY=$(echo -e "$CERTIFICATE")
       volumes:
         - /dev/shm:/dev/shm:rw
-      logging:
-        driver: 'json-file'
-        options:
-          max-size: '30m'
-          max-file: '5'
 
 volumes:
-    caddy_data:
-        driver: local
-        external: false
-        name: caddy_data
+  caddy_data:
+    name: caddy_data
+    driver: local
+    external: false
 EOL
 
     cat > /opt/remnawave/Caddyfile <<EOL
