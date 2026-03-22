@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.3.9 dev"
+SCRIPT_VERSION="2.4.0 dev"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -647,9 +647,9 @@ choose_reinstall_type() {
                     case $WEBSERVER_OPTION in
                         1)
                             case $REINSTALL_OPTION in
-                                1) load_install_panel_node_module; installation ;;
-                                2) load_install_panel_module; installation_panel ;;
-                                3) load_install_node_module; installation_node ;;
+                                1) load_install_panel_node_module; load_api_module; installation ;;
+                                2) load_install_panel_module; load_api_module; installation_panel ;;
+                                3) load_install_node_module; load_api_module; installation_node ;;
                             esac
                             ;;
                         2)
