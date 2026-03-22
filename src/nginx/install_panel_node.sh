@@ -236,7 +236,7 @@ services:
       --unixsocketperm 777
       --port 0
     healthcheck:
-      test: ['CMD', 'valkey-cli', 'ping']
+      test: ['CMD', 'valkey-cli', '-s', '/var/run/valkey/valkey.sock', 'ping']
       interval: 3s
       timeout: 10s
       retries: 3
