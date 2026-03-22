@@ -247,7 +247,6 @@ services:
           - caddy_data:/data
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
-          - CADDY_SOCKET_PATH=/dev/shm/nginx.sock
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
