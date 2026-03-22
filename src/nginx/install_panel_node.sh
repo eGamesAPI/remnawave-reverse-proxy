@@ -69,8 +69,10 @@ API_INSTANCES=1
 DATABASE_URL="postgresql://postgres:postgres@remnawave-db:5432/postgres"
 
 ### REDIS ###
-REDIS_HOST=remnawave-redis
-REDIS_PORT=6379
+REDIS_SOCKET=/var/run/valkey/valkey.sock
+# Alternative to REDIS_SOCKET
+#REDIS_HOST=
+#REDIS_PORT=
 
 ### JWT ###
 JWT_AUTH_SECRET=$JWT_AUTH_SECRET
@@ -83,15 +85,19 @@ JWT_AUTH_LIFETIME=168
 ### TELEGRAM NOTIFICATIONS ###
 IS_TELEGRAM_NOTIFICATIONS_ENABLED=false
 TELEGRAM_BOT_TOKEN=change_me
-TELEGRAM_NOTIFY_USERS_CHAT_ID=change_me
-TELEGRAM_NOTIFY_NODES_CHAT_ID=change_me
-TELEGRAM_NOTIFY_CRM_CHAT_ID=change_me
+# is optional, only if you want to use proxy
+# FORMAT: protocol://user:password@host:port, example: socks5://proxy:1080
+# TELEGRAM_BOT_PROXY=change_me
 
-# Optional
-# Only set if you want to use topics
-TELEGRAM_NOTIFY_USERS_THREAD_ID=
-TELEGRAM_NOTIFY_NODES_THREAD_ID=
-TELEGRAM_NOTIFY_CRM_THREAD_ID=
+### TELEGRAM CHAT IDs in format: "chat_id:thread_id"
+# thread_id is optional, only if you want to use topics
+# example: "-100123:80" - -100123 is chat_id, 80 is thread_id
+# example: "-100123" - -100123 is chat_id, thread_id is not used
+TELEGRAM_NOTIFY_USERS=change_me
+TELEGRAM_NOTIFY_NODES=change_me
+TELEGRAM_NOTIFY_CRM=change_me
+TELEGRAM_NOTIFY_SERVICE=change_me
+TELEGRAM_NOTIFY_TBLOCKER=change_me
 
 ### FRONT_END ###
 # Used by CORS, you can leave it as * or place your domain there
@@ -111,7 +117,7 @@ SCALAR_PATH=/scalar
 IS_DOCS_ENABLED=false
 
 ### PROMETHEUS ###
-### Metrics are available at /api/metrics
+### Metrics are available at http://127.0.0.1:METRICS_PORT/metrics
 METRICS_USER=$METRICS_USER
 METRICS_PASS=$METRICS_PASS
 
@@ -129,6 +135,12 @@ BANDWIDTH_USAGE_NOTIFICATIONS_ENABLED=false
 # Only in ASC order (example: [60, 80]), must be valid array of integer(min: 25, max: 95) numbers. No more than 5 values.
 BANDWIDTH_USAGE_NOTIFICATIONS_THRESHOLD=[60, 80]
 
+### Not connected users notification (webhook, telegram)
+NOT_CONNECTED_USERS_NOTIFICATIONS_ENABLED=false
+# Only in ASC order (example: [6, 12, 24]), must be valid array of integer(min: 1, max: 168) numbers. No more than 3 values.
+# Each value represents HOURS passed after user creation (user.createdAt)
+NOT_CONNECTED_USERS_NOTIFICATIONS_AFTER_HOURS=[6, 24, 48]
+
 ### CLOUDFLARE ###
 # USED ONLY FOR docker-compose-prod-with-cf.yml
 # NOT USED BY THE APP ITSELF
@@ -143,18 +155,33 @@ POSTGRES_DB=postgres
 EOL
 
     cat > docker-compose.yml <<EOL
+x-common: &common
+  ulimits:
+    nofile:
+      soft: 1048576
+      hard: 1048576
+  restart: always
+
+x-networks: &networks
+  networks:
+    - remnawave-network
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 100m
+      max-file: 5
+
+x-env: &env
+  env_file: .env
+
 services:
   remnawave-db:
-    image: postgres:18.1
+    image: postgres:18.3
     container_name: 'remnawave-db'
     hostname: remnawave-db
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    env_file:
-      - .env
+    <<: [*common, *logging, *env, *networks]
     environment:
       - POSTGRES_USER=\${POSTGRES_USER}
       - POSTGRES_PASSWORD=\${POSTGRES_PASSWORD}
@@ -164,35 +191,22 @@ services:
       - '127.0.0.1:6767:5432'
     volumes:
       - remnawave-db-data:/var/lib/postgresql
-    networks:
-      - remnawave-network
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U \$\${POSTGRES_USER} -d \$\${POSTGRES_DB}']
       interval: 3s
       timeout: 10s
       retries: 3
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnawave:
     image: remnawave/backend:2
     container_name: remnawave
     hostname: remnawave
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    env_file:
-      - .env
+    <<: [*common, *logging, *env, *networks]
+    volumes:
+      - valkey-socket:/var/run/valkey
     ports:
       - '127.0.0.1:3000:\${APP_PORT:-3000}'
       - '127.0.0.1:3001:\${METRICS_PORT:-3001}'
-    networks:
-      - remnawave-network
     healthcheck:
       test: ['CMD-SHELL', 'curl -f http://localhost:\${METRICS_PORT:-3001}/health']
       interval: 30s
@@ -204,50 +218,35 @@ services:
         condition: service_healthy
       remnawave-redis:
         condition: service_healthy
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnawave-redis:
-    image: valkey/valkey:9.0.0-alpine
+    image: valkey/valkey:9.0.3-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
-    networks:
-      - remnawave-network
+    <<: [*common, *logging, *networks]
+    volumes:
+      - valkey-socket:/var/run/valkey
     command: >
       valkey-server
       --save ""
       --appendonly no
       --maxmemory-policy noeviction
       --loglevel warning
+      --unixsocket /var/run/valkey/valkey.sock
+      --unixsocketperm 777
+      --port 0
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 3s
       timeout: 10s
       retries: 3
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnawave-nginx:
     image: nginx:1.28
     container_name: remnawave-nginx
     hostname: remnawave-nginx
+    <<: [*common, *logging]
     network_mode: host
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 EOL
@@ -296,21 +295,12 @@ installation() {
     depends_on:
       - remnawave
       - remnawave-subscription-page
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
+    <<: [*common, *logging, *networks]
     depends_on:
       remnawave:
         condition: service_healthy
@@ -320,34 +310,18 @@ installation() {
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
-    networks:
-      - remnawave-network
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   remnanode:
     image: remnawave/node:latest
     container_name: remnanode
     hostname: remnanode
-    restart: always
-    ulimits:
-      nofile:
-        soft: 1048576
-        hard: 1048576
+    <<: [*common, *logging]
     network_mode: host
     environment:
       - NODE_PORT=2222
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
-    logging:
-      driver: 'json-file'
-      options:
-        max-size: '30m'
-        max-file: '5'
 
 networks:
   remnawave-network:
@@ -363,6 +337,10 @@ volumes:
     driver: local
     external: false
     name: remnawave-db-data
+  valkey-socket:
+    name: valkey-socket
+    driver: local
+    external: false
 EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
