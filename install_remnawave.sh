@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.4.0 dev"
+SCRIPT_VERSION="2.4.1 dev"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -169,7 +169,7 @@ update_remnawave_reverse() {
     done
 
     # Modules (common)
-    local common_modules=("add_node" "manage_panel")
+    local common_modules=("add_node" "manage_panel" "warp" "ipv6")
     for module in "${common_modules[@]}"; do
         local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
         if [ -f "$module_file" ]; then
@@ -423,13 +423,14 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Install random template
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
-    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # Extensions distilium
+    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
     echo -e ""
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Manage IPv6
-    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage certificates domain
+    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
+    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
-    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Check for updates
-    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Remove script
+    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
@@ -696,398 +697,6 @@ reinstall_remnawave() {
     rm -rf /opt/remnawave 2>/dev/null
 }
 #Show Reinstall Options
-
-#Manage Panel Node Menu
-
-manage_extensions() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[EXTENSIONS_MENU_TITLE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[WARP_MENU]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[BACKUP_RESTORE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-    reading "${LANG[EXTENSIONS_PROMPT]}" EXTENSION_OPTION
-
-    case $EXTENSION_OPTION in
-        1)
-            manage_warp
-            log_clear
-            manage_extensions
-            ;;
-        2)
-            if [ -f ~/backup-restore.sh ]; then
-                rw-backup
-            else
-                curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
-            fi
-            log_clear
-            manage_extensions
-            ;;
-        0)
-            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            ;;
-        *)
-            echo -e "${COLOR_RED}${LANG[EXTENSIONS_INVALID_CHOICE]}${COLOR_RESET}"
-            ;;
-    esac
-}
-
-manage_warp() {
-    load_api_module
-	
-	echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[WARP_MENU_TITLE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[WARP_UNINSTALL]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}3. ${LANG[WARP_ADD_CONFIG]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[WARP_DELETE_WARP_SETTINGS]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-    reading "${LANG[WARP_PROMPT]}" WARP_OPTION
-
-    case $WARP_OPTION in
-        1)
-            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
-                exit 1
-            fi
-            bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
-            ;;
-        2)
-            bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/uninstall.sh)
-            ;;
-        3)
-            local domain_url="127.0.0.1:3000"
-            
-            echo -e ""
-            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}${LANG[WARP_CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
-            read confirm
-            echo
-
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                exit 0
-            fi
-            
-            get_panel_token
-            token=$(cat "$TOKEN_FILE")
-
-            local config_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
-            if [ -z "$config_response" ] || ! echo "$config_response" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Invalid response${COLOR_RESET}"
-            fi
-
-            if ! echo "$config_response" | jq -e '.response.configProfiles | type == "array"' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Response does not contain configProfiles array${COLOR_RESET}"
-            fi
-
-            local config_count=$(echo "$config_response" | jq '.response.configProfiles | length')
-            if [ "$config_count" -eq 0 ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Empty configuration list${COLOR_RESET}"
-            fi
-            local configs=$(echo "$config_response" | jq -r '.response.configProfiles[] | select(.uuid and .name) | "\(.name) \(.uuid)"' 2>/dev/null)
-            if [ -z "$configs" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: No valid configurations found in response${COLOR_RESET}"
-            fi
-
-            echo -e ""
-            echo -e "${COLOR_YELLOW}${LANG[WARP_SELECT_CONFIG]}${COLOR_RESET}"
-            echo -e ""
-            local i=1
-            declare -A config_map
-            while IFS=' ' read -r name uuid; do
-                echo -e "${COLOR_YELLOW}$i. $name${COLOR_RESET}"
-                config_map[$i]="$uuid"
-                ((i++))
-            done <<< "$configs"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-            echo -e ""
-            reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION
-
-            if [ "$CONFIG_OPTION" == "0" ]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                return 0
-            fi
-
-            if [ -z "${config_map[$CONFIG_OPTION]}" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE2]}${COLOR_RESET}"
-                return 1
-            fi
-
-            local selected_uuid=${config_map[$CONFIG_OPTION]}
-
-            local config_data=$(make_api_request "GET" "${domain_url}/api/config-profiles/$selected_uuid" "$token")
-            if [ -z "$config_data" ] || ! echo "$config_data" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
-            fi
-
-            local config_json
-            if echo "$config_data" | jq -e '.response.config' > /dev/null 2>&1; then
-                config_json=$(echo "$config_data" | jq -r '.response.config')
-            else
-                config_json=$(echo "$config_data" | jq -r '.config // ""')
-            fi
-
-            if [ -z "$config_json" ] || [ "$config_json" == "null" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: No config found in response${COLOR_RESET}"
-            fi
-
-            if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' > /dev/null 2>&1; then
-                echo -e "${COLOR_YELLOW}${LANG[WARP_WARNING]}${COLOR_RESET}"
-            else
-                local warp_outbound='{
-                    "tag": "warp-out",
-                    "protocol": "freedom",
-                    "settings": {
-					    "domainStrategy": "UseIP"
-					},
-                    "streamSettings": {
-                        "sockopt": {
-                            "interface": "warp",
-                            "tcpFastOpen": true
-                        }
-                    }
-                }'
-                config_json=$(echo "$config_json" | jq --argjson warp_out "$warp_outbound" '.outbounds += [$warp_out]' 2>/dev/null)
-            fi
-
-            if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' > /dev/null 2>&1; then
-                echo -e "${COLOR_YELLOW}${LANG[WARP_WARNING2]}${COLOR_RESET}"
-            else
-                local warp_rule='{
-                    "type": "field",
-                    "domain": ["whoer.net", "browserleaks.com", "2ip.io", "2ip.ru"],
-                    "outboundTag": "warp-out"
-                }'
-                config_json=$(echo "$config_json" | jq --argjson warp_rule "$warp_rule" '.routing.rules += [$warp_rule]' 2>/dev/null)
-            fi
-
-            local update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
-            if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
-            fi
-
-            echo -e "${COLOR_GREEN}${LANG[WARP_UPDATE_SUCCESS]}${COLOR_RESET}"
-            log_clear
-            manage_warp
-            ;;
-        4)
-            local domain_url="127.0.0.1:3000"
-            
-            echo -e ""
-            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}${LANG[WARP_CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
-            read confirm
-            echo
-
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                exit 0
-            fi
-            
-            get_panel_token
-            token=$(cat "$TOKEN_FILE")
-
-            local config_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
-            if [ -z "$config_response" ] || ! echo "$config_response" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Invalid response${COLOR_RESET}"
-                return 1
-            fi
-
-            if ! echo "$config_response" | jq -e '.response.configProfiles | type == "array"' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Response does not contain configProfiles array${COLOR_RESET}"
-                return 1
-            fi
-
-            local config_count=$(echo "$config_response" | jq '.response.configProfiles | length')
-            if [ "$config_count" -eq 0 ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Empty configuration list${COLOR_RESET}"
-                return 1
-            fi
-
-            local configs=$(echo "$config_response" | jq -r '.response.configProfiles[] | select(.uuid and .name) | "\(.name) \(.uuid)"' 2>/dev/null)
-            if [ -z "$configs" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: No valid configurations found in response${COLOR_RESET}"
-                return 1
-            fi
-
-            echo -e ""
-            echo -e "${COLOR_YELLOW}${LANG[WARP_SELECT_CONFIG_DELETE]}${COLOR_RESET}"
-            echo -e ""
-            local i=1
-            declare -A config_map
-            while IFS=' ' read -r name uuid; do
-                echo -e "${COLOR_YELLOW}$i. $name${COLOR_RESET}"
-                config_map[$i]="$uuid"
-                ((i++))
-            done <<< "$configs"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-            echo -e ""
-            reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION
-
-            if [ "$CONFIG_OPTION" == "0" ]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                return 0
-            fi
-
-            if [ -z "${config_map[$CONFIG_OPTION]}" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE2]}${COLOR_RESET}"
-                return 1
-            fi
-
-            local selected_uuid=${config_map[$CONFIG_OPTION]}
-
-            local config_data=$(make_api_request "GET" "${domain_url}/api/config-profiles/$selected_uuid" "$token")
-            if [ -z "$config_data" ] || ! echo "$config_data" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
-                return 1
-            fi
-
-            local config_json
-            if echo "$config_data" | jq -e '.response.config' > /dev/null 2>&1; then
-                config_json=$(echo "$config_data" | jq -r '.response.config')
-            else
-                config_json=$(echo "$config_data" | jq -r '.config // ""')
-            fi
-
-            if [ -z "$config_json" ] || [ "$config_json" == "null" ]; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: No config found in response${COLOR_RESET}"
-                return 1
-            fi
-            
-            if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' > /dev/null 2>&1; then
-                config_json=$(echo "$config_json" | jq 'del(.outbounds[] | select(.tag == "warp-out"))' 2>/dev/null)
-                echo -e "${COLOR_YELLOW}${LANG[WARP_REMOVED_WARP_SETTINGS1]}${COLOR_RESET}"
-            else
-                echo -e "${COLOR_YELLOW}${LANG[WARP_NO_WARP_SETTINGS1]}${COLOR_RESET}"
-            fi
-
-            if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' > /dev/null 2>&1; then
-                config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "warp-out"))' 2>/dev/null)
-                echo -e "${COLOR_YELLOW}${LANG[WARP_REMOVED_WARP_SETTINGS2]}${COLOR_RESET}"
-            else
-                echo -e "${COLOR_YELLOW}${LANG[WARP_NO_WARP_SETTINGS2]}${COLOR_RESET}"
-            fi
-
-            local update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
-            if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' > /dev/null 2>&1; then
-                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
-                return 1
-            fi
-
-            echo -e "${COLOR_GREEN}${LANG[WARP_DELETE_SUCCESS]}${COLOR_RESET}"
-            log_clear
-            manage_warp
-            ;;
-        0)
-            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            ;;
-        *)
-            echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE]}${COLOR_RESET}"
-            ;;
-    esac
-}
-
-#Manage IPv6
-show_ipv6_menu() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[IPV6_MENU_TITLE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[IPV6_ENABLE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[IPV6_DISABLE]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-}
-
-manage_ipv6() {
-    show_ipv6_menu
-    reading "${LANG[IPV6_PROMPT]}" IPV6_OPTION
-    case $IPV6_OPTION in
-        1)
-            enable_ipv6
-            sleep 2
-            log_clear
-            manage_ipv6
-            ;;
-        2)
-            disable_ipv6
-            sleep 2
-            log_clear
-            manage_ipv6
-            ;;
-        0)
-            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            log_clear
-            remnawave_reverse
-            ;;
-        *)
-            echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
-            sleep 2
-            log_clear
-            manage_ipv6
-            ;;
-    esac
-}
-
-enable_ipv6() {
-    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" -eq 0 ]; then
-        echo -e "${COLOR_YELLOW}${LANG[IPV6_ALREADY_ENABLED]}${COLOR_RESET}"
-        return 0
-    fi
-
-    echo -e "${COLOR_YELLOW}${LANG[ENABLE_IPV6]}${COLOR_RESET}"
-    interface_name=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -n 1)
-
-    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.conf
-    sed -i "/net.ipv6.conf.$interface_name.disable_ipv6/d" /etc/sysctl.conf
-
-    echo "net.ipv6.conf.all.disable_ipv6 = 0" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.default.disable_ipv6 = 0" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.lo.disable_ipv6 = 0" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.$interface_name.disable_ipv6 = 0" >> /etc/sysctl.conf
-
-    sysctl -p > /dev/null 2>&1
-    echo -e "${COLOR_GREEN}${LANG[IPV6_ENABLED]}${COLOR_RESET}"
-}
-
-disable_ipv6() {
-    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" -eq 1 ]; then
-        echo -e "${COLOR_YELLOW}${LANG[IPV6_ALREADY_DISABLED]}${COLOR_RESET}"
-        return 0
-    fi
-
-    echo -e "${COLOR_YELLOW}${LANG[DISABLING_IPV6]}${COLOR_RESET}"
-    interface_name=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -n 1)
-
-    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.conf
-    sed -i "/net.ipv6.conf.$interface_name.disable_ipv6/d" /etc/sysctl.conf
-
-    echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.$interface_name.disable_ipv6 = 1" >> /etc/sysctl.conf
-
-    sysctl -p > /dev/null 2>&1
-    echo -e "${COLOR_GREEN}${LANG[IPV6_DISABLED]}${COLOR_RESET}"
-}
-#Manage IPv6
 
 #Extensions by legiz
 show_custom_legiz_menu() {
@@ -2682,6 +2291,8 @@ load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 load_caddy_module() { load_module "install_panel_node" "caddy" "${1:-false}"; }
 load_caddy_panel_module() { load_module "install_panel" "caddy" "${1:-false}"; }
 load_caddy_node_module() { load_module "install_node" "caddy" "${1:-false}"; }
+load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
+load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 
 log_entry
 
@@ -2759,30 +2370,42 @@ case $OPTION in
         remnawave_reverse
         ;;
     6)
-        manage_extensions
+        load_warp_module
+        manage_warp_native
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     7)
-        manage_ipv6
+        if [ -f ~/backup-restore.sh ]; then
+            rw-backup
+        else
+            curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
+        fi
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     8)
-        manage_certificates
+        load_ipv6_module
+        manage_ipv6
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     9)
-        update_remnawave_reverse
+        manage_certificates
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     10)
+        update_remnawave_reverse
+        sleep 2
+        log_clear
+        remnawave_reverse
+        ;;
+    11)
         remove_script
         ;;
     0)
