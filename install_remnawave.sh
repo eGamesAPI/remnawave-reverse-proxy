@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="2.4.1 dev"
+SCRIPT_VERSION="2.4.2 dev"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -278,6 +278,12 @@ remove_script() {
                 docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
                 spinner $! "${LANG[WAITING]}"
                 rm -rf /opt/remnawave 2>/dev/null
+            fi
+            if [ -d "/opt/remnanode" ]; then
+                cd /opt/remnanode || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} /opt/remnanode${COLOR_RESET}"; exit 1; }
+                docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+                spinner $! "${LANG[WAITING]}"
+                rm -rf /opt/remnanode 2>/dev/null
             fi
             docker system prune -a --volumes -f > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
@@ -691,10 +697,16 @@ reinstall_remnawave() {
         cd /opt/remnawave || return
         docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
+        rm -rf /opt/remnawave 2>/dev/null
+    fi
+    if [ -d "/opt/remnanode" ]; then
+        cd /opt/remnanode || return
+        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        rm -rf /opt/remnanode 2>/dev/null
     fi
     docker system prune -a --volumes -f > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
-    rm -rf /opt/remnawave 2>/dev/null
 }
 #Show Reinstall Options
 
@@ -2146,7 +2158,14 @@ load_module() {
 # Module loaders (wrappers for load_module)
 load_install_panel_node_module() { load_module "install_panel_node" "nginx" "${1:-false}"; }
 load_install_panel_module() { load_module "install_panel" "nginx" "${1:-false}"; }
-load_install_node_module() { load_module "install_node" "nginx" "${1:-false}"; }
+load_install_node_module() {
+    # Determine webserver type from existing installation or default to nginx
+    if [ -f "/opt/remnanode/Caddyfile" ] || [ -f "/opt/remnawave/Caddyfile" ]; then
+        load_module "install_node" "caddy" "${1:-false}"
+    else
+        load_module "install_node" "nginx" "${1:-false}"
+    fi
+}
 load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
 load_manage_panel_module() { load_module "manage_panel" "modules" "${1:-false}"; }
 load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
