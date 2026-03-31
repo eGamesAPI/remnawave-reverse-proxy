@@ -429,7 +429,7 @@ server {
     # OAuth2 Telegram login
     location ^~ /oauth2/ {
         
-        if ($http_referer !~ "^https://oauth\.telegram\.org/") {
+        if (\$http_referer !~ "^https://oauth\.telegram\.org/") {
             return 444;
         }
         
