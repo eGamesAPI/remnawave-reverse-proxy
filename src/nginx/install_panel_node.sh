@@ -399,11 +399,14 @@ server {
     add_header Set-Cookie \$set_cookie_header;
 
     location / {
-        error_page 418 = @unauthorized;
-        recursive_error_pages on;
+        
         if (\$authorized = 0) {
             return 418;
         }
+
+        error_page 418 = @unauthorized;
+        recursive_error_pages on;
+
         proxy_http_version 1.1;
         proxy_pass http://remnawave;
         proxy_set_header Host \$host;
@@ -425,10 +428,11 @@ server {
 
     # OAuth2 Telegram login
     location ^~ /oauth2/ {
-        if (\$http_referer !~ "^https?://(oauth\.telegram\.org|${PANEL_DOMAIN})" 
-        && \$http_referer != "") {
+        
+        if ($http_referer !~ "^https://oauth\.telegram\.org/") {
             return 444;
         }
+        
         proxy_http_version 1.1;
         proxy_pass http://remnawave;
         proxy_set_header Host \$host;
