@@ -30,6 +30,10 @@ LANG[ERROR_CONFIGURE_UPGRADES]="Ошибка: Не удалось настрои
 LANG[ERROR_DOCKER_DNS]="Ошибка: Не удалось разрешить домен download.docker.com. Проверьте настройки DNS."
 LANG[ERROR_INSTALL_CERTBOT]="Ошибка: Не удалось установить certbot"
 LANG[SUCCESS_INSTALL]="Все пакеты успешно установлены"
+#Install Panel+Node Warning
+LANG[PANEL_NODE_SINGLE_SERVER_WARNING]="Этот способ установки не рекомендуется для использования в производственных средах, поскольку он отсутствует в официальной документации Remnawave."
+LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]="Для оптимального результата и стабильной работы, пожалуйста, выбирайте методы установки Только панель или Только нода в зависимости от ваших потребностей."
+LANG[CONFIRM_CONTINUE]="Продолжить? (y/n):"
 #Update Script
 LANG[UPDATING_LANG_FILES]="Обновление языковых файлов..."
 LANG[LANG_FILE_UPDATED]="✓ %s обновлён"
