@@ -2,6 +2,9 @@
 # Module: Install Node Only
 
 install_node_nginx() {
+    # Load selfsteal templates module
+    load_selfsteal_templates_module
+
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
@@ -116,6 +119,8 @@ installation_node() {
     hostname: remnanode
     <<: [*common, *logging]
     network_mode: host
+    cap_add:
+      - NET_ADMIN
     environment:
       - NODE_PORT=2222
       - SECRET_KEY=$(echo -e "$CERTIFICATE")
