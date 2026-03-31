@@ -5,7 +5,7 @@ install_node_nginx() {
     # Load selfsteal templates module
     load_selfsteal_templates_module
 
-    mkdir -p /opt/remnawave && cd /opt/remnawave
+    mkdir -p /opt/remnanode && cd /opt/remnanode
 
     reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
 
@@ -108,7 +108,7 @@ installation_node() {
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
 
-    cat >> /opt/remnawave/docker-compose.yml <<EOL
+    cat >> /opt/remnanode/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
       - /var/www/html:/var/www/html:ro
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
@@ -128,7 +128,7 @@ installation_node() {
       - /dev/shm:/dev/shm:rw
 EOL
 
-cat > /opt/remnawave/nginx.conf <<EOL
+cat > /opt/remnanode/nginx.conf <<EOL
 server_names_hash_bucket_size 64;
 
 map \$http_upgrade \$connection_upgrade {
@@ -172,7 +172,7 @@ EOL
 
     echo -e "${COLOR_YELLOW}${LANG[STARTING_NODE]}${COLOR_RESET}"
     sleep 3
-    cd /opt/remnawave
+    cd /opt/remnanode
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
