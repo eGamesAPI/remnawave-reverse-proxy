@@ -5,7 +5,7 @@ install_node_caddy() {
     # Load selfsteal templates module
     load_selfsteal_templates_module
 
-    mkdir -p /opt/remnawave && cd /opt/remnawave
+    mkdir -p /opt/remnanode && cd /opt/remnanode
 
     reading "${LANG[SELFSTEAL]}" SELFSTEAL_DOMAIN
 
@@ -108,7 +108,7 @@ volumes:
     external: false
 EOL
 
-    cat > /opt/remnawave/Caddyfile <<EOL
+    cat > /opt/remnanode/Caddyfile <<EOL
 {
     admin off
     servers {
@@ -149,7 +149,7 @@ installation_node_caddy() {
 
     echo -e "${COLOR_YELLOW}${LANG[STARTING_NODE]}${COLOR_RESET}"
     sleep 3
-    cd /opt/remnawave
+    cd /opt/remnanode
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
