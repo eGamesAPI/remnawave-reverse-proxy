@@ -483,7 +483,7 @@ manage_install() {
             echo -e ""
             echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]}${COLOR_RESET}"
             echo -e ""
-            reading "${LANG[CONFIRM_CONTINUE]}(y/n)" confirm_install
+            reading "${LANG[CONFIRM_CONTINUE]}" confirm_install
             
             if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
