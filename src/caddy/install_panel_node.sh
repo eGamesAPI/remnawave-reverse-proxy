@@ -2,6 +2,9 @@
 # Module: Install Panel + Node
 
 install_panel_node_caddy() {
+    # Load selfsteal templates module
+    load_selfsteal_templates_module
+
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
