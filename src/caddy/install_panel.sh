@@ -315,6 +315,7 @@ https://{\$PANEL_DOMAIN} {
     }
 
     @unauthorized {
+        not path /oauth2/*
         not header Cookie *$cookies_random1=$cookies_random2*
         not query $cookies_random1=$cookies_random2
     }
@@ -323,6 +324,26 @@ https://{\$PANEL_DOMAIN} {
         root * /var/www/html
         try_files {path} /index.html
         file_server
+    }
+
+    @oauth2_bad {
+        path /oauth2/*
+        not header Referer https://oauth.telegram.org/*
+    }
+
+    handle @oauth2_bad {
+        abort
+    }
+
+    @oauth2 {
+        path /oauth2/*
+        header Referer https://oauth.telegram.org/*
+    }
+
+    handle @oauth2 {
+        reverse_proxy {\$BACKEND_URL} {
+            header_up Host {host}
+        }
     }
 
     reverse_proxy {\$BACKEND_URL} {
