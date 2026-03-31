@@ -89,6 +89,8 @@ start_panel_node() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1
@@ -111,6 +113,8 @@ stop_panel_node() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1
@@ -132,6 +136,8 @@ update_panel_node() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1
@@ -181,6 +187,8 @@ view_logs() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1
@@ -238,6 +246,8 @@ open_panel_access() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1
@@ -364,6 +374,8 @@ close_panel_access() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
         dir="/opt/remnawave"
+    elif [ -d "/opt/remnanode" ]; then
+        dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
         exit 1

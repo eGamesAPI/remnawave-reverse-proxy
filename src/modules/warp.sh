@@ -17,7 +17,8 @@ manage_warp_native() {
 
     case $WARP_OPTION in
         1)
-            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml; then
+            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml 2>/dev/null && \
+               ! grep -q "remnanode:" /opt/remnanode/docker-compose.yml 2>/dev/null; then
                 echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
                 sleep 2
                 log_clear
