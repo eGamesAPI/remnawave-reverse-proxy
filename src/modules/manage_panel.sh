@@ -215,28 +215,23 @@ manage_panel_access() {
     case $ACCESS_OPTION in
         1)
             open_panel_access
-            sleep 2
-            log_clear
-            manage_panel_access
             ;;
         2)
             close_panel_access
-            sleep 2
-            log_clear
-            manage_panel_access
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            sleep 2
             log_clear
             remnawave_reverse
             ;;
         *)
             echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
-            sleep 2
-            log_clear
-            manage_panel_access
             ;;
     esac
+    sleep 2
+    log_clear
+    manage_panel_access
 }
 
 open_panel_access() {
@@ -250,34 +245,17 @@ open_panel_access() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    # Determine web server type
     local webserver=""
     if [ -f "nginx.conf" ]; then
         webserver="nginx"
     elif [ -f "Caddyfile" ]; then
         webserver="caddy"
     else
-        echo -e "${COLOR_RED}${LANG[NGINX_CONF_NOT_FOUND]} $dir${COLOR_RESET}"
-        exit 1
-    fi
-
-    if command -v ss >/dev/null 2>&1; then
-        if ss -tuln | grep -q ":8443"; then
-            echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-            exit 1
-        fi
-    elif command -v netstat >/dev/null 2>&1; then
-        if netstat -tuln | grep -q ":8443"; then
-            echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-            exit 1
-        fi
-    else
-        echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[CONFIG_NOT_FOUND]}${COLOR_RESET}"
         exit 1
     fi
 
     if [ "$webserver" = "nginx" ]; then
-        # Nginx handling
         PANEL_DOMAIN=$(grep -B 20 "proxy_pass http://remnawave" "$dir/nginx.conf" | grep "server_name" | grep -v "server_name _" | awk '{print $2}' | sed 's/;//' | head -n 1)
 
         cookie_line=$(grep -A 2 "map \$http_cookie \$auth_cookie" "$dir/nginx.conf" | grep "~*\w\+.*=")
@@ -289,72 +267,96 @@ open_panel_access() {
             exit 1
         fi
 
+        if command -v ss >/dev/null 2>&1; then
+            if ss -tuln | grep -q ":8443"; then
+                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+                exit 1
+            fi
+        elif command -v netstat >/dev/null 2>&1; then
+            if netstat -tuln | grep -q ":8443"; then
+                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+                exit 1
+            fi
+        else
+            echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
+            exit 1
+        fi
+
         sed -i "/server_name $PANEL_DOMAIN;/,/}/{/^[[:space:]]*$/d; s/listen 8443 ssl;//}" "$dir/nginx.conf"
         sed -i "/server_name $PANEL_DOMAIN;/a \    listen 8443 ssl;" "$dir/nginx.conf"
         if [ $? -ne 0 ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
+            echo -e "${COLOR_RED}${LANG[NGINX_CONF_MODIFY_FAILED]}${COLOR_RESET}"
             exit 1
         fi
 
-        docker compose restart remnawave-nginx > /dev/null 2>&1 &
+        docker compose down remnawave-nginx > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
 
-        echo -e ""
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}${LANG[PORT_8443_OPENED]}${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}:8443/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
-    elif [ "$webserver" = "caddy" ]; then
-        # Caddy handling
-        PANEL_DOMAIN=$(grep -oP 'https://\{\$PANEL_DOMAIN\}' "$dir/Caddyfile" | head -1 | sed 's/https:\/\///;s/{\$PANEL_DOMAIN}//')
-        
-        if [ -z "$PANEL_DOMAIN" ]; then
-            PANEL_DOMAIN=$(grep "PANEL_DOMAIN=" "$dir/.env" 2>/dev/null | cut -d'=' -f2)
-        fi
-
-        if [ -z "$PANEL_DOMAIN" ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
-            exit 1
-        fi
-
-        # Get cookies from Caddyfile
-        cookie_line=$(grep -A 2 "query \$cookies_random1=\$cookies_random2" "$dir/Caddyfile" | head -1)
-        cookies_random1=$(echo "$cookie_line" | grep -oP 'cookies_random1' | head -1)
-        cookies_random2=$(echo "$cookie_line" | grep -oP 'cookies_random2' | head -1)
-        
-        # If not found in Caddyfile, try to extract from set-cookie line
-        if [ -z "$cookies_random1" ] || [ -z "$cookies_random2" ]; then
-            cookie_line=$(grep "Set-Cookie" "$dir/Caddyfile" | head -1)
-            cookies_random1=$(echo "$cookie_line" | grep -oP '\K\w+(?==)' | head -1)
-            cookies_random2=$(echo "$cookie_line" | grep -oP '=\K\w+(?=;)' | head -1)
-        fi
-
-        # Check if port 8443 already exists in Caddyfile
-        if grep -q "bind unix:.*:8443" "$dir/Caddyfile" || grep -q "listen.*8443" "$dir/Caddyfile"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_OPEN]}${COLOR_RESET}"
-            return 0
-        fi
-
-        # Add port 8443 to Caddyfile - modify the https block to also listen on 8443
-        # Find the https://{$PANEL_DOMAIN} block and add a new server block for 8443
-        sed -i "/^https:\/\/{\$PANEL_DOMAIN} {/a \\\nhttps:\/\/{\$PANEL_DOMAIN}:8443 {\\n    bind 0.0.0.0\\n    @has_token_param {\\n        query \\$cookies_random1=\\$cookies_random2\\n    }\\n\\n    handle @has_token_param {\\n        header +Set-Cookie \"\\$cookies_random1=\\$cookies_random2; Path=\/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000\"\\n    }\\n\\n    @unauthorized {\\n        not header Cookie *\\$cookies_random1=\\$cookies_random2*\\n        not query \\$cookies_random1=\\$cookies_random2\\n    }\\n\\n    handle @unauthorized {\\n        root * \/var\/www\/html\\n        try_files {path} \/index.html\\n        file_server\\n    }\\n\\n    reverse_proxy {\$BACKEND_URL} {\\n        header_up X-Real-IP {remote}\\n        header_up Host {host}\\n    }\\n}" "$dir/Caddyfile"
-
-        docker compose restart caddy-remnawave > /dev/null 2>&1 &
+        docker compose up -d remnawave-nginx > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
 
         ufw allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
         ufw reload > /dev/null 2>&1
         sleep 1
 
-        echo -e ""
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}${LANG[PORT_8443_OPENED]}${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}:8443/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-        echo -e "${COLOR_GREEN}=================================================${COLOR_RESET}"
+        local panel_link="https://${PANEL_DOMAIN}:8443/auth/login?${cookies_random1}=${cookies_random2}"
+        echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
+    elif [ "$webserver" = "caddy" ]; then
+        PANEL_DOMAIN=$(grep 'PANEL_DOMAIN=' "$dir/docker-compose.yml" | head -n 1 | sed 's/.*PANEL_DOMAIN=//; s/[[:space:]]*$//')
+
+        if [ -z "$PANEL_DOMAIN" ]; then
+            echo -e "${COLOR_RED}${LANG[CADDY_CONF_ERROR]}${COLOR_RESET}"
+            exit 1
+        fi
+
+        if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
+            return 0
+        fi
+
+        if command -v ss >/dev/null 2>&1; then
+            if ss -tuln | grep -q ":8443"; then
+                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+                exit 1
+            fi
+        elif command -v netstat >/dev/null 2>&1; then
+            if netstat -tuln | grep -q ":8443"; then
+                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+                exit 1
+            fi
+        else
+            echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
+            exit 1
+        fi
+
+        sed -i "s|redir https://{\$PANEL_DOMAIN}{uri} permanent|redir https://{\$PANEL_DOMAIN}:8443{uri} permanent|g" "$dir/Caddyfile"
+
+        sed -i "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|g" "$dir/Caddyfile"
+        sed -i "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/ { /bind unix\/{\$CADDY_SOCKET_PATH}/d }" "$dir/Caddyfile"
+
+        docker compose down remnawave-caddy > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+
+        docker compose up -d remnawave-caddy > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+
+        ufw allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
+        ufw reload > /dev/null 2>&1
+        sleep 1
+
+        local cookie_line=$(grep 'header +Set-Cookie' "$dir/Caddyfile" | head -n 1)
+        local cookies_random1=$(echo "$cookie_line" | grep -oP 'Set-Cookie "\K[^=]+')
+        local cookies_random2=$(echo "$cookie_line" | grep -oP 'Set-Cookie "[^=]+=\K[^;]+')
+
+        local panel_link="https://${PANEL_DOMAIN}:8443/auth/login"
+        if [ -n "$cookies_random1" ] && [ -n "$cookies_random2" ]; then
+            panel_link="${panel_link}?${cookies_random1}=${cookies_random2}"
+        fi
+        echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
     fi
 }
 
@@ -369,75 +371,85 @@ close_panel_access() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    # Determine web server type
+    echo -e "${COLOR_YELLOW}${LANG[PORT_8443_CLOSE]}${COLOR_RESET}"
+
     local webserver=""
     if [ -f "nginx.conf" ]; then
         webserver="nginx"
     elif [ -f "Caddyfile" ]; then
         webserver="caddy"
     else
-        echo -e "${COLOR_RED}${LANG[NGINX_CONF_NOT_FOUND]} $dir${COLOR_RESET}"
-        exit 1
-    fi
-
-    PANEL_DOMAIN=$(grep "PANEL_DOMAIN=" "$dir/.env" 2>/dev/null | cut -d'=' -f2)
-
-    if [ -z "$PANEL_DOMAIN" ]; then
-        echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
-        exit 1
-    fi
-
-    if command -v ss >/dev/null 2>&1; then
-        if ! ss -tuln | grep -q ":8443"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_OPEN]}${COLOR_RESET}"
-            return 0
-        fi
-    elif command -v netstat >/dev/null 2>&1; then
-        if ! netstat -tuln | grep -q ":8443"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_OPEN]}${COLOR_RESET}"
-            return 0
-        fi
-    else
-        echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[CONFIG_NOT_FOUND]}${COLOR_RESET}"
         exit 1
     fi
 
     if [ "$webserver" = "nginx" ]; then
-        # Nginx handling
-        if [ ! -f "nginx.conf" ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_NOT_FOUND]} $dir${COLOR_RESET}"
-            exit 1
-        fi
+        PANEL_DOMAIN=$(grep -B 20 "proxy_pass http://remnawave" "$dir/nginx.conf" | grep "server_name" | grep -v "server_name _" | awk '{print $2}' | sed 's/;//' | head -n 1)
 
-        sed -i "/server_name $PANEL_DOMAIN;/,/}/{/^[[:space:]]*$/d; s/listen 8443 ssl;//}" "$dir/nginx.conf"
-        if [ $? -ne 0 ]; then
+        if [ -z "$PANEL_DOMAIN" ]; then
             echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
             exit 1
         fi
 
-        docker compose restart remnawave-nginx > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
+        if grep -A 10 "server_name $PANEL_DOMAIN;" "$dir/nginx.conf" | grep -q "listen 8443 ssl;"; then
+            sed -i "/server_name $PANEL_DOMAIN;/,/}/{/^[[:space:]]*$/d; s/listen 8443 ssl;//}" "$dir/nginx.conf"
+            if [ $? -ne 0 ]; then
+                echo -e "${COLOR_RED}${LANG[NGINX_CONF_MODIFY_FAILED]}${COLOR_RESET}"
+                exit 1
+            fi
 
-        echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
-    elif [ "$webserver" = "caddy" ]; then
-        # Caddy handling
-        if [ ! -f "Caddyfile" ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_NOT_FOUND]} $dir${COLOR_RESET}"
-            exit 1
+            docker compose down remnawave-nginx > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            docker compose up -d remnawave-nginx > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
         fi
 
-        # Remove the 8443 server block from Caddyfile
-        sed -i '/^https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/d' "$dir/Caddyfile"
-
-        docker compose restart caddy-remnawave > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-
-        # Remove UFW rule
         if ufw status | grep -q "8443.*ALLOW"; then
             ufw delete allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
             ufw reload > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                echo -e "${COLOR_RED}${LANG[UFW_RELOAD_FAILED]}${COLOR_RESET}"
+                exit 1
+            fi
+            echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CLOSED]}${COLOR_RESET}"
+        fi
+    elif [ "$webserver" = "caddy" ]; then
+        PANEL_DOMAIN=$(grep 'PANEL_DOMAIN=' "$dir/docker-compose.yml" | head -n 1 | sed 's/.*PANEL_DOMAIN=//; s/[[:space:]]*$//')
+
+        if [ -z "$PANEL_DOMAIN" ]; then
+            echo -e "${COLOR_RED}${LANG[CADDY_CONF_ERROR]}${COLOR_RESET}"
+            exit 1
         fi
 
-        echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
+        if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
+            sed -i "s|https://{\$PANEL_DOMAIN}:8443 {|https://{\$PANEL_DOMAIN} {|g" "$dir/Caddyfile"
+
+            sed -i "/https:\/\/{\$PANEL_DOMAIN} {/a \    bind unix/{\$CADDY_SOCKET_PATH}" "$dir/Caddyfile"
+
+            sed -i "s|redir https://{\$PANEL_DOMAIN}:8443{uri} permanent|redir https://{\$PANEL_DOMAIN}{uri} permanent|g" "$dir/Caddyfile"
+
+            docker compose down remnawave-caddy > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            docker compose up -d remnawave-caddy > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
+        fi
+
+        if ufw status | grep -q "8443.*ALLOW"; then
+            ufw delete allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
+            ufw reload > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                echo -e "${COLOR_RED}${LANG[UFW_RELOAD_FAILED]}${COLOR_RESET}"
+                exit 1
+            fi
+            echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CLOSED]}${COLOR_RESET}"
+        fi
     fi
 }
