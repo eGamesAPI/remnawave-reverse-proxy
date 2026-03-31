@@ -182,7 +182,7 @@ LANG[INVALID_SQUAD_UUID]="Invalid squad UUID"
 LANG[INVALID_INBOUND_UUID]="Invalid inbound UUID"
 #Stop/Start/Update
 LANG[CHANGE_DIR_FAILED]="Failed to change to directory %s"
-LANG[DIR_NOT_FOUND]="Directory /opt/remnawave not found"
+LANG[DIR_NOT_FOUND]="Directory /opt/remnawave or /opt/remnanode not found"
 LANG[PANEL_RUNNING]="Panel/node already running"
 LANG[PANEL_RUN]="Panel/node running"
 LANG[PANEL_STOP]="Panel/node stopped"

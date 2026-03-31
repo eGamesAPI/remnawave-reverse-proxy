@@ -176,7 +176,7 @@ LANG[INVALID_SQUAD_UUID]="Неверный UUID сквада"
 LANG[INVALID_INBOUND_UUID]="Неверный UUID входа"
 #Stop/Start/Update
 LANG[CHANGE_DIR_FAILED]="Не удалось перейти в директорию %s"
-LANG[DIR_NOT_FOUND]="Директория /opt/remnawave не найдена"
+LANG[DIR_NOT_FOUND]="Директория /opt/remnawave или /opt/remnanode не найдена"
 LANG[PANEL_RUNNING]="Панель/нода уже запущена"
 LANG[PANEL_RUN]="Панель/нода запущена"
 LANG[PANEL_STOP]="Панель/нода остановлена"
