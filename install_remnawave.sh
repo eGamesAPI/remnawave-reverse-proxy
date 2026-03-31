@@ -422,6 +422,7 @@ show_menu() {
     else
 		echo -e "${COLOR_GRAY}$(printf "${LANG[VERSION_LABEL]}" "$SCRIPT_VERSION")${COLOR_RESET}"
     fi
+    echo -e "${COLOR_GRAY}Wiki: https://wiki.egam.es/${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}" # Install Remnawave Components
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
@@ -475,6 +476,22 @@ manage_install() {
     reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
     case $INSTALL_OPTION in
         1)
+            # Показать предупреждение для установки панели+ноды на один сервер
+            echo -e ""
+            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_WARNING]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]}${COLOR_RESET}"
+            echo -e ""
+            reading "${LANG[CONFIRM_CONTINUE]}(y/n)" confirm_install
+            
+            if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                log_clear
+                manage_install
+                return
+            fi
+            
             show_webserver_select
             case $WEBSERVER_OPTION in
                 1)
