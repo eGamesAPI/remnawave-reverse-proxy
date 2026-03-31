@@ -321,9 +321,7 @@ https://{\$PANEL_DOMAIN} {
     }
 
     handle @unauthorized {
-        root * /var/www/html
-        try_files {path} /index.html
-        file_server
+        abort
     }
 
     @oauth2_bad {
