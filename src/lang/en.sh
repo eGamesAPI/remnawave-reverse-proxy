@@ -325,12 +325,15 @@ LANG[NO_PORT_CHECK_TOOLS]="Port checking tools (ss or netstat) not found. Instal
 LANG[OPEN_PANEL_LINK]="Your panel access link:"
 LANG[PORT_8443_WARNING]="Don't forget, port 8443 is now open to the world. After fixing the panel, select the option to close port 8443."
 LANG[PORT_8443_CLOSED]="Port 8443 has been closed."
+LANG[CONFIG_NOT_FOUND]="Configuration file (nginx.conf or Caddyfile) not found in $dir"
 LANG[NGINX_CONF_NOT_FOUND]="File nginx.conf not found in $dir"
 LANG[NGINX_CONF_ERROR]="Failed to extract necessary parameters from nginx.conf"
 LANG[NGINX_CONF_MODIFY_FAILED]="Failed to modify nginx.conf"
 LANG[PORT_8443_ALREADY_CONFIGURED]="Port 8443 already configured in nginx.conf"
 LANG[UFW_RELOAD_FAILED]="Failed to reload UFW."
 LANG[PORT_8443_ALREADY_CLOSED]="Port 8443 already closed in UFW."
+LANG[CADDY_CONF_ERROR]="Failed to extract necessary parameters from Caddyfile"
+LANG[PORT_8443_NOT_CONFIGURED]="Port 8443 not configured."
 #Legiz Extensions
 LANG[LEGIZ_EXTENSIONS_PROMPT]="Select action (0-2):"
 # Sub Page Upload
