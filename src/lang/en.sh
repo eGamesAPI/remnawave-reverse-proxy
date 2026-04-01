@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 #English translations
 
 declare -gA LANG
