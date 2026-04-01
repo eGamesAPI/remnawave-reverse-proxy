@@ -1,7 +1,10 @@
-﻿#!/bin/bash
-# Module: Install Panel Only
+#!/bin/bash
+# Module: Install Panel + Node
 
-install_panel_nginx() {
+install_panel_node_nginx() {
+    # Load selfsteal templates module
+    load_selfsteal_templates_module
+
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -21,6 +24,12 @@ install_panel_nginx() {
     fi
 
     reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+    check_domain "$SELFSTEAL_DOMAIN" true false
+    local node_check_result=$?
+    if [ $node_check_result -eq 2 ]; then
+        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
+        exit 1
+    fi
 
     if [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
@@ -29,9 +38,11 @@ install_panel_nginx() {
 
     PANEL_BASE_DOMAIN=$(extract_domain "$PANEL_DOMAIN")
     SUB_BASE_DOMAIN=$(extract_domain "$SUB_DOMAIN")
+    SELFSTEAL_BASE_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
 
     unique_domains["$PANEL_BASE_DOMAIN"]=1
     unique_domains["$SUB_BASE_DOMAIN"]=1
+    unique_domains["$SELFSTEAL_BASE_DOMAIN"]=1
 
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
@@ -244,16 +255,17 @@ services:
 EOL
 }
 
-installation_panel() {
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING_PANEL]}${COLOR_RESET}"
+installation() {
+    echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"
     sleep 1
 
     declare -A unique_domains
-    install_panel_nginx
+    install_panel_node_nginx
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
     domains_to_check["$SUB_DOMAIN"]=1
+    domains_to_check["$SELFSTEAL_DOMAIN"]=1
 
     handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
 
@@ -269,14 +281,20 @@ installation_panel() {
     if [ "$CERT_METHOD" == "1" ]; then
         local base_domain=$(extract_domain "$PANEL_DOMAIN")
         local sub_base_domain=$(extract_domain "$SUB_DOMAIN")
+        local node_base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
         PANEL_CERT_DOMAIN="$base_domain"
         SUB_CERT_DOMAIN="$sub_base_domain"
+        NODE_CERT_DOMAIN="$node_base_domain"
     else
         PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
         SUB_CERT_DOMAIN="$SUB_DOMAIN"
+        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL
+      - /dev/shm:/dev/shm:rw
+      - /var/www/html:/var/www/html:ro
+    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -293,10 +311,28 @@ installation_panel() {
     ports:
       - '127.0.0.1:3010:3010'
 
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    <<: [*common, *logging]
+    depends_on:
+      remnawave:
+        condition: service_healthy
+    network_mode: host
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+    volumes:
+      - /dev/shm:/dev/shm:rw
+
 networks:
   remnawave-network:
     name: remnawave-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
     external: false
 
 volumes:
@@ -352,10 +388,11 @@ ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDS
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
 ssl_session_cache shared:MozSSL:10m;
+ssl_session_tickets off;
 
 server {
     server_name $PANEL_DOMAIN;
-    listen 443 ssl;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$PANEL_CERT_DOMAIN/fullchain.pem";
@@ -365,9 +402,14 @@ server {
     add_header Set-Cookie \$set_cookie_header;
 
     location / {
+        
         if (\$authorized = 0) {
-            return 444;
+            return 418;
         }
+
+        error_page 418 = @unauthorized;
+        recursive_error_pages on;
+
         proxy_http_version 1.1;
         proxy_pass http://remnawave;
         proxy_set_header Host \$host;
@@ -381,7 +423,12 @@ server {
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
-    
+
+    location @unauthorized {
+        root /var/www/html;
+        index index.html;
+    }
+
     # OAuth2 Telegram login
     location ^~ /oauth2/ {
         
@@ -406,7 +453,7 @@ server {
 
 server {
     server_name $SUB_DOMAIN;
-    listen 443 ssl;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$SUB_CERT_DOMAIN/fullchain.pem";
@@ -419,8 +466,8 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP \$proxy_protocol_addr;
+        proxy_set_header X-Forwarded-For \$proxy_protocol_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
@@ -436,18 +483,37 @@ server {
 }
 
 server {
-    listen 443 ssl default_server;
+    server_name $SELFSTEAL_DOMAIN;
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$NODE_CERT_DOMAIN/privkey.pem";
+    ssl_trusted_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
+
+    root /var/www/html;
+    index index.html;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
+}
+
+server {
+    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
     server_name _;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
     ssl_reject_handshake on;
+    return 444;
 }
 EOL
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
+
+    remnawave_network_subnet=172.30.0.0/16
+    ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp > /dev/null 2>&1
 
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
@@ -474,6 +540,11 @@ EOL
     local token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
     echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
+    # Get public key
+    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
+    sleep 1
+    get_public_key "$domain_url" "$token" "$target_dir"
+
     # Generate Xray keys
     echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
@@ -490,7 +561,7 @@ EOL
 
     # Create node with config profile binding
     echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid"
 
     # Create host
     echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
@@ -508,15 +579,15 @@ EOL
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
     create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave Subscription Page
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    # Stop and start Remnawave
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
@@ -534,5 +605,6 @@ EOL
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
+
+    randomhtml
 }
