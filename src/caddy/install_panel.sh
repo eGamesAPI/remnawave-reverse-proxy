@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: Install Panel
 
 install_panel_caddy() {
