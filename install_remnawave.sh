@@ -2128,7 +2128,7 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
+    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
 
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
