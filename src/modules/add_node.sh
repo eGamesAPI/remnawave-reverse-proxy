@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: Add Node to Panel
 
 #Add Node to Panel

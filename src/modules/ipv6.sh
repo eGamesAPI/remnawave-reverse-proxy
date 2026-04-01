@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: IPv6 Management
 
 show_ipv6_menu() {

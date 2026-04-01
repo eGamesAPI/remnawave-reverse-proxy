@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: WARP Native
 
 manage_warp_native() {

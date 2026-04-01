@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: Manage Panel
 
 show_manage_panel_menu() {

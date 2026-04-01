@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: SelfSteal Templates
 
 show_template_source_options() {
