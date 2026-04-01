@@ -1,0 +1,85 @@
+---
+title: Проблемы, связанные с Docker
+description: Устранение проблем с Docker
+---
+
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+
+## Добавление зеркал для Docker
+
+В некоторых случаях, как в [#40](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/40), серверы, особенно те, которые расположены в России, не могут загружать образы.
+Чтобы решить эту проблему, вы можете добавить зеркала:
+
+<Steps>
+
+1. Создайте файл `daemon.json`:
+
+    ```bash
+    nano /etc/docker/daemon.json
+    ```
+
+2. Импортируйте зеркала
+
+    ```json
+    {
+    "log-driver": "local",
+    "registry-mirrors": [
+        "https://mirror.gcr.io/",
+        "https://dockerhub.timeweb.cloud"
+        ]
+    }
+    ```
+
+3. Перезапустите службу Docker, чтобы применить внесенные изменения
+
+    ```bash
+    systemctl restart docker
+    ```
+
+</Steps>
+
+## You have reached your unauthenticated pull rate limit
+
+Если вы видите это сообщение, это означает, что вы превысили лимит частоты для неаутентифицированных запросов к Docker Hub. Чтобы решить эту проблему, вы можете попробовать одно из следующих решений:
+
+<Steps>
+
+1. Авторизуйтесь в Docker Hub
+
+    Войдите в свою учетную запись Docker Hub с помощью Docker CLI:
+
+    ```bash
+    docker login
+    ```
+
+2. Используйте другую сеть
+
+    Если возможно, попробуйте переключиться на другую сеть, чтобы увидеть, сохраняется ли проблема. А еще лучше задать этот вопрос вашему хостингу.
+
+3. Включите IPv6
+
+    Запустите скрипт и выберите "7. Управление IPv6" и включите поддержку IPv6. Это может помочь обойти некоторые лимиты частоты в некоторых случаях.
+
+</Steps>
+
+## Моей проблемы здесь нет
+
+Не стесняйтесь сообщать о любых проблемах, связанных с нашим проектом, в [репозитории GitHub](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) или [Telegram](https://t.me/remnawave_reverse) чате.
+
+<div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '1rem' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose"
+        icon="add-document"
+        iconPlacement="start"
+    >
+        Создать новую проблему
+    </LinkButton>
+
+    <LinkButton
+        href="https://t.me/remnawave_reverse"
+        icon="telegram"
+        iconPlacement="start"
+    >
+        Обсудить в Telegram
+    </LinkButton>
+</div>

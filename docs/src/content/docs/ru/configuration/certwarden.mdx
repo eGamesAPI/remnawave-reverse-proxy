@@ -1,0 +1,500 @@
+---
+title: Руководство по установке и настройке Cert Warden
+description: Инструкция по установке и настройке Cert Warden — централизованного сервера для управления SSL/TLS-сертификатами.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+**Cert Warden** — это централизованный клиент ACME (Automated Certificate Management Environment), предназначенный для упрощения управления SSL/TLS-сертификатами. Это open-source решение, которое предоставляет API для автоматизации получения, обновления и распространения сертификатов между различными системами и сервисами. Cert Warden разработан для упрощения работы с сертификатами в инфраструктурах, где требуется управление большим количеством сертификатов для разных доменов или устройств.
+
+## Зачем нужен Cert Warden?
+Cert Warden решает задачу автоматизации управления сертификатами в сложных инфраструктурах, таких как кластеры Kubernetes, веб-приложения или IoT-устройства. Вот основные причины, зачем он может быть полезен:
+
+1. **Автоматизация процессов:**
+    - Cert Warden автоматизирует получение, обновление и распространение SSL/TLS-сертификатов, что исключает необходимость ручного управления, которое может быть трудоемким и подверженным ошибкам.
+    - Поддерживает автоматическое продление сертификатов до истечения их срока действия, что минимизирует риски простоя из-за просроченных сертификатов.
+
+2. **Централизованное управление:**
+    - Вместо того чтобы настраивать отдельные клиенты ACME на каждом сервере, Cert Warden позволяет управлять всеми сертификатами из одного места. Это особенно удобно в крупных инфраструктурах с множеством серверов или доменов.
+
+3. **Безопасность:**
+    - Cert Warden использует API-ключи для аутентификации клиентов, обеспечивая безопасный доступ к сертификатам.
+    - Поддерживает работу с доверенными центрами сертификации, такими как Let’s Encrypt, что гарантирует использование валидных и признанных сертификатов.
+
+## Установка и настройка Cert Warden
+
+:::danger[Важно]
+Устанавливать **Cert Warden** будем на сервер панели **Remnawave**, но вы можете установить его на любой другой сервер.
+:::
+
+:::danger[Важно]
+Использовать метод будем **dns-01 Cloudflare**, но вы можете использовать и другие методы.
+:::
+
+<Steps>
+
+1. Cоздаем директорию для Cert Warden и создаем `docker-compose.yml`
+
+    ```bash
+    mkdir /opt/certwarden && cd /opt/certwarden && nano docker-compose.yml
+    ```
+
+    Вставляем следующее содержимое:
+
+    ```yaml title="docker-compose.yml"
+    services:
+      certwarden:
+        container_name: certwarden
+        image: ghcr.io/gregtwallace/certwarden:latest
+        restart: unless-stopped
+        ports:
+          - '127.0.0.1:4050:4050'
+        volumes:
+          - ./certwarden-data:/app/data
+        networks:
+          - remnawave-network
+        logging:
+          driver: 'json-file'
+          options:
+            max-size: '30m'
+            max-file: '5'
+
+    networks:
+      remnawave-network:
+        name: remnawave-network
+        driver: bridge
+        external: true
+    ```
+
+2. Запускаем Cert Warden
+
+    ```bash
+    cd /opt/certwarden && docker compose up -d && docker compose logs -f
+    ```
+
+3. Добавляем Cert Warden в `nginx.conf` панели Remnawave
+
+    ```bash
+    cd /opt/remnawave && nano nginx.conf
+    ```
+
+    Добавляем секцию upstream:
+
+    ```nginx title="nginx.conf"
+    upstream certwarden {
+        server 127.0.0.1:4050;
+    }
+    ```
+
+    Добавляем секцию server:
+
+    ```nginx title="nginx.conf" "yourdomain.com"
+    server {
+        listen 443 ssl;
+        server_name certwarden.yourdomain.com; # Не забудьте добавить запись DNS в Cloudflare
+        http2 on;
+
+        ssl_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem";
+        ssl_certificate_key "/etc/nginx/ssl/yourdomain.com/privkey.pem";
+        ssl_trusted_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem";
+
+        location / {
+            proxy_pass http://certwarden;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+4. Перезапускаем nginx:
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+
+5. Открываем браузер и переходим по ссылке
+    
+    ::::danger[Важно]
+    Не забываем добавить запись DNS для вашего домена в Cloudflare
+    ::::
+
+    ```bash
+    https://certwarden.yourdomain.com
+    ```
+
+6. Войдём в систему, используя логин admin и пароль password
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_login.png" 
+        alt="Cert Warden Login" 
+        style={{ maxWidth: '50%' }} 
+      />
+    </div>
+
+7. Попадём на главную страницу
+
+    ![Cert Warden dashboard](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_dashboard.png)
+
+8. Переходим в раздел `Settings` и меняем наш текущий пароль
+
+</Steps>
+
+## Настройка Provider
+
+<Steps>
+
+1. Переходим в раздел `Providers`
+
+2. Нажимаем на `New Provider`
+
+3. Выбираем `DNS-01 Cloudflare`
+
+4. В поле `Domains` вводим домен, для которого будем получать wildcard-сертификаты
+
+5. В поле `API Access Method` выбираем `API Token`. Инструкцию по созданию токена с правами `Zone:Edit` можно найти в [официальной документации Cloudflare](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)
+      
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_new_challenge_provider.png" 
+        alt="Cert Warden New Challenge Provider" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+6. Нажимаем на кнопку Submit
+
+</Steps>
+
+## Настройка Private Key
+
+<Steps>
+
+1. Переходим в раздел `Private Keys`
+
+2. Нажимаем на `New Key`
+
+3. В Name вводим название ключа (например, `ACME`)
+
+4. Key Generation Algorithm указываем `ECDSA P-384` (рекомендуемый алгоритм для высокой безопасности и совместимости)
+
+5. Ставим галочку на Disable API Key
+
+6. Нажимаем на кнопку Submit
+
+7. Выскочит новое окно c нашим Private Key, так же нажимаем на кнопку Submit
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_private_key.png" 
+        alt="Cert Warden New Private Key" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+</Steps>
+
+## Настройка ACME Accounts
+
+<Steps>
+
+1. Переходим в раздел `ACME Accounts`
+
+2. Нажимаем на `New Account`
+
+3. В поле `Name` вводим название нашего домена или своё другое название
+
+4. В поле `Contact E-mail Address` указываем email, на который будут приходить уведомления
+
+5. В поле `ACME Server` выбираем `Let’s Encrypt`
+
+6. В поле `Private Key` выбираем свой ранее созданный ключ
+
+7. Ставим галочку на Accept ACME Server`s Terms of Service
+
+8. Нажимаем на кнопку Submit
+
+9. Откроется окно с данными аккаунта
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_acme_accounts.png" 
+        alt="Cert Warden New ACME Account" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+10. Нажимаем на кнопку REGISTER и Account Status должен стать Valid
+
+11. Нажимаем на кнопку Submit
+
+</Steps>
+
+## Настройка  Certificates
+
+<Steps>
+
+1. Переходим в раздел `Certificates`
+
+2. Нажимаем на `New Certificate`
+
+3. В поле `Name` вводим название нашего домена или своё другое название
+
+4. В поле `ACME Account` выбираем ранее созданный аккаунт
+
+5. В поле `Subject (and Common Name)` вводим домен 2 уровня, например `example.com`
+
+6. Нажимаем на кнопку `ADD` и в поле Alternate Name 1 вводим уже wildcard домен `*.example.com`
+
+7. Нажимаем на кнопку Submit
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_certificates.png" 
+        alt="Cert Warden New Certificate" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+8. Внизу появится окно ACME Orders
+
+      ![Cert Warden ACME Orders](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_acme_orders.png)
+
+9. Нажимаем на кнопку `PLACE NEW ORDER`
+
+10. Теперь ожидаем, пока сертификат будет получен, отслеживать состояние можно в разделе `ACME Queue`, как только домен там пропадет, значит сертификат получен
+
+11. Переходим в раздел `Dashboard` и видим, что сертификат получен и сколько дней осталось до окончания срока действия
+
+      ![Cert Warden Dashboard](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_dashboard_certificate.png) 
+
+</Steps>
+
+## Certwarden Client
+
+**Cert Warden Client** — это Docker-контейнер или приложение, которое взаимодействует с сервером Cert Warden для автоматического получения и обновления сертификатов. Он предназначен для упрощения управления сертификатами на клиентских устройствах. Основные функции клиента включают:
+
+- Автоматическое получение сертификатов: Клиент делает GET-запросы к API Cert Warden, используя API-ключи, для получения ключей и сертификатов.
+- Обновление сертификатов: Клиент следит за обновлениями сертификатов и автоматически загружает новые версии.
+- Перезапуск Docker-контейнеров: Если сертификаты обновлены, клиент может перезапустить указанные Docker-контейнеры, чтобы они подхватили новые сертификаты.
+
+
+## Установка и настройка Certwarden Client на сервере панели Remnawave
+
+<Steps>
+
+1. Создаем директорию для Cert Warden Client
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+   
+   Вставляем следующее содержимое:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          networks:
+            - remnawave-network
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+
+    networks:
+        remnawave-network:
+          name: remnawave-network
+          driver: bridge
+          external: true
+    ```
+
+2. `CW_CLIENT_AES_KEY_BASE64` - указываем ключ, сгенерированный в разделе `Certificates` --> `Post Processing` --> `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить ключ
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png" 
+        alt="Cert Warden AES Key" 
+        style={{ maxWidth: '50%' }} 
+      />
+    </div>
+
+3. `CW_CLIENT_SERVER_ADDRESS` - указываем адрес сервера Cert Warden (например, `https://certwarden.example.com`).
+
+4. `CW_CLIENT_KEY_NAME` - указываем название ключа, созданного в разделе `Private Keys`.
+
+5. `CW_CLIENT_KEY_APIKEY` - указываем API-ключ, созданный в разделе `Private Keys`.
+
+6. `CW_CLIENT_CERT_NAME` - указываем название сертификата, созданного в разделе `Certificates`.
+
+7. `CW_CLIENT_CERT_APIKEY` - указываем API-ключ, созданный в разделе `Certificates`.
+
+8. Запускаем Cert Warden Client
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+9. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`
+
+10. Теперь мы можем их смонтировать в наш docker-compose.yml в секцию `remnawave-nginx`
+
+    ```bash
+    cd /opt/remnawave && nano docker-compose.yml
+    ```
+
+    Добавляем в volumes, не забудьте указать ваш домен:
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+11. Перезапускаем nginx
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+</Steps>
+
+## Установка и настройка Certwarden Client на сервере ноды Remnawave
+
+:::note
+Аналогично ставится и на другие ноды, которые будут получать сертификаты
+:::
+
+<Steps>
+
+1. Создаем директорию для Cert Warden Client
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+   
+   Вставляем следующее содержимое:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+    ```
+
+2. `CW_CLIENT_AES_KEY_BASE64` - указываем ключ, сгенерированный в разделе `Certificates` --> `Post Processing` --> `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить ключ
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png" 
+        alt="Cert Warden AES Key" 
+        style={{ maxWidth: '50%' }} 
+      />
+    </div>
+
+3. `CW_CLIENT_SERVER_ADDRESS` - указываем адрес сервера Cert Warden (например, `https://certwarden.example.com`).
+
+4. `CW_CLIENT_KEY_NAME` - указываем название ключа, созданного в разделе `Private Keys`.
+
+5. `CW_CLIENT_KEY_APIKEY` - указываем API-ключ, созданный в разделе `Private Keys`.
+
+6. `CW_CLIENT_CERT_NAME` - указываем название сертификата, созданного в разделе `Certificates`.
+
+7. `CW_CLIENT_CERT_APIKEY` - указываем API-ключ, созданный в разделе `Certificates`.
+
+8. Запускаем Cert Warden Client
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+9. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`
+
+10. Теперь мы можем их смонтировать в наш docker-compose.yml в секцию `remnawave-nginx`
+
+    ```bash
+    cd /opt/remnawave && nano docker-compose.yml
+    ```
+
+    Добавляем в volumes, не забудьте указать ваш домен:
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+11. Перезапускаем nginx
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+</Steps>
+
+## Закрываем доступ к Certwarden с помощью Netbird
+
+:::note
+Если вы хотите закрыть доступ к Certwarden с помощью Netbird, то следуйте этим шагам
+:::
+
+<Steps>
+
+1. Добавляем сервер Cert Warden в Netbird, как его установить можно посмотреть [здесь](../netbird)
+
+2. В панели управления Cloudflare для вашего домена certwarden.yourdomain.com указываем IP-адрес сервера Cert Warden в сети Netbird
+
+      ![Cert Warden Cloudflare](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_ip_netbird.png) 
+
+3. Теперь, чтобы попасть на страницу Cert Warden, нужно будет подключатся на своем компьютере к вашей сети через приложение [Netbird](https://docs.netbird.io/how-to/installation)
+</Steps>

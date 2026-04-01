@@ -1,0 +1,62 @@
+---
+title: Только панель
+description: Инструкция по установке панели Remnawave на вашем сервере.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+## Установка скрипта
+
+:::danger[Важно]
+Скрипт нужно запускать с **правами root**.
+:::
+
+Введите данную команду на вашем сервере:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
+## Установка панели
+
+<Steps>
+
+1. Выберите пункт `Установка компонентов Remnawave`
+
+    ![Main menu RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/main_menu.webp)
+
+2. Затем выберите пункт `Установить только панель`
+
+    ![Install panel RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/install_panel.webp)
+
+3. После завершения процесса скрипт предоставит все необходимые данные для входа в неё.
+
+    ![Menu panel end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/menu_panel_end.webp)
+
+</Steps>
+
+:::danger[Важно]
+После завершения установки скрипт отобразит уникальный URL-адрес для входа в панель управления.  
+**Обязательно сохраните этот URL-адрес.** Он содержит секретный ключ, необходимый для доступа.
+
+Пример ссылки для входа:
+```
+https://p.example.com/auth/login?SECRET_KEY=SECRET_KEY
+```
+Без этого URL-адреса **вы не сможете** войти в панель.
+:::
+
+## Обновление скрипта
+
+Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем. Вы можете сделать это, выбрав `Проверить обновления скрипта` в меню скрипта или просмотрев репозиторий GitHub на наличие обновлений.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"
+        icon="github"
+        iconPlacement="start"
+    >
+        Посмотреть последнее обновление
+    </LinkButton>
+</div>

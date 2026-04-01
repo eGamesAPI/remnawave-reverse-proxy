@@ -1,0 +1,88 @@
+---
+title: Warp Native
+description: Installation and configuration of Warp Native
+---
+import { Code } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+`Cloudflare Warp Native` is a way to use the Cloudflare Warp service through the WireGuard protocol in `native` mode, that is, with direct WireGuard configuration without depending on the official Cloudflare client (for example, the 1.1.1.1 or warp-cli application). In the context of the wgcf tool, this means setting up a connection to the Cloudflare Warp infrastructure using a generated WireGuard profile, which can be used in any compatible WireGuard client.
+
+## What is Cloudflare Warp?
+`Cloudflare Warp` is a service that redirects user internet traffic through Cloudflare servers, providing:
+
+- Security: encrypting traffic to protect data.
+- Confidentiality: hiding the user's IP address.
+- Optimization: routing through the global Cloudflare network to improve speed and connection reliability.
+
+### Installation of Warp Native
+
+:::danger[Important]
+Installation of Warp Native is only performed on the server where the Remnawave node is installed.
+:::
+
+<Steps>
+
+1. Select the `WARP Native from distillium` option
+
+    ![Warp Native Main Menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native.png)
+
+2. Then select the `Install WARP Native` option
+
+    ![Warp Native Install](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_main_menu.png)
+
+</Steps>
+
+### Configuration of Warp-Settings
+
+:::danger[Important]
+Run only on the server where the Remnawave panel is installed.
+:::
+
+<Steps>
+
+1. Select the `Add WARP-Settings to node configuration` option
+
+    ![Warp Native Add Config](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_add_config.png)
+
+2. Then select which node to add warp-settings configuration
+
+    ![Warp Native Add Node](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_add_node.png)
+
+</Steps>
+
+The following blocks are added to the node's configuration profile:
+
+export const exampleCode = `{
+  "tag": "warp-out",
+  "protocol": "freedom",
+  "settings": {
+    "domainStrategy": "UseIP"
+  },
+  "streamSettings": {
+    "sockopt": {
+      "interface": "warp",
+      "tcpFastOpen": true
+    }
+  }
+}`;
+export const fileName = 'outbound';
+
+<Code code={exampleCode} lang="json" title={fileName} />
+
+The highlighted domains will be sent through WARP, replace them with your own.
+
+export const fileName2 = 'routing rule';
+export const highlights = ['whoer.net', 'browserleaks.com', '2ip.io', '2ip.ru'];
+export const exampleCode2 = `{
+  "type": "field",
+  "domain": [
+    "whoer.net",
+    "browserleaks.com",
+    "2ip.io",
+    "2ip.ru"
+  ],
+  "outboundTag": "warp-out"
+}`;
+
+<Code code={exampleCode2} lang="json" title={fileName2} mark={highlights} />

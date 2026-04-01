@@ -1,0 +1,38 @@
+---
+title: Access to Prometheus metrics
+---
+
+## In the original installation
+
+Prometheus metrics are available on port 3001 with basic HTTP authentication:
+
+```yaml
+scrape_configs:
+  - job_name: 'remnawave'
+    scheme: http
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['remnawave:3001']
+    basic_auth:
+      username: admin
+      password: change_me
+```
+
+## In the eGames's script
+
+Access to Prometheus metrics is also protected by a cookie system, which means:
+
+- **Local access**: Possible directly via `http://127.0.0.1:3001/metrics`
+- **External access**: Blocked without the correct cookie set
+
+
+### Environment Variables Configuration
+
+| Variable | Purpose | Default Value |
+| :-- | :-- | :-- |
+| `APP_PORT` | Panel port | 3000 |
+| `METRICS_PORT` | Metrics port | 3001 |
+| `METRICS_USER` | Metrics user | admin |
+| `METRICS_PASS` | Metrics password | change_me |
+| `JWT_AUTH_SECRET` | JWT auth secret | change_me |
+| `JWT_API_TOKENS_SECRET` | API tokens secret | change_me |

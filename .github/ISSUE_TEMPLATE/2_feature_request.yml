@@ -1,0 +1,22 @@
+name: '🌠 Feature Request'
+description: 'New feature or request'
+title: '[Request] '
+labels: ['enchancement']
+
+body:
+  - type: textarea
+    attributes:
+      label: '🥰 Feature Description'
+      description: Please add a clear and concise description.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: '🧐 Proposed Solution'
+      description: Describe the solution you'd like in a clear and concise manner.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 'ℹ️ Additional Information'
+      description: Add any other context about the problem here.

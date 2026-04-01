@@ -1,0 +1,38 @@
+---
+title: Доступ к метрикам Prometheus
+---
+
+## В оригинальной установке
+
+Метрики Prometheus доступны на порту 3001 с базовой HTTP-аутентификацией:
+
+```yaml
+scrape_configs:
+  - job_name: 'remnawave'
+    scheme: http
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['remnawave:3001']
+    basic_auth:
+      username: admin
+      password: change_me
+```
+
+## В скрипте eGames
+
+Доступ к метрикам Prometheus также защищен cookie-системой, что означает:
+
+- **Локальный доступ**: Возможен напрямую через `http://127.0.0.1:3001/metrics`
+- **Внешний доступ**: Заблокирован без правильного cookie-набора
+
+
+### Конфигурация переменных окружения
+
+| Переменная | Назначение | Значение по умолчанию |
+| :-- | :-- | :-- |
+| `APP_PORT` | Порт панели | 3000 |
+| `METRICS_PORT` | Порт метрик | 3001 |
+| `METRICS_USER` | Пользователь метрик | admin |
+| `METRICS_PASS` | Пароль метрик | change_me |
+| `JWT_AUTH_SECRET` | Секрет JWT авторизации | change_me |
+| `JWT_API_TOKENS_SECRET` | Секрет API токенов | change_me |

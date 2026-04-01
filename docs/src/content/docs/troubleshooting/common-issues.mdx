@@ -1,0 +1,113 @@
+---
+title: Common Issues
+description: Troubleshooting common issues
+---
+
+import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Deploying bots
+
+If you are deploying bots, ensure that in bot's env or config you're using `local` mode. In that case you can simply enter `http://remnawave:3000` to avoid problems with accessing panel.
+
+## Lost cookie-header to access the panel
+
+If you've lost cookie-header to access the panel, you can retrieve it by following these steps:
+
+<Steps>
+
+1. Navigate to the Remnawave directory
+
+    ```bash
+    cd /opt/remnawave
+    ```
+
+2. Open the nginx configuration in a text editor:
+
+    ```bash
+    nano nginx.conf # or any other editor
+    ```
+
+3. In the beginning, we encounter sections about cookie-paths to the panel:
+
+    ```nginx title="nginx.conf" "rEmnaprx=aBCDefgh"
+    map $arg_rEmnaprx $set_cookie_header {
+        "aBCDefgh" "rEmnaprx=aBCDefgh; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+        default "";
+    }
+    ```
+
+4. Copy the value `rEmnaprx=aBCDefgh` from the `map` section and use it as the cookie-path to the panel.
+
+    Thus, the link will look like this:
+
+    ```
+    https://domain.com/auth/login?rEmnaprx=aBCDefgh
+    ```
+
+</Steps>
+
+## Alias doesn't work in my terminal
+
+In case you've installed script in different terminal (e.g. bash) and now e.g. zsh can't execute the `rr` command you need to:
+
+<Steps>
+
+1. Open zsh config (root or user or even both)
+
+    <Tabs>
+        <TabItem label="User">
+        ```bash
+        nano ~/.zsh
+        ```
+        </TabItem>
+        <TabItem label="Root">
+        ```bash
+        nano /root/.zsh
+        ```
+        </TabItem>
+    </Tabs>
+
+2. Add the following strings
+
+    <Tabs>
+        <TabItem label="User">
+        ```bash
+        source /home/YOURUSERNAME/.bash_profile
+        ```
+        </TabItem>
+        <TabItem label="Root">
+        ```bash
+        source /root/.bash_profile # or source /etc/bash.bashrc
+        ```
+        </TabItem>
+    </Tabs>
+
+3. Restart your terminal or run the command
+
+    ```bash
+    exec zsh
+    ```
+
+</Steps>
+
+## Unlisted issue
+
+Feel free to report any related to our project issues in the [GitHub repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) or [Telegram](https://t.me/remnawave_reverse) chat.
+
+<div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '1rem' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose"
+        icon="add-document"
+        iconPlacement="start"
+    >
+        Create new issue
+    </LinkButton>
+
+    <LinkButton
+        href="https://t.me/remnawave_reverse"
+        icon="telegram"
+        iconPlacement="start"
+    >
+        Discuss in Telegram
+    </LinkButton>
+</div>

@@ -1,0 +1,57 @@
+---
+title: Add node to panel
+description: Instructions for adding a Remnawave node to your panel.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+## Running the script
+
+:::danger[Warning]
+Script must be run as **root**, and also on the server where the Remnawave panel is installed.
+:::
+
+Enter the command on your server:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
+## Add node to panel
+
+<Steps>
+
+1. Select `Install Remnawave components`
+
+    ![Main menu EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+
+2. Then select `Add node to panel`
+
+    ![Add node to panel EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel.webp)
+
+3. Enter your new domain `selfsteal` which will be used to connect the node to the panel, as well as the name for the node.
+
+    :::danger[Warning]
+    Don't forget to add a DNS record for your domain.
+    :::
+
+    ![Add node to panel2 EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel2.webp)
+
+4. After successfully adding the node to the panel, run the script on your new server, where the Remnawave node will be installed, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
+
+</Steps>
+
+## Updating the script
+
+Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"
+        icon="github"
+        iconPlacement="start"
+    >
+        View latest release
+    </LinkButton>
+</div>

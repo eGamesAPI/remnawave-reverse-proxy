@@ -1,0 +1,207 @@
+---
+title: Руководство по установке Beszel
+description: Инструкция по установке и настройке Beszel — легковесной open-source платформы для мониторинга серверов, включая статистику Docker, исторические данные и оповещения.
+---
+import { Code } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+Beszel — это легковесная платформа для мониторинга серверов, включающая статистику Docker, исторические данные и функции оповещения.
+
+Она имеет дружелюбный веб-интерфейс, простую конфигурацию и готова к использованию «из коробки». Поддерживает автоматическое резервное копирование, многопользовательский режим, аутентификацию OAuth и доступ к API.
+
+## Установка Beszel Hub (основной компонент)
+
+:::note[Заметка]
+Рекомендуется наличие `панели Remnawave`, чтобы вам было проще с `сертификатами вашего домена`.
+Так же не забудьте создать запись DNS для вашего Beszel `beszel.example.com` (пример)
+:::
+
+<Steps>
+
+1. Создаем директорию для Beszel и редактируем docker-compose.yml
+
+    ```bash
+    mkdir /opt/beszel && cd /opt/beszel && nano docker-compose.yml
+    ```
+
+2. Добавляем в наш docker-compose.yml Beszel Hub
+
+    ```yaml title="docker-compose.yml"
+    services:
+      beszel:
+        image: henrygd/beszel
+        container_name: beszel
+        restart: always
+        ports:
+          - '127.0.0.1:8090:8090'
+        volumes:
+          - ./beszel_data:/beszel_data
+        logging:
+          driver: 'json-file'
+          options:
+            max-size: '30m'
+            max-file: '5'
+    ```
+
+3. Запускаем Beszel Hub
+
+    ```bash
+    cd /opt/beszel && docker compose up -d && docker compose logs -f
+    ```
+
+4. Редактируем наш nginx.conf
+
+    ```bash
+    cd /opt/remnawave && nano nginx.conf
+    ```
+
+5. Добавляем в наш `nginx.conf` блок `server` и `upstream` для Beszel
+
+    :::danger[Важно]
+    В данном конфиге используется wildcard-сертификат. Если у вас сертификат `ACME`, то не забудьте его сгенерировать для нового домена `beszel.example.com` (пример) и прописать его путь в `nginx.conf` и `docker-compose.yml` по пути в `/opt/remnawave`
+    ::: 
+
+    ```nginx title="nginx.conf" "yourdomain.com"
+    upstream beszel {
+        server 127.0.0.1:8090;
+    }
+
+    server {
+        server_name beszel.yourdomain.com;
+        listen 443 ssl;
+        http2 on;
+
+        ssl_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem";
+        ssl_certificate_key "/etc/nginx/ssl/yourdomain.com/privkey.pem";
+        ssl_trusted_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem";
+
+        location / {
+            proxy_http_version 1.1;
+            proxy_pass http://beszel;
+            proxy_set_header Host $host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Port $server_port;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+    }
+    ```
+
+6. Перезапускаем наш nginx
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose logs -f remnawave-nginx
+    ```
+
+</Steps>
+
+
+### Создание аккаунта
+
+<Steps>
+
+1. Откройте браузер и перейдите по вашему адресу
+    ```
+    https://beszel.example.com
+    ```
+
+2. Открывается страница авторизации Beszel
+
+    ![Admin creation](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/admin_creation_beszel.png)
+
+3. Введите адрес электронной почты и сложный пароль для создания аккаунта
+
+4. Попадаем в панель управления Beszel
+
+    ![Add System](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/add_system_beszel.png)
+
+</Steps>
+
+## Добавление агента в панель управления Beszel
+
+<Steps>
+
+1. Нажимаем на `Add System`
+
+2. Добавляем в систему нашего агента
+
+    ![Add System Host](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/add_system_host_beszel.png)
+
+3. Выбираем способ подключения Binary
+
+4. Заполните имя агента и укажите IP-адрес сервера нашей ноды Remnawave. Порт можем оставить по умолчанию (45876)
+
+5. Нажимаем на `Copy Linux command` и получаем команду для установки агента.
+
+6. Перейдите на сервер Remnawave ноды и выполните скопированную команду.
+
+    ```bash
+    curl -sL https://get.beszel.dev -o /tmp/install-agent.sh && chmod +x /tmp/install-agent.sh && /tmp/install-agent.sh -p 45876 -k "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPW2NUPqCB4pq8oOgEFB9Luqe6oWjEy4bkQV3qcXo3qt" -t "8c9e7262-ced0-4162-bc49-4c985162c22f" -url "https://beszel.example.com"
+    ```
+
+7. Видим, что наш агент успешно установлен
+
+    ![Install Agent](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/install_agent_beszel.png)
+
+</Steps>
+
+## Настройка брандмауэра (UFW) на сервере ноды Remnawave
+
+<Steps>
+
+1. Выполните команду для открытия порта 45876 (TCP) для IP-адреса сервера панели Remnawave (замените `100.88.38.121` на актуальный IP-адрес вашего сервера):
+
+    ```bash
+    ufw allow from 100.88.38.121 to any port 45876 proto tcp
+    ```
+
+2. Перезагрузите брандмауэр:
+
+    ```bash
+    ufw reload
+    ```
+
+3. Подождите несколько минут, пока агент подключится к панели Beszel. Порт 45876 используется для связи агента с Beszel Hub, поэтому он должен быть открыт только для IP-адреса сервера Hub.
+
+    ![Host System](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/host_system_beszel.png)
+
+</Steps>
+
+## Настройка уведомлений в Telegram
+
+<Steps>
+
+1. Откройте браузер и перейдите по вашему адресу 
+
+    ```bash
+    https://beszel.example.com
+    ```
+
+2. Войдите в панель управления Beszel, введите логин и пароль, которые вы указали при создании аккаунта
+
+3. Перейдите в раздел `Settings` 
+
+    ![Beszel Settings](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/beszel/beszel_settings.png)
+
+4. Нажмите на `Notification`
+
+    ![Beszel Notifications](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/beszel/beszel_notifications.png)
+
+5. В поле Webhook / Push notifications вставьте ссылку вида
+
+    ```bash title="Webhook / Push notifications" "8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY" "1465650656"
+    telegram://8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY@telegram?chats=1465650656
+    ```
+    `8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY` - токен вашего бота
+    
+    `1465650656` - ID чата, куда будут отправляться уведомления
+
+6. Нажмите на `Save Settings`
+
+</Steps>
