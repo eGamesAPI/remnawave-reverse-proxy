@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 #Russian translations
 
 declare -gA LANG
@@ -33,7 +33,7 @@ LANG[SUCCESS_INSTALL]="Все пакеты успешно установлены
 #Install Panel+Node Warning
 LANG[PANEL_NODE_SINGLE_SERVER_WARNING]="Этот способ установки не рекомендуется для использования в производственных средах, поскольку он отсутствует в официальной документации Remnawave."
 LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]="Для оптимального результата и стабильной работы, пожалуйста, выбирайте методы установки Только панель или Только нода в зависимости от ваших потребностей."
-LANG[CONFIRM_CONTINUE]="Продолжить? (y/n):"
+LANG[CONFIRM_CONTINUE]="Продолжить?"
 #Update Script
 LANG[UPDATING_LANG_FILES]="Обновление языковых файлов..."
 LANG[LANG_FILE_UPDATED]="✓ %s обновлён"

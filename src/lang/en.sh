@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 #English translations
 
 declare -gA LANG
@@ -34,7 +34,7 @@ LANG[SUCCESS_INSTALL]="All packages installed successfully"
 #Install Panel+Node Warning
 LANG[PANEL_NODE_SINGLE_SERVER_WARNING]="This installation method is not recommended for production environments as it is not documented in the official Remnawave documentation."
 LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]="For optimal results and stable operation, please choose the Panel Only or Node Only installation methods depending on your needs."
-LANG[CONFIRM_CONTINUE]="Continue? (y/n):"
+LANG[CONFIRM_CONTINUE]="Continue?"
 #Update Script
 LANG[UPDATING_LANG_FILES]="Updating language files..."
 LANG[LANG_FILE_UPDATED]="✓ %s updated"
