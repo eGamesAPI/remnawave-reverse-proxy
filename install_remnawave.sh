@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.0.0"
+SCRIPT_VERSION="3.0.1"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -169,7 +169,7 @@ update_remnawave_reverse() {
     done
 
     # Modules (common)
-    local common_modules=("add_node" "manage_panel" "warp" "ipv6" "selfsteal_templates")
+    local common_modules=("add_node" "manage_panel")
     for module in "${common_modules[@]}"; do
         local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
         if [ -f "$module_file" ]; then
@@ -278,12 +278,6 @@ remove_script() {
                 docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
                 spinner $! "${LANG[WAITING]}"
                 rm -rf /opt/remnawave 2>/dev/null
-            fi
-            if [ -d "/opt/remnanode" ]; then
-                cd /opt/remnanode || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} /opt/remnanode${COLOR_RESET}"; exit 1; }
-                docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-                spinner $! "${LANG[WAITING]}"
-                rm -rf /opt/remnanode 2>/dev/null
             fi
             docker system prune -a --volumes -f > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
@@ -422,7 +416,6 @@ show_menu() {
     else
 		echo -e "${COLOR_GRAY}$(printf "${LANG[VERSION_LABEL]}" "$SCRIPT_VERSION")${COLOR_RESET}"
     fi
-    echo -e "${COLOR_GRAY}Wiki: https://wiki.egam.es/${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}" # Install Remnawave Components
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
@@ -430,14 +423,13 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Install random template
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
-    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
+    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # Extensions distilium
     echo -e ""
-    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
-    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Manage IPv6
+    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
-    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
-    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
+    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Check for updates
+    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
@@ -476,22 +468,6 @@ manage_install() {
     reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
     case $INSTALL_OPTION in
         1)
-            # Показать предупреждение для установки панели+ноды на один сервер
-            echo -e ""
-            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_WARNING]}${COLOR_RESET}"
-            echo -e ""
-            echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]}${COLOR_RESET}"
-            echo -e ""
-            reading "${LANG[CONFIRM_CONTINUE]}" confirm_install
-            
-            if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                log_clear
-                manage_install
-                return
-            fi
-            
             show_webserver_select
             case $WEBSERVER_OPTION in
                 1)
@@ -671,9 +647,9 @@ choose_reinstall_type() {
                     case $WEBSERVER_OPTION in
                         1)
                             case $REINSTALL_OPTION in
-                                1) load_install_panel_node_module; load_api_module; installation ;;
-                                2) load_install_panel_module; load_api_module; installation_panel ;;
-                                3) load_install_node_module; load_api_module; installation_node ;;
+                                1) load_install_panel_node_module; installation ;;
+                                2) load_install_panel_module; installation_panel ;;
+                                3) load_install_node_module; installation_node ;;
                             esac
                             ;;
                         2)
@@ -714,18 +690,404 @@ reinstall_remnawave() {
         cd /opt/remnawave || return
         docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
         spinner $! "${LANG[WAITING]}"
-        rm -rf /opt/remnawave 2>/dev/null
-    fi
-    if [ -d "/opt/remnanode" ]; then
-        cd /opt/remnanode || return
-        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        rm -rf /opt/remnanode 2>/dev/null
     fi
     docker system prune -a --volumes -f > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
+    rm -rf /opt/remnawave 2>/dev/null
 }
 #Show Reinstall Options
+
+#Manage Panel Node Menu
+
+manage_extensions() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[EXTENSIONS_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[WARP_MENU]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[BACKUP_RESTORE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[EXTENSIONS_PROMPT]}" EXTENSION_OPTION
+
+    case $EXTENSION_OPTION in
+        1)
+            manage_warp
+            log_clear
+            manage_extensions
+            ;;
+        2)
+            if [ -f ~/backup-restore.sh ]; then
+                rw-backup
+            else
+                curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
+            fi
+            log_clear
+            manage_extensions
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            echo -e "${COLOR_RED}${LANG[EXTENSIONS_INVALID_CHOICE]}${COLOR_RESET}"
+            ;;
+    esac
+}
+
+manage_warp() {
+    load_api_module
+	
+	echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[WARP_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[WARP_UNINSTALL]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}3. ${LANG[WARP_ADD_CONFIG]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[WARP_DELETE_WARP_SETTINGS]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[WARP_PROMPT]}" WARP_OPTION
+
+    case $WARP_OPTION in
+        1)
+            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
+                exit 1
+            fi
+            bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/install.sh)
+            ;;
+        2)
+            bash <(curl -fsSL https://raw.githubusercontent.com/distillium/warp-native/main/uninstall.sh)
+            ;;
+        3)
+            local domain_url="127.0.0.1:3000"
+            
+            echo -e ""
+            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[WARP_CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
+            read confirm
+            echo
+
+            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                exit 0
+            fi
+            
+            get_panel_token
+            token=$(cat "$TOKEN_FILE")
+
+            local config_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
+            if [ -z "$config_response" ] || ! echo "$config_response" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Invalid response${COLOR_RESET}"
+            fi
+
+            if ! echo "$config_response" | jq -e '.response.configProfiles | type == "array"' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Response does not contain configProfiles array${COLOR_RESET}"
+            fi
+
+            local config_count=$(echo "$config_response" | jq '.response.configProfiles | length')
+            if [ "$config_count" -eq 0 ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Empty configuration list${COLOR_RESET}"
+            fi
+            local configs=$(echo "$config_response" | jq -r '.response.configProfiles[] | select(.uuid and .name) | "\(.name) \(.uuid)"' 2>/dev/null)
+            if [ -z "$configs" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: No valid configurations found in response${COLOR_RESET}"
+            fi
+
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[WARP_SELECT_CONFIG]}${COLOR_RESET}"
+            echo -e ""
+            local i=1
+            declare -A config_map
+            while IFS=' ' read -r name uuid; do
+                echo -e "${COLOR_YELLOW}$i. $name${COLOR_RESET}"
+                config_map[$i]="$uuid"
+                ((i++))
+            done <<< "$configs"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+            echo -e ""
+            reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION
+
+            if [ "$CONFIG_OPTION" == "0" ]; then
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                return 0
+            fi
+
+            if [ -z "${config_map[$CONFIG_OPTION]}" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE2]}${COLOR_RESET}"
+                return 1
+            fi
+
+            local selected_uuid=${config_map[$CONFIG_OPTION]}
+
+            local config_data=$(make_api_request "GET" "${domain_url}/api/config-profiles/$selected_uuid" "$token")
+            if [ -z "$config_data" ] || ! echo "$config_data" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
+            fi
+
+            local config_json
+            if echo "$config_data" | jq -e '.response.config' > /dev/null 2>&1; then
+                config_json=$(echo "$config_data" | jq -r '.response.config')
+            else
+                config_json=$(echo "$config_data" | jq -r '.config // ""')
+            fi
+
+            if [ -z "$config_json" ] || [ "$config_json" == "null" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: No config found in response${COLOR_RESET}"
+            fi
+
+            if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' > /dev/null 2>&1; then
+                echo -e "${COLOR_YELLOW}${LANG[WARP_WARNING]}${COLOR_RESET}"
+            else
+                local warp_outbound='{
+                    "tag": "warp-out",
+                    "protocol": "freedom",
+                    "settings": {
+					    "domainStrategy": "UseIP"
+					},
+                    "streamSettings": {
+                        "sockopt": {
+                            "interface": "warp",
+                            "tcpFastOpen": true
+                        }
+                    }
+                }'
+                config_json=$(echo "$config_json" | jq --argjson warp_out "$warp_outbound" '.outbounds += [$warp_out]' 2>/dev/null)
+            fi
+
+            if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' > /dev/null 2>&1; then
+                echo -e "${COLOR_YELLOW}${LANG[WARP_WARNING2]}${COLOR_RESET}"
+            else
+                local warp_rule='{
+                    "type": "field",
+                    "domain": ["whoer.net", "browserleaks.com", "2ip.io", "2ip.ru"],
+                    "outboundTag": "warp-out"
+                }'
+                config_json=$(echo "$config_json" | jq --argjson warp_rule "$warp_rule" '.routing.rules += [$warp_rule]' 2>/dev/null)
+            fi
+
+            local update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
+            if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
+            fi
+
+            echo -e "${COLOR_GREEN}${LANG[WARP_UPDATE_SUCCESS]}${COLOR_RESET}"
+            log_clear
+            manage_warp
+            ;;
+        4)
+            local domain_url="127.0.0.1:3000"
+            
+            echo -e ""
+            echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[WARP_CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
+            read confirm
+            echo
+
+            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                exit 0
+            fi
+            
+            get_panel_token
+            token=$(cat "$TOKEN_FILE")
+
+            local config_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
+            if [ -z "$config_response" ] || ! echo "$config_response" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Invalid response${COLOR_RESET}"
+                return 1
+            fi
+
+            if ! echo "$config_response" | jq -e '.response.configProfiles | type == "array"' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Response does not contain configProfiles array${COLOR_RESET}"
+                return 1
+            fi
+
+            local config_count=$(echo "$config_response" | jq '.response.configProfiles | length')
+            if [ "$config_count" -eq 0 ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: Empty configuration list${COLOR_RESET}"
+                return 1
+            fi
+
+            local configs=$(echo "$config_response" | jq -r '.response.configProfiles[] | select(.uuid and .name) | "\(.name) \(.uuid)"' 2>/dev/null)
+            if [ -z "$configs" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_NO_CONFIGS]}: No valid configurations found in response${COLOR_RESET}"
+                return 1
+            fi
+
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[WARP_SELECT_CONFIG_DELETE]}${COLOR_RESET}"
+            echo -e ""
+            local i=1
+            declare -A config_map
+            while IFS=' ' read -r name uuid; do
+                echo -e "${COLOR_YELLOW}$i. $name${COLOR_RESET}"
+                config_map[$i]="$uuid"
+                ((i++))
+            done <<< "$configs"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+            echo -e ""
+            reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION
+
+            if [ "$CONFIG_OPTION" == "0" ]; then
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                return 0
+            fi
+
+            if [ -z "${config_map[$CONFIG_OPTION]}" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE2]}${COLOR_RESET}"
+                return 1
+            fi
+
+            local selected_uuid=${config_map[$CONFIG_OPTION]}
+
+            local config_data=$(make_api_request "GET" "${domain_url}/api/config-profiles/$selected_uuid" "$token")
+            if [ -z "$config_data" ] || ! echo "$config_data" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
+                return 1
+            fi
+
+            local config_json
+            if echo "$config_data" | jq -e '.response.config' > /dev/null 2>&1; then
+                config_json=$(echo "$config_data" | jq -r '.response.config')
+            else
+                config_json=$(echo "$config_data" | jq -r '.config // ""')
+            fi
+
+            if [ -z "$config_json" ] || [ "$config_json" == "null" ]; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: No config found in response${COLOR_RESET}"
+                return 1
+            fi
+            
+            if echo "$config_json" | jq -e '.outbounds[] | select(.tag == "warp-out")' > /dev/null 2>&1; then
+                config_json=$(echo "$config_json" | jq 'del(.outbounds[] | select(.tag == "warp-out"))' 2>/dev/null)
+                echo -e "${COLOR_YELLOW}${LANG[WARP_REMOVED_WARP_SETTINGS1]}${COLOR_RESET}"
+            else
+                echo -e "${COLOR_YELLOW}${LANG[WARP_NO_WARP_SETTINGS1]}${COLOR_RESET}"
+            fi
+
+            if echo "$config_json" | jq -e '.routing.rules[] | select(.outboundTag == "warp-out")' > /dev/null 2>&1; then
+                config_json=$(echo "$config_json" | jq 'del(.routing.rules[] | select(.outboundTag == "warp-out"))' 2>/dev/null)
+                echo -e "${COLOR_YELLOW}${LANG[WARP_REMOVED_WARP_SETTINGS2]}${COLOR_RESET}"
+            else
+                echo -e "${COLOR_YELLOW}${LANG[WARP_NO_WARP_SETTINGS2]}${COLOR_RESET}"
+            fi
+
+            local update_response=$(make_api_request "PATCH" "${domain_url}/api/config-profiles" "$token" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
+            if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' > /dev/null 2>&1; then
+                echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
+                return 1
+            fi
+
+            echo -e "${COLOR_GREEN}${LANG[WARP_DELETE_SUCCESS]}${COLOR_RESET}"
+            log_clear
+            manage_warp
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE]}${COLOR_RESET}"
+            ;;
+    esac
+}
+
+#Manage IPv6
+show_ipv6_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[IPV6_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[IPV6_ENABLE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[IPV6_DISABLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+}
+
+manage_ipv6() {
+    show_ipv6_menu
+    reading "${LANG[IPV6_PROMPT]}" IPV6_OPTION
+    case $IPV6_OPTION in
+        1)
+            enable_ipv6
+            sleep 2
+            log_clear
+            manage_ipv6
+            ;;
+        2)
+            disable_ipv6
+            sleep 2
+            log_clear
+            manage_ipv6
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            log_clear
+            remnawave_reverse
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            log_clear
+            manage_ipv6
+            ;;
+    esac
+}
+
+enable_ipv6() {
+    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" -eq 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IPV6_ALREADY_ENABLED]}${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e "${COLOR_YELLOW}${LANG[ENABLE_IPV6]}${COLOR_RESET}"
+    interface_name=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -n 1)
+
+    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.conf
+    sed -i "/net.ipv6.conf.$interface_name.disable_ipv6/d" /etc/sysctl.conf
+
+    echo "net.ipv6.conf.all.disable_ipv6 = 0" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.default.disable_ipv6 = 0" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.lo.disable_ipv6 = 0" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.$interface_name.disable_ipv6 = 0" >> /etc/sysctl.conf
+
+    sysctl -p > /dev/null 2>&1
+    echo -e "${COLOR_GREEN}${LANG[IPV6_ENABLED]}${COLOR_RESET}"
+}
+
+disable_ipv6() {
+    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" -eq 1 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IPV6_ALREADY_DISABLED]}${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e "${COLOR_YELLOW}${LANG[DISABLING_IPV6]}${COLOR_RESET}"
+    interface_name=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -n 1)
+
+    sed -i '/net.ipv6.conf.all.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.default.disable_ipv6/d' /etc/sysctl.conf
+    sed -i '/net.ipv6.conf.lo.disable_ipv6/d' /etc/sysctl.conf
+    sed -i "/net.ipv6.conf.$interface_name.disable_ipv6/d" /etc/sysctl.conf
+
+    echo "net.ipv6.conf.all.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.default.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.lo.disable_ipv6 = 1" >> /etc/sysctl.conf
+    echo "net.ipv6.conf.$interface_name.disable_ipv6 = 1" >> /etc/sysctl.conf
+
+    sysctl -p > /dev/null 2>&1
+    echo -e "${COLOR_GREEN}${LANG[IPV6_DISABLED]}${COLOR_RESET}"
+}
+#Manage IPv6
 
 #Extensions by legiz
 show_custom_legiz_menu() {
@@ -1214,21 +1576,159 @@ spinner() {
   printf "\r\033[K" > /dev/tty
 }
 
-#Extensions by legiz
-show_custom_legiz_menu() {
+#Manage Template for steal
+show_template_source_options() {
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[MENU_5]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[CHOOSE_TEMPLATE_SOURCE]}${COLOR_RESET}"
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[SELECT_SUB_PAGE_CUSTOM1]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[CUSTOM_APP_LIST_MENU]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
 }
 
+randomhtml() {
+    local template_source="$1"
+
+    cd /opt/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
+
+    rm -f main.zip 2>/dev/null
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/ 2>/dev/null
+
+    echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
+    sleep 1
+    spinner $$ "${LANG[WAITING]}" &
+    spinner_pid=$!
+
+    template_urls=(
+        "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
+        "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
+        "https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip"
+    )
+
+    if [ -z "$template_source" ]; then
+        selected_url=${template_urls[$RANDOM % ${#template_urls[@]}]}
+    else
+        if [ "$template_source" = "simple" ]; then
+            selected_url=${template_urls[0]}  # Simple web templates
+        elif [ "$template_source" = "sni" ]; then
+            selected_url=${template_urls[1]}  # Sni templates
+        elif [ "$template_source" = "nothing" ]; then
+            selected_url=${template_urls[2]}  # Nothing templates
+        else
+            selected_url=${template_urls[1]}  # Default to Sni templates
+        fi
+    fi
+
+    while ! wget -q --timeout=30 --tries=10 --retry-connrefused "$selected_url"; do
+        echo "${LANG[DOWNLOAD_FAIL]}"
+        sleep 3
+    done
+
+    unzip -o main.zip &>/dev/null || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+    rm -f main.zip
+
+    if [[ "$selected_url" == *"eGamesAPI"* ]]; then
+        cd simple-web-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf assets ".gitattributes" "README.md" "_config.yml" 2>/dev/null
+    elif [[ "$selected_url" == *"nothing-sni"* ]]; then
+        cd nothing-sni-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf .github README.md 2>/dev/null
+    else
+        cd sni-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        rm -rf assets "README.md" "index.html" 2>/dev/null
+    fi
+
+    # Special handling for nothing-sni - select random HTML file
+    if [[ "$selected_url" == *"nothing-sni"* ]]; then
+        # Randomly select one HTML file from 1-8.html
+        selected_number=$((RANDOM % 8 + 1))
+        RandomHTML="${selected_number}.html"
+    else
+        mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
+
+        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+    fi
+
+    if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
+        cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        versions=("v1" "v2")
+        RandomVersion="${versions[$RANDOM % ${#versions[@]}]}"
+        RandomHTML="$RandomHTML/$RandomVersion"
+        cd ..
+    fi
+
+    local random_meta_id=$(openssl rand -hex 16)
+    local random_comment=$(openssl rand -hex 8)
+    local random_class_suffix=$(openssl rand -hex 4)
+    local random_title_prefix="Page_"
+    local random_title_suffix=$(openssl rand -hex 4)
+    local random_footer_text="Designed by RandomSite_${random_title_suffix}"
+    local random_id_suffix=$(openssl rand -hex 4)
+
+    local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
+    local meta_usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
+    local random_meta_name=${meta_names[$RANDOM % ${#meta_names[@]}]}
+    local random_username=${meta_usernames[$RANDOM % ${#meta_usernames[@]}]}
+
+    local class_prefixes=("style" "data" "ui" "layout" "theme" "view")
+    local random_class_prefix=${class_prefixes[$RANDOM % ${#class_prefixes[@]}]}
+    local random_class="$random_class_prefix-$random_class_suffix"
+    local random_title="${random_title_prefix}${random_title_suffix}"
+
+    find "./$RandomHTML" -type f -name "*.html" -exec sed -i \
+        -e "s|<!-- Website template by freewebsitetemplates.com -->||" \
+        -e "s|<!-- Theme by: WebThemez.com -->||" \
+        -e "s|<a href=\"http://freewebsitetemplates.com\">Free Website Templates</a>|<span>${random_footer_text}</span>|" \
+        -e "s|<a href=\"http://webthemez.com\" alt=\"webthemez\">WebThemez.com</a>|<span>${random_footer_text}</span>|" \
+        -e "s|id=\"Content\"|id=\"rnd_${random_id_suffix}\"|" \
+        -e "s|id=\"subscribe\"|id=\"sub_${random_id_suffix}\"|" \
+        -e "s|<title>.*</title>|<title>${random_title}</title>|" \
+        -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
+        -e "s/<body/<body class=\"$random_class\"/" \
+        -e "s/CHANGEMEPLS/$random_username/g" \
+        {} \;
+
+    find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
+        -e "1i\/* $random_comment */" \
+        -e "1i.$random_class { display: block; }" \
+        {} \;
+
+    kill "$spinner_pid" 2>/dev/null
+    wait "$spinner_pid" 2>/dev/null
+    printf "\r\033[K" > /dev/tty
+
+    echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
+
+    if [[ -d "${RandomHTML}" ]]; then
+        if [[ ! -d "/var/www/html/" ]]; then
+            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
+        fi
+        rm -rf /var/www/html/*
+        cp -a "${RandomHTML}"/. "/var/www/html/"
+        echo "${LANG[TEMPLATE_COPY]}"
+    elif [[ -f "${RandomHTML}" ]]; then
+        cp "${RandomHTML}" "/var/www/html/index.html"
+        echo "${LANG[TEMPLATE_COPY]}"
+    else
+        echo "${LANG[UNPACK_ERROR]}" && exit 1
+    fi
+
+    if ! find "/var/www/html" -type f -name "*.html" -exec grep -q "$random_meta_name" {} \; 2>/dev/null; then
+        echo -e "${COLOR_RED}${LANG[FAILED_TO_MODIFY_HTML_FILES]}${COLOR_RESET}"
+        return 1
+    fi
+
+    cd /opt/
+    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/
+}
+#Manage Template for steal
+
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
-
+    
     if ! apt-get update -y; then
         echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_LIST]}${COLOR_RESET}" >&2
         return 1
@@ -2182,9 +2682,6 @@ load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 load_caddy_module() { load_module "install_panel_node" "caddy" "${1:-false}"; }
 load_caddy_panel_module() { load_module "install_panel" "caddy" "${1:-false}"; }
 load_caddy_node_module() { load_module "install_node" "caddy" "${1:-false}"; }
-load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
-load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
-load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 
 log_entry
 
@@ -2219,7 +2716,6 @@ case $OPTION in
         show_manage_panel_menu
         ;;
     4)
-        load_selfsteal_templates_module
         if [ ! -d "/opt/remnawave" ]; then
             echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
             exit 1
@@ -2263,42 +2759,30 @@ case $OPTION in
         remnawave_reverse
         ;;
     6)
-        load_warp_module
-        manage_warp_native
+        manage_extensions
         sleep 2
         log_clear
         remnawave_reverse
         ;;
     7)
-        if [ -f ~/backup-restore.sh ]; then
-            rw-backup
-        else
-            curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
-        fi
-        sleep 2
-        log_clear
-        remnawave_reverse
-        ;;
-    8)
-        load_ipv6_module
         manage_ipv6
         sleep 2
         log_clear
         remnawave_reverse
         ;;
-    9)
+    8)
         manage_certificates
         sleep 2
         log_clear
         remnawave_reverse
         ;;
-    10)
+    9)
         update_remnawave_reverse
         sleep 2
         log_clear
         remnawave_reverse
         ;;
-    11)
+    10)
         remove_script
         ;;
     0)
