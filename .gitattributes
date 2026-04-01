@@ -1,2 +1,5 @@
 README.md merge=ours
 README-RU.md merge=ours
+*.sh text eol=lf
+*.bash text eol=lf
+* text eol=lf
