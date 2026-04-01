@@ -1,5 +1,27 @@
+# Documentation and media files (managed separately)
 docs/
 media/
 .github/
+
+# README files
 README.md
 README-RU.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.bak
