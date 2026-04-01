@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: Remnawave API Functions
 
 make_api_request() {
