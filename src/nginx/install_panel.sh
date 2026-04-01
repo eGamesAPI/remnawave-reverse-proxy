@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Module: Install Panel Only
 
 install_panel_nginx() {
