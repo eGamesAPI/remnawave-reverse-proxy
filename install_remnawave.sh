@@ -476,7 +476,6 @@ manage_install() {
     reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
     case $INSTALL_OPTION in
         1)
-            # Показать предупреждение для установки панели+ноды на один сервер
             echo -e ""
             echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
             echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_WARNING]}${COLOR_RESET}"
@@ -487,9 +486,7 @@ manage_install() {
             
             if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                log_clear
-                manage_install
-                return
+                exit 0
             fi
             
             show_webserver_select
