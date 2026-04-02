@@ -1,7 +1,10 @@
 #!/bin/bash
-# Module: Install Panel
+# Module: Install Panel + Node
 
-install_panel_caddy() {
+install_panel_node_caddy() {
+    # Load selfsteal templates module
+    load_selfsteal_templates_module
+
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -247,6 +250,8 @@ services:
           - caddy_data:/data
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
+          - CADDY_SOCKET_PATH=/dev/shm/nginx.sock
+          - SELF_STEAL_DOMAIN=${SELFSTEAL_DOMAIN}
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
@@ -273,10 +278,28 @@ services:
       remnawave:
         condition: service_healthy
 
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    <<: [*common, *logging]
+    depends_on:
+      remnawave:
+        condition: service_healthy
+    network_mode: host
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+    volumes:
+      - /dev/shm:/dev/shm:rw
+
 networks:
   remnawave-network:
     name: remnawave-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
     external: false
 
 volumes:
@@ -297,6 +320,25 @@ EOL
     cat > /opt/remnawave/Caddyfile <<EOL
 {
     admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
+
+http://{\$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{\$SELF_STEAL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    root * /var/www/html
+    try_files {path} /index.html
+    file_server
 }
 
 http://{\$PANEL_DOMAIN} {
@@ -305,6 +347,7 @@ http://{\$PANEL_DOMAIN} {
 }
 
 https://{\$PANEL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
 
     @has_token_param {
         query $cookies_random1=$cookies_random2
@@ -321,7 +364,9 @@ https://{\$PANEL_DOMAIN} {
     }
 
     handle @unauthorized {
-        abort
+        root * /var/www/html
+        try_files {path} /index.html
+        file_server
     }
 
     @oauth2_bad {
@@ -350,7 +395,13 @@ https://{\$PANEL_DOMAIN} {
     }
 }
 
+http://{\$SUB_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SUB_DOMAIN}{uri} permanent
+}
+
 https://{\$SUB_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
     handle {
         reverse_proxy {\$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}
@@ -366,16 +417,19 @@ https://{\$SUB_DOMAIN} {
 EOL
 }
 
-installation_panel_caddy() {
-    install_panel_caddy
+installation_panel_node_caddy() {
+    install_panel_node_caddy
 	
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
     ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
+
+    remnawave_network_subnet=172.30.0.0/16
+    ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp > /dev/null 2>&1
 
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
@@ -402,6 +456,11 @@ installation_panel_caddy() {
     local token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
     echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
+    # Get public key
+    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
+    sleep 1
+    get_public_key "$domain_url" "$token" "$target_dir"
+
     # Generate Xray keys
     echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
@@ -418,7 +477,7 @@ installation_panel_caddy() {
 
     # Create node with config profile binding
     echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid"
 
     # Create host
     echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
@@ -436,15 +495,15 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
     create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave Subscription Page
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    # Stop and start Remnawave
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
@@ -462,5 +521,6 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
+
+    randomhtml
 }
