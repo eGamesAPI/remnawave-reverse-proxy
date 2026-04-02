@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # Module: Install Node Only
 
 install_node_nginx() {
