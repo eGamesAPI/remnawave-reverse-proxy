@@ -1,5 +1,5 @@
 #!/bin/bash
-# Module: Install Node
+# Module: Install Node Nginx
 
 install_node_caddy() {
     # Load selfsteal templates module
