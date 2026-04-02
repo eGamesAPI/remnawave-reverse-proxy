@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.0.4"
+SCRIPT_VERSION="3.0.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -13,6 +13,98 @@ COLOR_YELLOW="\033[1;33m"
 COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
 COLOR_GRAY='\033[0;90m'
+
+# Download file with multiple mirrors and validation
+download_with_mirrors() {
+    local file_url="$1"
+    local dest_file="$2"
+    local file_type="${3:-script}"  # script, lang, module
+    
+    # Mirror URLs (GitHub raw content proxies)
+    local mirrors=(
+        "$file_url"
+        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/${file_url#*main/}"
+        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/main/${file_url#*main/}"
+        "https://ghproxy.com/${file_url}"
+    )
+    
+    local temp_file="${dest_file}.tmp"
+    local download_success=false
+    local http_code=""
+    
+    # Try each mirror
+    for mirror_url in "${mirrors[@]}"; do
+        if command -v curl &> /dev/null; then
+            http_code=$(curl -sL -w "%{http_code}" --connect-timeout 10 --max-time 30 "$mirror_url" -o "$temp_file" 2>/dev/null)
+            if [ "$http_code" = "200" ] && [ -s "$temp_file" ]; then
+                # Validate file content
+                if validate_downloaded_file "$temp_file" "$file_type"; then
+                    download_success=true
+                    break
+                fi
+            fi
+        elif command -v wget &> /dev/null; then
+            if wget -q --timeout=10 --tries=1 "$mirror_url" -O "$temp_file" 2>/dev/null; then
+                if [ -s "$temp_file" ]; then
+                    # Validate file content
+                    if validate_downloaded_file "$temp_file" "$file_type"; then
+                        download_success=true
+                        break
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    if [ "$download_success" = "true" ]; then
+        mv "$temp_file" "$dest_file"
+        rm -f "${dest_file}.bak"
+        return 0
+    else
+        rm -f "$temp_file"
+        return 1
+    fi
+}
+
+# Validate downloaded file content
+validate_downloaded_file() {
+    local file="$1"
+    local file_type="$2"
+    
+    if [ ! -s "$file" ]; then
+        return 1
+    fi
+    
+    # Check for HTTP error responses or rate limit errors
+    if grep -q "429" "$file" && grep -q "Too Many Requests" "$file"; then
+        return 1
+    fi
+    
+    if grep -q "404" "$file" && grep -q "Not Found" "$file"; then
+        return 1
+    fi
+    
+    # Check for Terms of Service warnings (GitHub scraping warning)
+    if grep -q "Terms of Service" "$file" && grep -q "scraping" "$file"; then
+        return 1
+    fi
+    
+    # For bash scripts, check for proper shebang
+    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
+        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
+            return 1
+        fi
+    fi
+    
+    # For language files, check for LANG array declaration
+    if [ "$file_type" = "lang" ]; then
+        if ! grep -q "declare -gA LANG" "$file"; then
+            return 1
+        fi
+    fi
+    
+    return 0
+}
 
 load_language() {
     if [ -f "$LANG_FILE" ]; then
@@ -55,21 +147,35 @@ set_language() {
      if [ "$force_update" = "true" ] || [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
          mkdir -p "${DIR_REMNAWAVE}lang"
-         if command -v curl &> /dev/null; then
-             curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
-         elif command -v wget &> /dev/null; then
-             wget -q "$lang_url" -O "$lang_file" 2>/dev/null
+         
+         # Use download_with_mirrors for reliable download
+         if ! download_with_mirrors "$lang_url" "$lang_file" "lang"; then
+             # Fallback: try direct download if mirrors fail
+             if command -v curl &> /dev/null; then
+                 curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
+             elif command -v wget &> /dev/null; then
+                 wget -q "$lang_url" -O "$lang_file" 2>/dev/null
+             fi
          fi
      fi
 
      if [ -f "$lang_file" ]; then
          source "$lang_file"
      else
+         # Emergency fallback: download English from mirrors
          local en_url="${LANG_BASE_URL}/en.sh"
-         if command -v curl &> /dev/null; then
-             source <(curl -sL "$en_url" 2>/dev/null)
-         elif command -v wget &> /dev/null; then
-             source <(wget -qO- "$en_url" 2>/dev/null)
+         local temp_en_file="${DIR_REMNAWAVE}lang/en_temp.sh"
+         
+         if download_with_mirrors "$en_url" "$temp_en_file" "lang"; then
+             source "$temp_en_file"
+             mv "$temp_en_file" "${DIR_REMNAWAVE}lang/en.sh"
+         else
+             # Last resort: direct download
+             if command -v curl &> /dev/null; then
+                 source <(curl -sL "$en_url" 2>/dev/null)
+             elif command -v wget &> /dev/null; then
+                 source <(wget -qO- "$en_url" 2>/dev/null)
+             fi
          fi
      fi
 }
@@ -206,7 +312,9 @@ update_remnawave_reverse() {
     echo -e ""
 
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
-    if wget -q -O "$temp_script" "$SCRIPT_URL"; then
+    
+    # Use download_with_mirrors for reliable script download
+    if download_with_mirrors "$SCRIPT_URL" "$temp_script" "script"; then
         local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
         if [ "$downloaded_version" != "$remote_version" ]; then
             echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
@@ -233,6 +341,35 @@ update_remnawave_reverse() {
         echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_GREEN} remnawave_reverse${COLOR_RESET}"
         exit 0
     else
+        # Fallback: try direct download with wget
+        if wget -q -O "$temp_script" "$SCRIPT_URL" 2>/dev/null; then
+            local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
+            if [ "$downloaded_version" != "$remote_version" ]; then
+                echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
+                rm -f "$temp_script"
+                return 1
+            fi
+
+            if [ -f "$update_script" ]; then
+                rm -f "$update_script"
+            fi
+            mv "$temp_script" "$update_script"
+            chmod +x "$update_script"
+
+            if [ -e "$bin_link" ]; then
+                rm -f "$bin_link"
+            fi
+            ln -s "$update_script" "$bin_link"
+
+            hash -r
+
+            printf "${COLOR_GREEN}${LANG[UPDATE_SUCCESS]}${COLOR_RESET}\n" "$remote_version"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[RESTART_REQUIRED]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_GREEN} remnawave_reverse${COLOR_RESET}"
+            exit 0
+        fi
+        
         echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
         rm -f "$temp_script"
         return 1
@@ -308,9 +445,15 @@ remove_script() {
 install_script_if_missing() {
     if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
         mkdir -p "${DIR_REMNAWAVE}"
-        if ! wget -q -O "${DIR_REMNAWAVE}remnawave_reverse" "$SCRIPT_URL"; then
-            exit 1
+        
+        # Use download_with_mirrors for reliable download
+        if ! download_with_mirrors "$SCRIPT_URL" "${DIR_REMNAWAVE}remnawave_reverse" "script"; then
+            # Fallback: try direct download
+            if ! wget -q -O "${DIR_REMNAWAVE}remnawave_reverse" "$SCRIPT_URL" 2>/dev/null; then
+                exit 1
+            fi
         fi
+        
         chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
         ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
     fi
@@ -2136,28 +2279,36 @@ load_module() {
             cp "$module_file" "$backup_file"
         fi
 
-        local download_success=false
-        if command -v curl &> /dev/null; then
-            local http_code
-            http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
-            if [ "$http_code" = "200" ] && [ -s "$module_file" ]; then
-                download_success=true
+        # Use download_with_mirrors for reliable download
+        if download_with_mirrors "$module_url" "$module_file" "module"; then
+            rm -f "$backup_file"
+        else
+            # Fallback: try direct download if mirrors fail
+            if command -v curl &> /dev/null; then
+                local http_code
+                http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
+                if [ "$http_code" != "200" ] || [ ! -s "$module_file" ]; then
+                    if [ -f "$backup_file" ]; then
+                        mv "$backup_file" "$module_file"
+                    fi
+                    return 1
+                fi
+            elif command -v wget &> /dev/null; then
+                wget -q "$module_url" -O "$module_file" 2>/dev/null
+                if [ ! -s "$module_file" ]; then
+                    if [ -f "$backup_file" ]; then
+                        mv "$backup_file" "$module_file"
+                    fi
+                    return 1
+                fi
+            else
+                if [ -f "$backup_file" ]; then
+                    mv "$backup_file" "$module_file"
+                fi
+                return 1
             fi
-        elif command -v wget &> /dev/null; then
-            wget -q "$module_url" -O "$module_file" 2>/dev/null
-            if [ -s "$module_file" ]; then
-                download_success=true
-            fi
+            rm -f "$backup_file"
         fi
-
-        if [ "$download_success" = "false" ]; then
-            if [ -f "$backup_file" ]; then
-                mv "$backup_file" "$module_file"
-            fi
-            return 1
-        fi
-
-        rm -f "$backup_file"
     fi
 
     if [ -f "$module_file" ]; then
