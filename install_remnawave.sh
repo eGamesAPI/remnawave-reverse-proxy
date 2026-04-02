@@ -1964,7 +1964,7 @@ handle_certificates() {
     local -n domains_to_check_ref=$1
     local cert_method="$2"
     local letsencrypt_email="$3"
-    local target_dir="/opt/remnawave"
+    local target_dir="${4:-/opt/remnawave}"
 
     declare -A unique_domains
     local need_certificates=false
@@ -2090,7 +2090,7 @@ handle_certificates() {
 
     local cron_command
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd /opt/remnawave && docker compose down && docker compose up"
+        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd $target_dir && docker compose down && docker compose up"
     else
         cron_command="/usr/bin/certbot renew --quiet"
     fi
@@ -2109,7 +2109,7 @@ handle_certificates() {
 
     for domain in "${!unique_domains[@]}"; do
         if [ -f "/etc/letsencrypt/renewal/$domain.conf" ]; then
-            desired_hook="renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'"
+            desired_hook="renew_hook = sh -c 'cd $target_dir && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'"
             if ! grep -q "renew_hook" "/etc/letsencrypt/renewal/$domain.conf"; then
                 echo "$desired_hook" >> "/etc/letsencrypt/renewal/$domain.conf"
             elif ! grep -Fx "$desired_hook" "/etc/letsencrypt/renewal/$domain.conf"; then

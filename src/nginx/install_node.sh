@@ -90,7 +90,7 @@ installation_node() {
     declare -A domains_to_check
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/remnanode"
 
     if [ -z "$CERT_METHOD" ]; then
         local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
