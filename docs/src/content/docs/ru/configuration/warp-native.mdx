@@ -1,0 +1,88 @@
+---
+title: Warp Native
+description: Инструкция по установке и настройке Warp Native
+---
+import { Code } from '@astrojs/starlight/components';
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+`Cloudflare Warp Native` — это способ использования сервиса Cloudflare Warp через протокол WireGuard в `нативном` режиме, то есть с прямой настройкой WireGuard без зависимости от официального клиента Cloudflare (например, приложения 1.1.1.1 или warp-cli). В контексте инструмента wgcf, это означает настройку соединения с инфраструктурой Cloudflare Warp с помощью сгенерированного WireGuard-профиля, который можно использовать в любом совместимом WireGuard-клиенте.
+
+## Что такое Cloudflare Warp?
+`Cloudflare Warp` — это сервис, который перенаправляет интернет-трафик пользователя через серверы Cloudflare, обеспечивая:
+
+- Безопасность: шифрование трафика для защиты данных.
+- Конфиденциальность: сокрытие IP-адреса пользователя.
+- Оптимизацию: маршрутизация через глобальную сеть Cloudflare для повышения скорости и надежности соединения.
+
+### Установка Warp Native
+
+:::danger[Важно]
+Установка Warp Native производится только на сервере, на котором установлена нода Remnawave.
+:::
+
+<Steps>
+
+1. Выберите пункт `WARP Native от distillium`
+
+    ![Warp Native Main Menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native.png)
+
+2. Затем выберите пункт `Установить WARP Native`
+
+    ![Warp Native Install](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_main_menu.png)
+
+</Steps>
+
+### Настройка Warp-настроек
+
+:::danger[Важно]
+Запускать только на сервере, на котором установлена панель Remnawave.
+:::
+
+<Steps>
+
+1. Выберите пункт `Добавить WARP-настройки в конфигурацию ноды`
+
+    ![Warp Native Add Config](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_add_config.png)
+
+2. Затем выберите на какую ноду добавить конфигурацию warp-настроек
+
+    ![Warp Native Add Node](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_add_node.png)
+
+</Steps>
+
+В секцию вашего конфигурационного профиля ноды, добавляются следующие блоки:
+
+export const exampleCode = `{
+  "tag": "warp-out",
+  "protocol": "freedom",
+  "settings": {
+    "domainStrategy": "UseIP"
+  },
+  "streamSettings": {
+    "sockopt": {
+      "interface": "warp",
+      "tcpFastOpen": true
+    }
+  }
+}`;
+export const fileName = 'outbound';
+
+<Code code={exampleCode} lang="json" title={fileName} />
+
+Выделенные домены будут отправляться через WARP, замените их на свои.
+
+export const fileName2 = 'routing rule';
+export const highlights = ['whoer.net', 'browserleaks.com', '2ip.io', '2ip.ru'];
+export const exampleCode2 = `{
+  "type": "field",
+  "domain": [
+    "whoer.net",
+    "browserleaks.com",
+    "2ip.io",
+    "2ip.ru"
+  ],
+  "outboundTag": "warp-out"
+}`;
+
+<Code code={exampleCode2} lang="json" title={fileName2} mark={highlights} />

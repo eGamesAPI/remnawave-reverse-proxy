@@ -1,0 +1,113 @@
+---
+title: Частые проблемы
+description: Устранение распространенных проблем
+---
+
+import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Развертывание ботов
+
+Если вы развертываете ботов, убедитесь, что в окружении или конфигурации бота вы используете режим `local`. В этом случае вы можете просто ввести `http://remnawave:3000`, чтобы избежать проблем с доступом к панели.
+
+## Утерянный cookie-пути к панели
+
+Если вы потеряли cookie-пути к панели, вы можете просмотреть их, выполнив следующие шаги:
+
+<Steps>
+
+1. Перейдите в директорию Remnawave
+    
+    ```bash
+    cd /opt/remnawave
+    ```
+
+2. Откройте конфигурацию nginx в текстовом редакторе:
+    
+    ```bash
+    nano nginx.conf # или любой другой редактор
+    ```
+
+3. В самом начале нас встречают секции про cookie-пути к панели:
+
+    ```nginx title="nginx.conf" "rEmnaprx=aBCDefgh"
+    map $arg_rEmnaprx $set_cookie_header {
+        "aBCDefgh" "rEmnaprx=aBCDefgh; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+        default "";
+    }
+    ```
+
+4. Скопируйте значение `rEmnaprx=aBCDefgh` из секции `map` и используйте его в качестве cookie-пути к панели.
+
+    Таким образом, ссылка будет выглядеть так:
+
+    ```
+    https://domain.com/auth/login?rEmnaprx=aBCDefgh
+    ```
+
+</Steps>
+
+## Alias не работает в моем терминале
+
+Если вы установили скрипт в другом терминале (например, bash), а теперь, например, zsh не может выполнить команду `rr`, вам нужно:
+
+<Steps>
+
+1. Открыть конфигурацию zsh (root или пользователь или же оба)
+
+    <Tabs>
+        <TabItem label="User">
+        ```bash
+        nano ~/.zsh
+        ```
+        </TabItem>
+        <TabItem label="Root">
+        ```bash
+        nano /root/.zsh
+        ```
+        </TabItem>
+    </Tabs>
+
+2. Добавить следующие строки
+
+    <Tabs>
+        <TabItem label="User">
+        ```bash
+        source /home/YOURUSERNAME/.bash_profile
+        ```
+        </TabItem>
+        <TabItem label="Root">
+        ```bash
+        source /root/.bash_profile # или source /etc/bash.bashrc
+        ```
+        </TabItem>
+    </Tabs>
+
+3. Перезапустите терминал или выполните команду
+
+    ```bash
+    exec zsh
+    ```
+
+</Steps>
+
+## Моей проблемы здесь нет
+
+Не стесняйтесь сообщать о любых проблемах, связанных с нашим проектом, в [репозитории GitHub](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) или [Telegram](https://t.me/remnawave_reverse) чате.
+
+<div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '1rem' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose"
+        icon="add-document"
+        iconPlacement="start"
+    >
+        Создать новую проблему
+    </LinkButton>
+    
+    <LinkButton
+        href="https://t.me/remnawave_reverse"
+        icon="telegram"
+        iconPlacement="start"
+    >
+        Обсудить в Telegram
+    </LinkButton>
+</div>

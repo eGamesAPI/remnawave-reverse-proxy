@@ -1,0 +1,85 @@
+---
+title: Docker related issues
+description: Troubleshooting common Docker issues   
+---
+
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+
+## Adding mirrors for Docker
+
+In some cases like [#40](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/40) servers, especially which are located in Russia, can't pull the images.  
+To fix this issue, you can add mirrors:
+
+<Steps>
+
+1. Create `daemon.json` file:
+
+    ```bash
+    nano /etc/docker/daemon.json
+    ```
+
+2. Import mirrors
+
+    ```json
+    {
+    "log-driver": "local",
+    "registry-mirrors": [
+        "https://mirror.gcr.io/",
+        "https://dockerhub.timeweb.cloud"
+        ]
+    }
+    ```
+
+3. Restart Docker service to apply made changes
+
+    ```bash
+    systemctl restart docker
+    ```
+
+</Steps>
+
+## You have reached your unauthenticated pull rate limit
+
+If you see this message, it means you have exceeded the rate limit for unauthenticated requests to the Docker Hub. To resolve this issue, you can try one of the following solutions:
+
+<Steps>
+
+1. Authenticate with Docker Hub
+
+    Log in to your Docker Hub account using the Docker CLI:
+
+    ```bash
+    docker login
+    ```
+
+2. Use a Different Network
+
+    If possible, try switching to a different network to see if the issue persists. Or just ask your hosting provider to explain it.
+
+3. Enable IPv6
+
+    Run the script and select "7. Manage IPv6" and enable IPv6 support. This can help bypass some rate limits in some cases.
+
+</Steps>
+
+## Unlisted issue
+
+Feel free to report any related to our project issues in the [GitHub repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) or [Telegram](https://t.me/remnawave_reverse) chat.
+
+<div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose"
+        icon="add-document"
+        iconPlacement="start"
+    >
+        Create new issue
+    </LinkButton>
+
+    <LinkButton
+        href="https://t.me/remnawave_reverse"
+        icon="telegram"
+        iconPlacement="start"
+    >
+        Discuss in Telegram
+    </LinkButton>
+</div>

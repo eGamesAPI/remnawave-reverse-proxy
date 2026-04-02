@@ -1,0 +1,183 @@
+---
+title: Installing and Configuring Netbird to Link Servers
+description: A guide on installing and configuring Netbird to link servers
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+Netbird is an open-source platform based on WireGuard that allows you to easily create secure private networks. In this guide, we will walk through how to install and configure Netbird to link your Remnawave panel and nodes so they can communicate securely with each other.
+
+## Registering on Netbird
+
+<Steps>
+
+1. Open your browser and go to the following link.
+
+    ```bash
+    https://app.netbird.io/
+    ```
+
+2. Create an account.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/register.png" 
+        alt="Netbird registration" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+3. Click `Sign Up`. Choose a registration method: via email, Google, GitHub, or Microsoft.
+
+4. Fill in the fields (email, password) and confirm your registration via the email you receive.
+
+5. After this, you will be taken to the Netbird Dashboard.
+
+    ![Netbird peer](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/peer.png)
+
+</Steps>
+
+## Creating and Configuring a Setup Key
+
+:::note
+Setup key is a pre-authentication key that allows to register new machines in your network. It simply associates a machine with an account on a first run.
+:::
+
+<Steps>
+
+1. Go to the Setup Keys section. Click the Create Setup Key button.
+
+    ![Netbird setup key](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/setup_key.png)
+
+2. Create the key.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/create_new_setup_key.png" 
+        alt="Netbird create new setup key" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+3. Enter a name for the key (e.g., `Key`).
+
+4. Enable the `Make this key reusable` slider so the key can be used for multiple servers (up to 30 peers).
+
+5. Set `Expires in` to `Unlimited` so the key does not expire.
+
+6. Click `Create Setup Key`.
+
+7. Save your key. A window will appear with the generated key.
+Copy the key and save it in a safe place for future use.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/key.png" 
+        alt="Netbird key" 
+        style={{ maxWidth: '60%' }} 
+      />
+    </div>
+
+</Steps>
+
+## Installing Netbird on the Panel Server Remnawave
+
+<Steps>
+
+1. Click the `Install Netbird` button.
+    A window with installation instructions will open.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/install_netbird.png" 
+        alt="Netbird create setup key" 
+        style={{ maxWidth: '75%' }} 
+      />
+    </div>
+
+2. Install Netbird on the Remnawave panel server. Run the command to install Netbird:
+
+    ```bash
+    curl -fsSL https://pkgs.netbird.io/install.sh | sh
+    ```
+
+    ![Netbird setup](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/setup_netbird.png)
+
+3. Launch Netbird with the key you copied earlier. Execute the command to connect using the saved key (you will have your own key):
+
+    ```bash
+    netbird up --setup-key AE53280D-88CC-4250-9228-401AB1C7C041
+    ```
+
+    ![Netbird setup](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/setup_netbird2.png)
+
+4. Wait for the `Connected` message, indicating a successful connection.
+
+</Steps>
+
+## Verifying the Connection
+
+Return to the Dashboard and go to the Peers section.
+
+Ensure that the Remnawave panel peer is shown as connected.
+
+![Netbird peer](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/peer_netbird.png)
+
+## Installing Netbird on the Node Server Remnawave
+
+Follow the same installation steps as on the [`panel server`](https://wiki.egam.es/configuration/netbird/#installing-netbird-on-the-panel-server-remnawave).
+
+Return to the Dashboard Netbird and go to the Peers section. Ensure that the node peer is shown as connected.
+
+![Netbird peer](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/peer_netbird_node.png)
+
+## Configuring the Firewall (UFW) on the Node Server
+
+In the Netbird Dashboard, find the Netbird IP address of the panel Remnawave (in our case, it's 100.88.38.121; yours may be different).
+Run the command to open port 2222 (TCP) for this IP:
+
+```bash
+ufw allow from 100.88.38.121 to any port 2222 proto tcp
+```
+
+Reload the firewall:
+
+```bash
+ufw reload
+```
+
+## Configuring IP adress Netbird in the Remnawave Panel
+
+<Steps>
+
+1. Go to your Remnawave panel, navigate to `Nodes` → `Manage`.
+
+2. Select the node where Netbird is installed.
+
+3. In the `Address` field, enter the Netbird IP address of the node (in our case, it's 100.88.74.220; yours may be different).
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img 
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/ip_netbird_node.png" 
+        alt="Netbird create setup key" 
+        style={{ maxWidth: '75%' }} 
+      />
+    </div>
+    
+    Click the `Save` button.
+
+</Steps>
+
+## Verifying the Connection
+
+![Netbird peer](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/ip_netbird_node1.png)
+
+The node is now connected to the Remnawave panel via Netbird.
+Ensure that the connection between the panel and the node is working (e.g., check access via IP with ping or SSH).
+
+## Summary
+
+- Your Remnawave panel and the node server are now linked through a secure Netbird tunnel.
+- You can use this channel for secure data exchange or to manage the node via port 2222.
+- Netbird simplifies setup and provides high security through WireGuard.

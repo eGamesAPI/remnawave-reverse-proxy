@@ -1,0 +1,69 @@
+name: '🐛 Bug Report'
+title: '[Bug-report] '
+description: Report a bug or unexpected behavior
+labels: ['bug']
+
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: '⚠️ Preconditions'
+      description: Before creating a new issue, make sure you've done the following
+      options:
+        - label: I have read the [README](https://github.com/eGamesAPI/remnawave-reverse-proxy/blob/main/README.md)
+        - label: I have checked existing [Issues](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues)
+        - label: I have updated to the [latest release](https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest)
+
+  - type: input
+    id: os
+    attributes:
+      label: '💿 Operating System'
+      description: OS and version you're using
+      placeholder: e.g., Ubuntu 24.04 / Debian 12
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: '📦 Installation Method'
+      description: How did you install?
+      options:
+        - Panel only
+        - Node only
+        - Panel & Node
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_description
+    attributes:
+      label: '❔ Problem Description'
+      description: What happened and what did you expect to happen?
+      placeholder: Describe the issue in detail
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: '⚙️ Steps to Reproduce'
+      description: List the exact steps to reproduce the issue
+      placeholder: |
+        Describe the steps to reproduce the issue, so we can debug it effectively
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_screenshots
+    attributes:
+      label: '📎 Logs or Screenshots'
+      description: Paste logs here or upload screenshots to help us understand the problem
+      placeholder: Paste logs or attach screenshots here
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: 'ℹ️ Additional Information'
+      description: Anything else we should know?
+      placeholder: Any other details that may help us debug

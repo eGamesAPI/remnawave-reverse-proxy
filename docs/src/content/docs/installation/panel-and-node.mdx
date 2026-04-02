@@ -1,0 +1,68 @@
+---
+title: Panel and Node
+description: Instructions for installing the RemnaWave panel and node on your server.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
+
+## Running the script
+
+:::danger[Warning]
+Script must be run as **root**.
+:::
+
+Enter the command on your server:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
+## Install panel and node on one server
+
+:::danger[Warning]
+This installation method is not recommended for production environments, as it is not covered in the official Remnawave documentation.
+
+For the best experience and stable operation, please choose the [`Panel Only`](https://wiki.egam.es/installation/panel-only/) or [`Node Only`](https://wiki.egam.es/installation/node-only/) installation methods, depending on your requirements.
+:::
+
+<Steps>
+
+1. Select `Install Remnawave components`
+
+    ![Main menu RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+
+2. Then select `Install panel and node on one server`
+
+    ![Install panel and node RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_panel_node.webp)
+
+3. After the process is complete, the script will automatically restart the panel and provide all the necessary login information.
+
+    ![Menu end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_end.webp)
+
+</Steps>
+
+:::danger[Warning]
+After the installation is complete, the script will display a unique URL for logging into the control panel.  
+**Be sure to save this URL.** It contains the secret key needed for access.
+
+Example login link:
+```
+https://p.example.com/auth/login?SECRET_KEY=SECRET_KEY
+```
+Without this URL, **you will not be able** to log into the panel.
+:::
+
+## Updating the script
+
+Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"
+        icon="github"
+        iconPlacement="start"
+    >
+        View latest release
+    </LinkButton>
+</div>

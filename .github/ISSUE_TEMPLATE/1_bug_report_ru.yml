@@ -1,0 +1,69 @@
+name: '🐛 Сообщение о проблеме'
+title: '[Bug-report] '
+description: Сообщите о проблеме или нестандартном поведении
+labels: ['bug']
+
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: '⚠️ Обязательные условия'
+      description: Прежде чем создавать новый issue, убедитесь, что вы выполнили следующее
+      options:
+        - label: Я прочитал [README](https://github.com/eGamesAPI/remnawave-reverse-proxy/blob/main/README.md)
+        - label: Я проверил существующие [Issues](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues)
+        - label: Я обновился до [последнего релиза](https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest)
+
+  - type: input
+    id: os
+    attributes:
+      label: '💿 Операционная система'
+      description: Укажите используемую ОС и её версию
+      placeholder: Например, Ubuntu 24.04 / Debian 12
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation_method
+    attributes:
+      label: '📦 Метод установки'
+      description: Как вы выполнили установку?
+      options:
+        - Только панель (Panel only)
+        - Только нода (Node only)
+        - Панель и нода (Panel & Node)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem_description
+    attributes:
+      label: '❔ Описание проблемы'
+      description: Что произошло и что вы ожидали?
+      placeholder: Подробно опишите проблему
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: '⚙️ Шаги для воспроизведения'
+      description: Перечислите точные шаги для воспроизведения ошибки
+      placeholder: |
+        Опишите шаги для воспроизведения проблемы, чтобы мы могли её отладить
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs_screenshots
+    attributes:
+      label: '📎 Логи или скриншоты'
+      description: Вставьте логи или прикрепите скриншоты, чтобы помочь нам понять проблему
+      placeholder: Вставьте логи или добавьте скриншоты здесь
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: 'ℹ️ Дополнительная информация'
+      description: Всё, что нам ещё нужно знать
+      placeholder: Прочие детали, которые помогут в отладке

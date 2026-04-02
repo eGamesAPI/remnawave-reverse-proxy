@@ -1,0 +1,248 @@
+---
+title: Replacing default nginx with SWAG (Secure Web Application Gateway) and configuring it for Remnawave
+description: A guide on installing and configuring SWAG (Secure Web Application Gateway) to replace the default nginx in Remnawave.
+---
+
+import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/starlight/components';
+
+:::danger[Warning]
+This is the preview version of this page and a lot of things may change in future.
+:::
+
+:::tip[Contribution]
+Criticism is not welcome (read below) as it is our personal preference on how we configure our setup. However, I appreciate any feedback for IMPROVING it!
+:::
+
+First, you need to decide whether you want to use [SWAG](https://github.com/linuxserver/docker-swag) or stick with the default nginx configuration. SWAG (Secure Web Application Gateway) is a popular and easy choice for reverse proxy setups, especially when you've got a lot of stacks/containers to manage. It comes with built-it cert renewal, templates for various containers, which are a bit changed for beginner-friendly experience. SWAG is same nginx you familiar with (watch the pic below), but with some extra features and easier configuration. 
+
+<div style={{ display: 'flex', justifyContent: 'center' }}>
+  <img 
+    src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/swag/dialog.webp" 
+    alt="Netbird registration" 
+    style={{ maxWidth: '60%' }} 
+  />
+</div>
+
+## Installing SWAG for panel only
+
+<Steps>
+
+1. Create a directory for SWAG.
+
+    ```bash
+    mkdir /opt/swag
+    ```
+
+2. Create a docker compose file.
+
+    ```bash
+    nano docker-compose.yml
+    ```
+
+    ```yml
+    swag:
+      image: lscr.io/linuxserver/swag:latest
+      container_name: swag
+      cap_add:
+        - NET_ADMIN
+      environment:
+        - PUID=1000
+        - PGID=1000
+        - TZ=Etc/UTC
+        - URL=domain.com
+        - VALIDATION=dns
+        - SUBDOMAINS=wildcard
+        - DNSPLUGIN=cloudflare
+        - PROPAGATION=60
+        - SWAG_AUTORELOAD=true
+    #    - DISABLE-F2B=true #optional
+      volumes:
+        - /path/to/swag:/config
+      ports:
+        - 443:443
+        - 80:80 #optional
+      restart: unless-stopped
+      networks:
+        - remnawave-network
+
+    networks:
+      remnawave-network:
+        name: remnawave-network
+          driver: bridge
+          external: true
+    ```
+
+    I guess optional, but can be added
+
+    ```yml
+      logging:
+        driver: 'json-file'
+        options:
+          max-size: '30m'
+          max-file: '5'
+    ```
+
+3. Generate a Cloudflare [API token](https://dash.cloudflare.com/profile/api-tokens) with `DNS:Read`, `DNS:Edit` permissions to `domain.com` and copy the token.
+
+4. Edit `/path/to/swag/dns-conf/cloudflare.ini`, delete everything and paste the following with your token:
+
+    ```ini
+    dns_cloudflare_api_token = token
+    ```
+
+5. Stop remnawave stack, delete nginx section in `/opt/remnawave/docker-compose.yml` and restart the stack.
+
+    ```bash
+    cd /opt/remnawave && docker compose down
+    ```
+
+6. Start swag's stack and monitor logs, we'll need them in a second.
+
+    ```bash
+    cd /opt/swag && docker compose up -d && docker compose logs -f -t
+    ```
+
+    In case you've done everything right "Server ready." will pop up in logs and make sure that `domain.com` shows the welcome page with a valid certificate. But we also need logs for monitoring autoreload logs in case you've done mistakes in proxy-conf.
+
+7. Don't forget to remove all related crontab entries for cert renewal as SWAG will handle it for you.
+
+    ```bash
+    crontab -e
+    ```
+
+</Steps>
+
+## Configuring SWAG
+
+Now we need to implement the nginx configuration we had for SWAG to work with remnawave panel & nodes.
+
+<Steps>
+
+1. Copy template for remnawave
+
+    ```bash
+    cd /path/to/swag/config/nginx/proxy-confs
+    cp _template.subdomain.conf.sample remnawave.subdomain.conf
+    ```
+
+2. Edit the configuration file
+
+    ```bash
+    nano remnawave.subdomain.conf
+    ```
+
+3. If you want, you may delete everything in the file and paste the following:
+
+    ```nginx
+    map $http_cookie $auth_cookie {
+    default 0;
+    "~*abcdEfgH=IJKlmnoPq" 1;
+    }
+
+    map $arg_abcdEfgH $auth_query {
+        default 0;
+        "IJKlmnoPq" 1;
+    }
+
+    map "$auth_cookie$auth_query" $authorized {
+        "~1" 1;
+        default 0;
+    }
+
+    map $arg_abcdEfgH $set_cookie_header {
+        "IJKlmnoPq" "abcdEfgH=IJKlmnoPq; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+        default "";
+    }
+
+    server {
+        listen 443 ssl;
+
+        server_name panel.*;
+
+        include /config/nginx/ssl.conf;
+
+        client_max_body_size 0;
+
+        add_header Set-Cookie $set_cookie_header;
+
+        location / {
+            if ($authorized = 0) {
+                return 444;
+            }
+
+            include /config/nginx/proxy.conf;
+            include /config/nginx/resolver.conf;
+            set $upstream_app remnawave;
+            set $upstream_port 3000;
+            set $upstream_proto http;
+            proxy_pass $upstream_proto://$upstream_app:$upstream_port;
+
+        }
+    }
+
+    server {
+        listen 443 ssl;
+
+        server_name subscription.*;
+
+        include /config/nginx/ssl.conf;
+
+        client_max_body_size 0;
+
+        location / {
+            include /config/nginx/proxy.conf;
+            include /config/nginx/resolver.conf;
+            set $upstream_app remnawave-subscription-page;
+            set $upstream_port 3010;
+            set $upstream_proto http;
+            proxy_pass $upstream_proto://$upstream_app:$upstream_port;
+
+        }
+
+        location @redirect {
+            return 404;
+        }
+    }
+    ```
+
+    You may get confused as a lot of strings are gone, that's because some parameters such as `upstream`, headers and others are already present in SWAG's `proxy.conf` and `ssl.conf`, so you don't need to repeat them. If you want to add some headers, you add them back from `/opt/remnawave/nginx.conf`.
+
+4. Navigate to `/path/to/swag/config/nginx/site-confs` and edit `default` file.
+
+    ```nginx "ssl_reject_handshake on;"
+    # main server block
+    server {
+        listen 443 ssl default_server;
+
+        server_name _;
+        ssl_reject_handshake on;
+        include /config/nginx/ssl.conf;
+
+</Steps>
+
+## Securing SWAG
+
+### Fail2ban / Crowdsec
+
+Crowdsec and Fail2Ban can prevent brute-force attacks by monitoring the logs of apps and banning IPs that fail multiple login attempts.
+
+SWAG comes with Fail2Ban pre-configured with a few basic protections, you can fine-tune it specifically for your apps, or disable it and set up Crowdsec instead.
+
+#### Crowdsec
+
+[Crowdsec](https://www.crowdsec.net/) is a free, open-source and collaborative IPS; it's like fail2ban but you share your bans with all of the other users to try and pre-emptively block malicious hosts.
+
+Follow [this blog post](https://www.linuxserver.io/blog/blocking-malicious-connections-with-crowdsec-and-swag) to set it up in SWAG.
+
+#### Fail2ban
+
+Fail2Ban is an intrusion prevention software that protects external applications from brute-force attacks. Attackers that fail to login to your applications a certain number of times will get blocked from accessing all of your applications.  
+Fail2Ban looks for failed login attempts in log files, counts the failed attempts in a short period, and bans the IP address of the attacker.
+
+Follow [this guide](https://docs.linuxserver.io/images/docker-swag/?h=fail2ban#using-fail2ban) to set it up in SWAG.
+
+## Configuring other services
+
+As already said, SWAG has a lot of preset reverse proxy config files are added for popular apps. See the `README.md` file under `/config/nginx/proxy_confs` for instructions on how to enable them. The preset confs reside in and get imported from [this repo](https://github.com/linuxserver/reverse-proxy-confs).
+
+Read the docs [here](https://docs.linuxserver.io/images/docker-swag/#site-config-and-reverse-proxy).

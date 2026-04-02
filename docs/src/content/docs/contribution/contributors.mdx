@@ -1,0 +1,22 @@
+---
+title: Contributors
+description: A list of contributors to the Remnawave Reverse-proxy project
+---
+
+import { ContributorList } from "starlight-contributor-list";
+import { Card, LinkButton } from '@astrojs/starlight/components';
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <p>Those are all contributors to the <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy">Remnawave Reverse-proxy</a> repository, and we are grateful for their contributions, big and small.</p>
+
+    <ContributorList githubRepo="eGamesAPI/remnawave-reverse-proxy" ignore={["autofix-ci[bot]", "github-actions[bot]", "renovate[bot]", "snyk-bot", "snyk-bot[bot]"]} />
+
+    <Card title="Become one of us!" icon="github">
+    Want to contribute? We would love your help! Check out our guide to get started.
+    <div style={{ marginTop: '1rem' }}>
+        <LinkButton href="/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
+            Contribution Guide
+        </LinkButton>
+    </div>
+    </Card>
+</div>

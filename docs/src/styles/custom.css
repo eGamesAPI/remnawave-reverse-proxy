@@ -1,0 +1,67 @@
+/* Dark mode colors. */
+:root {
+	--sl-color-accent-low: #285c48;
+	--sl-color-accent: #50ccab;
+	--sl-color-accent-high: #78fecb;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #e8f0ee;
+	--sl-color-gray-2: #bbc4c2;
+	--sl-color-gray-3: #7f908c;
+	--sl-color-gray-4: #4d5c55;
+	--sl-color-gray-5: #2d3c36;
+	--sl-color-gray-6: #1c2a24;
+	--sl-color-black: #141615;
+}
+/* Light mode colors. */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #009166;
+	--sl-color-accent: #50ccab;
+	--sl-color-accent-high: #285c48;
+	--sl-color-white: #141615;
+	--sl-color-gray-1: #1c2a25;
+	--sl-color-gray-2: #2d3c39;
+	--sl-color-gray-3: #4d5c58;
+	--sl-color-gray-4: #7f908c;
+	--sl-color-gray-5: #bbc4c3;
+	--sl-color-gray-6: #e8f0ef;
+	--sl-color-gray-7: #f3f7f6;
+	--sl-color-black: #ffffff;
+}
+
+/* Banner styles for dark and light modes. */
+.dark-banner {
+	display: block;
+}
+.light-banner {
+	display: none;
+}
+
+:root[data-theme='light'] .dark-banner {
+	display: none;
+}
+:root[data-theme='light'] .light-banner {
+	display: block;
+}
+
+/* Fix button text color */
+.sl-link-button.primary {
+	color: black !important;
+}
+.sl-link-button.primary * {
+	color: black !important;
+}
+
+/* Fix splash page overflow */
+html[data-has-hero] {
+	overflow-y: hidden;
+}
+
+html[data-has-hero] body {
+	overflow-y: hidden;
+	max-height: 100vh;
+}
+
+.page[data-has-hero] {
+	max-height: 100vh;
+	overflow-y: hidden;
+}

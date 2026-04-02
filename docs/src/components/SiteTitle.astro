@@ -1,0 +1,37 @@
+---
+import type { ComponentProps } from "astro/types";
+
+import Default from "@astrojs/starlight/components/SiteTitle.astro";
+import { version } from "../../package.json";
+
+export type Props = ComponentProps<typeof Default>;
+---
+
+<Default {...Astro.props}>
+	<slot />
+</Default>
+
+<a
+	rel="noopener noreferrer"
+	class="version-link"
+	target="_blank"
+>
+	{`${version}`}
+</a>
+
+<style>
+	.version-link {
+		display: flex;
+		align-items: center;
+		color: var(--sl-color-text-accent);
+		text-decoration: none;
+		font-size: var(--font-size-small);
+		font-weight: 500;
+		margin-left: 0.5rem;
+		padding: 0.125rem 0.375rem;
+	}
+
+	.version-link:hover {
+		opacity: 0.66;
+	}
+</style>
