@@ -1,7 +1,7 @@
 #!/bin/bash
-# Module: Install Node Only
+# Module: Install Node
 
-install_node_nginx() {
+install_node_caddy() {
     # Load selfsteal templates module
     load_selfsteal_templates_module
 
@@ -49,11 +49,7 @@ install_node_nginx() {
         exit 1
     fi
 
-SELFSTEAL_BASE_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
-
-unique_domains["$SELFSTEAL_BASE_DOMAIN"]=1
-
-cat > docker-compose.yml <<EOL
+    cat > docker-compose.yml <<EOL
 x-common: &common
   ulimits:
     nofile:
@@ -69,104 +65,85 @@ x-logging: &logging
       max-file: 5
 
 services:
-  remnawave-nginx:
-    image: nginx:1.28
-    container_name: remnawave-nginx
-    hostname: remnawave-nginx
-    <<: [*common, *logging]
-    network_mode: host
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    caddy:
+      image: caddy:2.11.2
+      container_name: caddy-remnawave
+      hostname: caddy-remnawave
+      <<: [*common, *logging]
+      network_mode: host
+      volumes:
+          - ./Caddyfile:/etc/caddy/Caddyfile
+          - /var/www/html:/var/www/html:ro
+          - /dev/shm:/dev/shm:rw
+          - caddy_data:/data
+      command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
+      environment:
+          - CADDY_SOCKET_PATH=/dev/shm/nginx.sock
+          - SELF_STEAL_DOMAIN=${SELFSTEAL_DOMAIN}
+      healthcheck:
+          test: ["CMD", "test", "-S", "/dev/shm/nginx.sock"]
+          interval: 2s
+          timeout: 5s
+          retries: 15
+          start_period: 5s
+
+    remnanode:
+      image: remnawave/node:latest
+      container_name: remnanode
+      hostname: remnanode
+      <<: [*common, *logging]
+      network_mode: host
+      cap_add:
+        - NET_ADMIN
+      environment:
+        - NODE_PORT=2222
+        - SECRET_KEY=$(echo -e "$CERTIFICATE")
+      volumes:
+        - /dev/shm:/dev/shm:rw
+
+volumes:
+  caddy_data:
+    name: caddy_data
+    driver: local
+    external: false
+EOL
+
+    cat > /opt/remnanode/Caddyfile <<EOL
+{
+    admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
+
+http://{\$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{\$SELF_STEAL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    root * /var/www/html
+    try_files {path} /index.html
+    file_server
+}
+
+:80 {
+    bind 0.0.0.0
+    respond 204
+}
 EOL
 }
 
-installation_node() {
+installation_node_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
-    sleep 1
+    install_node_caddy
 
-    declare -A unique_domains
-    install_node_nginx
-
-    declare -A domains_to_check
-    domains_to_check["$SELFSTEAL_DOMAIN"]=1
-
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
-
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
-    fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        NODE_CERT_DOMAIN="$base_domain"
-    else
-        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
-    fi
-
-    cat >> /opt/remnanode/docker-compose.yml <<EOL
-      - /dev/shm:/dev/shm:rw
-      - /var/www/html:/var/www/html:ro
-    command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
-
-  remnanode:
-    image: remnawave/node:latest
-    container_name: remnanode
-    hostname: remnanode
-    <<: [*common, *logging]
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - NODE_PORT=2222
-      - SECRET_KEY=$(echo -e "$CERTIFICATE")
-    volumes:
-      - /dev/shm:/dev/shm:rw
-EOL
-
-cat > /opt/remnanode/nginx.conf <<EOL
-server_names_hash_bucket_size 64;
-
-map \$http_upgrade \$connection_upgrade {
-    default upgrade;
-    ""      close;
-}
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-ssl_session_tickets off;
-
-server {
-    server_name $SELFSTEAL_DOMAIN;
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol;
-    http2 on;
-
-    ssl_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
-    ssl_certificate_key "/etc/nginx/ssl/$NODE_CERT_DOMAIN/privkey.pem";
-    ssl_trusted_certificate "/etc/nginx/ssl/$NODE_CERT_DOMAIN/fullchain.pem";
-
-    root /var/www/html;
-    index index.html;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-}
-
-server {
-    listen unix:/dev/shm/nginx.sock ssl proxy_protocol default_server;
-    server_name _;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet, noimageindex" always;
-    ssl_reject_handshake on;
-    return 444;
-}
-EOL
-
+    ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1
     ufw allow from $PANEL_IP to any port 2222 > /dev/null 2>&1
     ufw reload > /dev/null 2>&1
 
