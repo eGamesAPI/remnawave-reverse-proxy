@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.0.5"
+SCRIPT_VERSION="3.0.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2368,7 +2368,7 @@ case $OPTION in
         ;;
     4)
         load_selfsteal_templates_module
-        if [ ! -d "/opt/remnawave" ]; then
+        if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
             echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
             exit 1
         else
