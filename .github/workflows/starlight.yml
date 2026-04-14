@@ -24,7 +24,7 @@ jobs:
         uses: withastro/action@v3
         with:
           path: ./docs
-          # node-version: 20 # The specific version of Node that should be used to build your site. Defaults to 20. (optional)
+          node-version: 22 # Astro 6.x requires Node.js >= 22.12.0
           # package-manager: pnpm@latest # The Node package manager that should be used to install dependencies and build your site. Automatically detected based on your lockfile. (optional)
 
   deploy:
