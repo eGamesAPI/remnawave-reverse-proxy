@@ -13,6 +13,13 @@ import starlightThemeGalaxy from 'starlight-theme-galaxy';
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://wiki.egam.es',
+	vite: {
+		resolve: {
+			alias: {
+				'@components': '/src/components',
+			},
+		},
+	},
 	integrations: [
 		autoImport({
 			imports: [],

@@ -1,0 +1,92 @@
+---
+export interface Props {
+  githubRepo?: `${string}/${string}`;
+  ignore?: string[];
+  focusColor?: string;
+}
+
+const {
+  githubRepo = "withastro/docs",
+  ignore = [],
+  focusColor,
+} = Astro.props;
+
+interface Contributor {
+  username: string;
+  avatar: string;
+  profile: string;
+}
+
+async function getContributors(repo: string, ignoreList: string[]): Promise<Contributor[]> {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/contributors?per_page=100`);
+    if (!res.ok) {
+      console.error(`Failed to fetch contributors for ${repo}: ${res.statusText}`);
+      return [];
+    }
+    const data = await res.json();
+    return data
+      .filter((c: any) => !ignoreList.includes(c.login))
+      .map((c: any) => ({
+        username: c.login,
+        avatar: c.avatar_url,
+        profile: c.html_url,
+      }));
+  } catch (err) {
+    console.error('Error fetching contributors:', err);
+    return [];
+  }
+}
+
+const contributors = await getContributors(githubRepo, ignore);
+---
+
+<div class="contributors-list" style:--focus-color={focusColor || 'var(--sl-color-accent)'}>
+  {contributors.map((contributor) => (
+    <a
+      href={contributor.profile}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="contributor"
+      title={contributor.username}
+    >
+      <img
+        src={contributor.avatar}
+        alt={contributor.username}
+        loading="lazy"
+      />
+    </a>
+  ))}
+</div>
+
+<style>
+  .contributors-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    padding: 1rem 0;
+  }
+
+  .contributor {
+    display: block;
+    transition: transform 0.2s ease;
+  }
+
+  .contributor:hover {
+    transform: scale(1.15);
+  }
+
+  .contributor img {
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .contributor:hover img {
+    border-color: var(--focus-color, var(--sl-color-accent));
+    box-shadow: 0 0 8px var(--focus-color, var(--sl-color-accent));
+  }
+</style>

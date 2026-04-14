@@ -3,7 +3,7 @@ title: Contributors
 description: A list of contributors to the Remnawave Reverse-proxy project
 ---
 
-import { ContributorList } from "starlight-contributor-list";
+import ContributorList from "@components/ContributorList.astro";
 import { Card, LinkButton } from '@astrojs/starlight/components';
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
@@ -12,11 +12,12 @@ import { Card, LinkButton } from '@astrojs/starlight/components';
     <ContributorList githubRepo="eGamesAPI/remnawave-reverse-proxy" ignore={["autofix-ci[bot]", "github-actions[bot]", "renovate[bot]", "snyk-bot", "snyk-bot[bot]"]} />
 
     <Card title="Become one of us!" icon="github">
-    Want to contribute? We would love your help! Check out our guide to get started.
-    <div style={{ marginTop: '1rem' }}>
-        <LinkButton href="/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
-            Contribution Guide
-        </LinkButton>
-    </div>
+        Want to contribute? We would love your help! Check out our guide to get started.{'\n'}
+        {'\n'}
+        <div style={{ marginTop: '1rem' }}>
+            <LinkButton href="/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
+                {'Contribution Guide'}
+            </LinkButton>
+        </div>
     </Card>
 </div>

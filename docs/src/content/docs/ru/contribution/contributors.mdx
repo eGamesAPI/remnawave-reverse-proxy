@@ -3,7 +3,7 @@ title: Участники разработки
 description: Список контрибьютеров Remnawave Reverse-proxy
 ---
 
-import { ContributorList } from "starlight-contributor-list";
+import ContributorList from "@components/ContributorList.astro";
 import { Card, LinkButton } from '@astrojs/starlight/components';
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
@@ -12,11 +12,12 @@ import { Card, LinkButton } from '@astrojs/starlight/components';
     <ContributorList githubRepo="eGamesAPI/remnawave-reverse-proxy" ignore={["autofix-ci[bot]", "github-actions[bot]", "renovate[bot]", "snyk-bot", "snyk-bot[bot]"]} />
 
     <Card title="Станьте одним из нас!" icon="github">
-    Хотите внести свой вклад? Мы будем рады вашей помощи! Ознакомьтесь с нашим руководством, чтобы начать.
-    <div style={{ marginTop: '1rem' }}>
-        <LinkButton href="/ru/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
-            Руководство по внесению изменений
-        </LinkButton>
-    </div>
+        Хотите внести свой вклад? Мы будем рады вашей помощи! Ознакомьтесь с нашим руководством, чтобы начать.{'\n'}
+        {'\n'}
+        <div style={{ marginTop: '1rem' }}>
+            <LinkButton href="/ru/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
+                {'Руководство по внесению изменений'}
+            </LinkButton>
+        </div>
     </Card>
 </div>
