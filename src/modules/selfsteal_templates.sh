@@ -67,8 +67,8 @@ randomhtml() {
 
     # Special handling for nothing-sni - select random HTML file
     if [[ "$selected_url" == *"nothing-sni"* ]]; then
-        # Randomly select one HTML file from 1-8.html
-        selected_number=$((RANDOM % 8 + 1))
+        # Randomly select one HTML file from 1-14.html
+        selected_number=$((RANDOM % 14 + 1))
         RandomHTML="${selected_number}.html"
     else
         mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
