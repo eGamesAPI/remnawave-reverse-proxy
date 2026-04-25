@@ -65,16 +65,17 @@ randomhtml() {
         rm -rf assets "README.md" "index.html" 2>/dev/null
     fi
 
-    # Special handling for nothing-sni - select random HTML file
     if [[ "$selected_url" == *"nothing-sni"* ]]; then
-        # Randomly select one HTML file from 1-14.html
-        selected_number=$((RANDOM % 14 + 1))
-        RandomHTML="${selected_number}.html"
+        mapfile -t templates < <(find . -maxdepth 1 -type f -name "*.html" -printf '%P\n' | sort)
     else
         mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
-
-        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
     fi
+
+    if [[ ${#templates[@]} -eq 0 ]]; then
+        echo "${LANG[UNPACK_ERROR]}" && exit 1
+    fi
+
+    RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
 
     if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
         cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
@@ -111,7 +112,7 @@ randomhtml() {
         -e "s|id=\"subscribe\"|id=\"sub_${random_id_suffix}\"|" \
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
-        -e "s/<body/<body class=\"$random_class\"/" \
+        -e "/<body/ { /class=\"/ s|class=\"|class=\"$random_class |; /class=\"/! s|<body|<body class=\"$random_class\"|; }" \
         -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
@@ -126,11 +127,12 @@ randomhtml() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
+    if [[ ! -d "/var/www/html/" ]]; then
+        mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
+    fi
+    rm -rf /var/www/html/*
+
     if [[ -d "${RandomHTML}" ]]; then
-        if [[ ! -d "/var/www/html/" ]]; then
-            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
-        fi
-        rm -rf /var/www/html/*
         cp -a "${RandomHTML}"/. "/var/www/html/"
         echo "${LANG[TEMPLATE_COPY]}"
     elif [[ -f "${RandomHTML}" ]]; then
@@ -140,7 +142,7 @@ randomhtml() {
         echo "${LANG[UNPACK_ERROR]}" && exit 1
     fi
 
-    if ! find "/var/www/html" -type f -name "*.html" -exec grep -q "$random_meta_name" {} \; 2>/dev/null; then
+    if ! grep -Rql --include="*.html" -- "$random_meta_name" "/var/www/html" 2>/dev/null; then
         echo -e "${COLOR_RED}${LANG[FAILED_TO_MODIFY_HTML_FILES]}${COLOR_RESET}"
         return 1
     fi
