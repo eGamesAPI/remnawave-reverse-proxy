@@ -2320,7 +2320,7 @@ load_module() {
 # Module loaders (wrappers for load_module)
 load_install_panel_node_module() { load_module "install_panel_node" "nginx" "${1:-false}"; }
 load_install_panel_module() { load_module "install_panel" "nginx" "${1:-false}"; }
-load_install_node_module() { load_module "install_node" "nginx" "${1:-false}"; }
+load_install_node_module() { load_module "install_node" "nginx" "true"; }
 load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
 load_manage_panel_module() { load_module "manage_panel" "modules" "${1:-false}"; }
 load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
