@@ -23,9 +23,6 @@ download_with_mirrors() {
     # Mirror URLs (GitHub raw content proxies)
     local mirrors=(
         "$file_url"
-        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/${file_url#*main/}"
-        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/main/${file_url#*main/}"
-        "https://ghproxy.com/${file_url}"
     )
     
     local temp_file="${dest_file}.tmp"
@@ -2268,7 +2265,7 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/${module_type}/${module_name}.sh"
+    local module_url="local module_url="https://raw.githubusercontent.com/ZaWarudoGuy/remnawave-reverse-proxy111111111111111/refs/heads/main/src/${module_type}/${module_name}.sh""
     local force_update="${3:-false}"
 
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
