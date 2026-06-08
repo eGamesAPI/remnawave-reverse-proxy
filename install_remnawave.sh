@@ -4,7 +4,7 @@ SCRIPT_VERSION="3.0.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/ZaWarudoGuy/remnawave-reverse-proxy111111111111111/refs/heads/main/install_remnawave.sh"
 LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/lang"
 
 COLOR_RESET="\033[0m"
