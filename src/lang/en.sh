@@ -406,6 +406,7 @@ LANG[CREATE_API_TOKEN_INSTRUCTION]="Go to the panel at: https://%s\nNavigate to 
 LANG[ENTER_API_TOKEN]="Enter the API token: "
 LANG[EMPTY_TOKEN_ERROR]="No token provided. Exiting."
 LANG[RATE_LIMIT_EXCEEDED]="Rate limit exceeded for Let's Encrypt"
+LANG[CERTBOT_RENEWAL_FAILED]="Certbot renewal failed; see /var/log/letsencrypt/letsencrypt.log"
 LANG[FAILED_TO_MODIFY_HTML_FILES]="Failed to modify HTML files"
 LANG[INSTALLING_YQ]="Installing yq..."
 LANG[ERROR_SETTING_YQ_PERMISSIONS]="Error setting yq permissions!"

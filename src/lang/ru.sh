@@ -401,6 +401,7 @@ LANG[CREATE_API_TOKEN_INSTRUCTION]="Зайдите в панель по адре
 LANG[ENTER_API_TOKEN]="Введите API-токен: "
 LANG[EMPTY_TOKEN_ERROR]="Токен не введен. Завершение работы."
 LANG[RATE_LIMIT_EXCEEDED]="Превышен лимит выдачи сертификатов Let's Encrypt"
+LANG[CERTBOT_RENEWAL_FAILED]="Ошибка Certbot; подробности в /var/log/letsencrypt/letsencrypt.log"
 LANG[FAILED_TO_MODIFY_HTML_FILES]="Не удалось изменить HTML файлы"
 LANG[INSTALLING_YQ]="Установка yq..."
 LANG[ERROR_SETTING_YQ_PERMISSIONS]="Ошибка установки прав yq!"

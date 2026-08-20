@@ -1688,6 +1688,12 @@ EOL
             ;;
         2)
             # ACME HTTP-01 (without wildcard)
+            local nginx_was_running=false
+            if docker ps --filter "name=^/remnawave-nginx$" --format '{{.Names}}' | grep -qx "remnawave-nginx"; then
+                nginx_was_running=true
+                docker stop remnawave-nginx > /dev/null
+            fi
+
             ufw allow 80/tcp comment 'HTTP for ACME challenge' > /dev/null 2>&1
 
             certbot certonly \
@@ -1699,9 +1705,18 @@ EOL
                 --http-01-port 80 \
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
+            local certbot_status=$?
 
             ufw delete allow 80/tcp > /dev/null 2>&1
             ufw reload > /dev/null 2>&1
+
+            if [ "$nginx_was_running" = true ]; then
+                docker start remnawave-nginx > /dev/null
+            fi
+
+            if [ "$certbot_status" -ne 0 ]; then
+                return "$certbot_status"
+            fi
             ;;
         3)
             # Gcore DNS-01 (wildcard)
@@ -1911,7 +1926,7 @@ EOL
             fi
 
             if [ "$certbot_exit_code" -ne 0 ]; then
-                cert_status["$cert_domain"]="${LANG[ERROR_UPDATE]}: ${LANG[RATE_LIMIT_EXCEEDED]}"
+                cert_status["$cert_domain"]="${LANG[ERROR_UPDATE]}: ${LANG[CERTBOT_RENEWAL_FAILED]}"
                 continue
             fi
 
@@ -2031,6 +2046,23 @@ check_cert_expiry() {
     return 0
 }
 
+configure_certbot_renewal_hooks() {
+    local renewal_conf="$1"
+
+    if [ ! -f "$renewal_conf" ]; then
+        return 1
+    fi
+
+    sed -i -E '/^(pre_hook|post_hook|renew_hook|deploy_hook) = /d' "$renewal_conf"
+
+    if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$renewal_conf"; then
+        echo "pre_hook = /usr/bin/docker stop remnawave-nginx" >> "$renewal_conf"
+        echo "post_hook = /usr/bin/docker start remnawave-nginx" >> "$renewal_conf"
+    else
+        echo "deploy_hook = /usr/bin/docker restart remnawave-nginx" >> "$renewal_conf"
+    fi
+}
+
 fix_letsencrypt_structure() {
     local domain=$1
     local live_dir="/etc/letsencrypt/live/$domain"
@@ -2093,9 +2125,7 @@ fix_letsencrypt_structure() {
         sed -i "s|^privkey =.*|privkey = $privkey_path|" "$renewal_conf"
     fi
 
-    local expected_hook="renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'"
-    sed -i '/^renew_hook/d' "$renewal_conf"
-    echo "$expected_hook" >> "$renewal_conf"
+    configure_certbot_renewal_hooks "$renewal_conf"
 
     chmod 644 "$live_dir/cert.pem" "$live_dir/chain.pem" "$live_dir/fullchain.pem"
     chmod 600 "$live_dir/privkey.pem"
@@ -2156,6 +2186,22 @@ handle_certificates() {
     else
         echo -e "${COLOR_GREEN}${LANG[CERTS_SKIPPED]}${COLOR_RESET}"
         cert_method="1"
+        for domain in "${!domains_to_check_ref[@]}"; do
+            local existing_conf="/etc/letsencrypt/renewal/$domain.conf"
+            local base_domain
+            base_domain=$(extract_domain "$domain")
+            if [ -f "/etc/letsencrypt/renewal/$base_domain.conf" ] && is_wildcard_cert "$base_domain"; then
+                existing_conf="/etc/letsencrypt/renewal/$base_domain.conf"
+            fi
+
+            if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$existing_conf" 2>/dev/null; then
+                # Opening port 80 is required if any managed certificate uses HTTP-01.
+                cert_method="2"
+                break
+            elif grep -q "dns-gcore" "$existing_conf" 2>/dev/null; then
+                cert_method="3"
+            fi
+        done
     fi
 
     declare -A cert_domains_added
@@ -2233,7 +2279,7 @@ handle_certificates() {
 
     local cron_command
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd $target_dir && docker compose down && docker compose up"
+        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
     else
         cron_command="/usr/bin/certbot renew --quiet"
     fi
@@ -2250,15 +2296,17 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}${LANG[CRON_ALREADY_EXISTS]}${COLOR_RESET}"
     fi
 
-    for domain in "${!unique_domains[@]}"; do
-        if [ -f "/etc/letsencrypt/renewal/$domain.conf" ]; then
-            desired_hook="renew_hook = sh -c 'cd $target_dir && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'"
-            if ! grep -q "renew_hook" "/etc/letsencrypt/renewal/$domain.conf"; then
-                echo "$desired_hook" >> "/etc/letsencrypt/renewal/$domain.conf"
-            elif ! grep -Fx "$desired_hook" "/etc/letsencrypt/renewal/$domain.conf"; then
-                sed -i "/renew_hook/c\\$desired_hook" "/etc/letsencrypt/renewal/$domain.conf"
-                echo -e "${COLOR_YELLOW}${LANG[UPDATED_RENEW_AUTH]}${COLOR_RESET}"
-            fi
+    for domain in "${!domains_to_check_ref[@]}"; do
+        local cert_domain="$domain"
+        local base_domain
+        base_domain=$(extract_domain "$domain")
+        if [ -f "/etc/letsencrypt/renewal/$base_domain.conf" ] && is_wildcard_cert "$base_domain"; then
+            cert_domain="$base_domain"
+        fi
+
+        local renewal_conf="/etc/letsencrypt/renewal/$cert_domain.conf"
+        if [ -f "$renewal_conf" ]; then
+            configure_certbot_renewal_hooks "$renewal_conf"
         fi
     done
 }
