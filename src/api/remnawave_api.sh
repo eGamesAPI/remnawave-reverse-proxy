@@ -464,9 +464,9 @@ create_api_token() {
     local target_dir=$3
     local token_name="${4:-subscription-page}"
 
-    local token_data='{"tokenName":"'"$token_name"'"}'
-    local api_response
-    api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+    local token_data='{"name":"'"$token_name"'","expiresInDays":365,"scopes":["*"]}'
+
+    local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
 
     if [ -z "$api_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
@@ -474,16 +474,15 @@ create_api_token() {
     fi
 
     local api_token
-    api_token=$(echo "$api_response" | jq -r '.response.token')
-
+    api_token=$(echo "$api_response" | jq -r '.response.token // .response.token // ""')
     if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
         return 1
     fi
 
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
-
     sleep 1
 
     echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}" >&2
+    return 0
 }
