@@ -52,7 +52,7 @@ get_panel_token() {
         local github_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.github // false' 2>/dev/null)
         local yandex_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.yandex // false' 2>/dev/null)
         local pocketid_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.pocketid // false' 2>/dev/null)
-        local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.tgAuth.enabled // false' 2>/dev/null)
+        local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.telegram // .response.authentication.tgAuth.enabled // false' 2>/dev/null)
 
         if [ "$github_enabled" = "true" ] || [ "$yandex_enabled" = "true" ] || \
            [ "$pocketid_enabled" = "true" ] || [ "$telegram_enabled" = "true" ]; then
@@ -127,11 +127,13 @@ get_public_key() {
 
     if [ -z "$api_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_PUBLIC_KEY]}${COLOR_RESET}"
+        return 1
     fi
 
-    local pubkey=$(echo "$api_response" | jq -r '.response.pubKey')
-    if [ -z "$pubkey" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}${COLOR_RESET}"
+    local pubkey=$(echo "$api_response" | jq -r '.response.secretKey // .response.pubKey // empty')
+    if [ -z "$pubkey" ] || [ "$pubkey" = "null" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}: $api_response${COLOR_RESET}"
+        return 1
     fi
 
     sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=\"$pubkey\"|g" "$target_dir/docker-compose.yml"
@@ -211,7 +213,6 @@ create_node() {
     "trafficLimitBytes": 0,
     "notifyPercent": 0,
     "trafficResetDay": 31,
-    "excludedInbounds": [],
     "countryCode": "XX",
     "consumptionMultiplier": 1.0
 }
@@ -304,6 +305,7 @@ create_config_profile() {
                         xver: 1,
                         dest: "/dev/shm/nginx.sock",
                         spiderX: "",
+                        minClientVer: "0.0.0",
                         shortIds: [$short_id],
                         privateKey: $private_key,
                         serverNames: [$domain]
@@ -358,7 +360,6 @@ create_host() {
         host: "",
         alpn: null,
         fingerprint: "chrome",
-        allowInsecure: false,
         isDisabled: false,
         securityLayer: "DEFAULT"
     }')
