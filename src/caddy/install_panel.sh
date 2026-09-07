@@ -300,6 +300,7 @@ http://{\$PANEL_DOMAIN} {
 }
 
 https://{\$PANEL_DOMAIN} {
+    encode
 
     @has_token_param {
         query $cookies_random1=$cookies_random2
@@ -346,6 +347,7 @@ https://{\$PANEL_DOMAIN} {
 }
 
 https://{\$SUB_DOMAIN} {
+    encode
     handle {
         reverse_proxy {\$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}
