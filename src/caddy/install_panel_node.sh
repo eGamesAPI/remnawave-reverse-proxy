@@ -1,7 +1,10 @@
 #!/bin/bash
-# Module: Install Panel
+# Module: Install Panel + Node
 
-install_panel_caddy() {
+install_panel_node_caddy() {
+    # Load selfsteal templates module
+    load_selfsteal_templates_module
+
     mkdir -p /opt/remnawave && cd /opt/remnawave
 
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
@@ -42,8 +45,7 @@ install_panel_caddy() {
     METRICS_USER=$(generate_user)
     METRICS_PASS=$(generate_user)
 
-    JWT_AUTH_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
-    JWT_API_TOKENS_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
+    APP_SECRET=$(openssl rand -hex 64)
     API_TOKEN=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
 
     cat > .env <<EOL
@@ -67,9 +69,10 @@ REDIS_SOCKET=/var/run/valkey/valkey.sock
 #REDIS_HOST=
 #REDIS_PORT=
 
-### JWT ###
-JWT_AUTH_SECRET=$JWT_AUTH_SECRET
-JWT_API_TOKENS_SECRET=$JWT_API_TOKENS_SECRET
+### SECRETS ###
+### The single signing key of the panel: admin sessions, API tokens and the
+### password pepper. Replacing it locks every admin out of the panel.
+APP_SECRET=$APP_SECRET
 
 # Set the session idle timeout in the panel to avoid daily logins.
 # Value in hours: 12–168
@@ -92,6 +95,10 @@ TELEGRAM_NOTIFY_CRM=change_me
 TELEGRAM_NOTIFY_SERVICE=change_me
 TELEGRAM_NOTIFY_TBLOCKER=change_me
 
+### PANEL DOMAIN ###
+### Used to build panel links in Telegram notifications.
+PANEL_DOMAIN=$PANEL_DOMAIN
+
 ### FRONT_END ###
 # Used by CORS, you can leave it as * or place your domain there
 FRONT_END_DOMAIN=$PANEL_DOMAIN
@@ -103,11 +110,6 @@ FRONT_END_DOMAIN=$PANEL_DOMAIN
 SUB_PUBLIC_DOMAIN=$SUB_DOMAIN
 
 ### If CUSTOM_SUB_PREFIX is set in @remnawave/subscription-page, append the same path to SUB_PUBLIC_DOMAIN. Example: SUB_PUBLIC_DOMAIN=sub-page.example.com/sub ###
-
-### SWAGGER ###
-SWAGGER_PATH=/docs
-SCALAR_PATH=/scalar
-IS_DOCS_ENABLED=false
 
 ### PROMETHEUS ###
 ### Metrics are available at http://127.0.0.1:METRICS_PORT/metrics
@@ -133,11 +135,6 @@ NOT_CONNECTED_USERS_NOTIFICATIONS_ENABLED=false
 # Only in ASC order (example: [6, 12, 24]), must be valid array of integer(min: 1, max: 168) numbers. No more than 3 values.
 # Each value represents HOURS passed after user creation (user.createdAt)
 NOT_CONNECTED_USERS_NOTIFICATIONS_AFTER_HOURS=[6, 24, 48]
-
-### CLOUDFLARE ###
-# USED ONLY FOR docker-compose-prod-with-cf.yml
-# NOT USED BY THE APP ITSELF
-CLOUDFLARE_TOKEN=ey...
 
 ### Database ###
 ### For Postgres Docker container ###
@@ -171,9 +168,10 @@ x-env: &env
 
 services:
   remnawave-db:
-    image: postgres:18.3
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
+    shm_size: 512mb
     <<: [*common, *logging, *env, *networks]
     environment:
       - POSTGRES_USER=\${POSTGRES_USER}
@@ -191,7 +189,7 @@ services:
       retries: 3
 
   remnawave:
-    image: remnawave/backend:2
+    image: remnawave/backend:3
     container_name: remnawave
     hostname: remnawave
     <<: [*common, *logging, *env, *networks]
@@ -213,7 +211,7 @@ services:
         condition: service_healthy
 
   remnawave-redis:
-    image: valkey/valkey:9.0.3-alpine
+    image: valkey/valkey:9-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     <<: [*common, *logging, *networks]
@@ -247,6 +245,8 @@ services:
           - caddy_data:/data
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
+          - CADDY_SOCKET_PATH=/dev/shm/nginx.sock
+          - SELF_STEAL_DOMAIN=${SELFSTEAL_DOMAIN}
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
@@ -273,10 +273,30 @@ services:
       remnawave:
         condition: service_healthy
 
+  remnanode:
+    image: remnawave/node:latest
+    container_name: remnanode
+    hostname: remnanode
+    <<: [*common, *logging]
+    depends_on:
+      remnawave:
+        condition: service_healthy
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
+    volumes:
+      - /dev/shm:/dev/shm:rw
+
 networks:
   remnawave-network:
     name: remnawave-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
     external: false
 
 volumes:
@@ -297,6 +317,25 @@ EOL
     cat > /opt/remnawave/Caddyfile <<EOL
 {
     admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
+
+http://{\$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{\$SELF_STEAL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    root * /var/www/html
+    try_files {path} /index.html
+    file_server
 }
 
 http://{\$PANEL_DOMAIN} {
@@ -305,6 +344,8 @@ http://{\$PANEL_DOMAIN} {
 }
 
 https://{\$PANEL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    encode
 
     @has_token_param {
         query $cookies_random1=$cookies_random2
@@ -321,7 +362,9 @@ https://{\$PANEL_DOMAIN} {
     }
 
     handle @unauthorized {
-        abort
+        root * /var/www/html
+        try_files {path} /index.html
+        file_server
     }
 
     @oauth2_bad {
@@ -350,7 +393,14 @@ https://{\$PANEL_DOMAIN} {
     }
 }
 
+http://{\$SUB_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SUB_DOMAIN}{uri} permanent
+}
+
 https://{\$SUB_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    encode
     handle {
         reverse_proxy {\$SUB_BACKEND_URL} {
             header_up X-Real-IP {remote}
@@ -366,16 +416,19 @@ https://{\$SUB_DOMAIN} {
 EOL
 }
 
-installation_panel_caddy() {
-    install_panel_caddy
+installation_panel_node_caddy() {
+    install_panel_node_caddy
 	
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
     cd /opt/remnawave
     ufw allow 80/tcp comment 'HTTP' > /dev/null 2>&1
     docker compose up -d > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
+
+    remnawave_network_subnet=172.30.0.0/16
+    ufw allow from "$remnawave_network_subnet" to any port 2222 proto tcp > /dev/null 2>&1
 
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
@@ -400,7 +453,16 @@ installation_panel_caddy() {
 
     # Register Remnawave
     local token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
+    case "$token" in
+        ey*) ;;
+        *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
+    esac
     echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
+
+    # Get public key
+    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
+    sleep 1
+    get_public_key "$domain_url" "$token" "$target_dir" || abort_with_credentials "${LANG[ERROR_EXTRACT_PUBLIC_KEY]}"
 
     # Generate Xray keys
     echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
@@ -418,7 +480,7 @@ installation_panel_caddy() {
 
     # Create node with config profile binding
     echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid"
 
     # Create host
     echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
@@ -436,15 +498,15 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
     create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave Subscription Page
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    # Stop and start Remnawave
+    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
     sleep 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
     sleep 1
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+    docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
     clear
@@ -462,5 +524,6 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
+
+    randomhtml
 }
