@@ -7,7 +7,7 @@ LANG_FILE="${DIR_REMNAWAVE}selected_language"
 
 # Source repository. Override without editing the script:
 #   REMNAWAVE_REPO=owner/repo REMNAWAVE_BRANCH=branch remnawave_reverse
-REPO_SLUG="${REMNAWAVE_REPO:-UnderGut/remnawave-reverse-proxy}"
+REPO_SLUG="${REMNAWAVE_REPO:-eGamesAPI/remnawave-reverse-proxy}"
 REPO_BRANCH="${REMNAWAVE_BRANCH:-dev}"
 REPO_RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/refs/heads/${REPO_BRANCH}"
 SCRIPT_URL="${REPO_RAW_BASE}/install_remnawave.sh"
