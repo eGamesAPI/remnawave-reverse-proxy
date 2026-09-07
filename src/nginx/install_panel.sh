@@ -42,8 +42,7 @@ install_panel_nginx() {
     METRICS_USER=$(generate_user)
     METRICS_PASS=$(generate_user)
 
-    JWT_AUTH_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
-    JWT_API_TOKENS_SECRET=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
+    APP_SECRET=$(openssl rand -hex 64)
 
     cat > .env <<EOL
 ### APP ###
@@ -66,9 +65,10 @@ REDIS_SOCKET=/var/run/valkey/valkey.sock
 #REDIS_HOST=
 #REDIS_PORT=
 
-### JWT ###
-JWT_AUTH_SECRET=$JWT_AUTH_SECRET
-JWT_API_TOKENS_SECRET=$JWT_API_TOKENS_SECRET
+### SECRETS ###
+### The single signing key of the panel: admin sessions, API tokens and the
+### password pepper. Replacing it locks every admin out of the panel.
+APP_SECRET=$APP_SECRET
 
 # Set the session idle timeout in the panel to avoid daily logins.
 # Value in hours: 12–168
@@ -91,6 +91,10 @@ TELEGRAM_NOTIFY_CRM=change_me
 TELEGRAM_NOTIFY_SERVICE=change_me
 TELEGRAM_NOTIFY_TBLOCKER=change_me
 
+### PANEL DOMAIN ###
+### Used to build panel links in Telegram notifications.
+PANEL_DOMAIN=$PANEL_DOMAIN
+
 ### FRONT_END ###
 # Used by CORS, you can leave it as * or place your domain there
 FRONT_END_DOMAIN=$PANEL_DOMAIN
@@ -102,11 +106,6 @@ FRONT_END_DOMAIN=$PANEL_DOMAIN
 SUB_PUBLIC_DOMAIN=$SUB_DOMAIN
 
 ### If CUSTOM_SUB_PREFIX is set in @remnawave/subscription-page, append the same path to SUB_PUBLIC_DOMAIN. Example: SUB_PUBLIC_DOMAIN=sub-page.example.com/sub ###
-
-### SWAGGER ###
-SWAGGER_PATH=/docs
-SCALAR_PATH=/scalar
-IS_DOCS_ENABLED=false
 
 ### PROMETHEUS ###
 ### Metrics are available at http://127.0.0.1:METRICS_PORT/metrics
@@ -132,11 +131,6 @@ NOT_CONNECTED_USERS_NOTIFICATIONS_ENABLED=false
 # Only in ASC order (example: [6, 12, 24]), must be valid array of integer(min: 1, max: 168) numbers. No more than 3 values.
 # Each value represents HOURS passed after user creation (user.createdAt)
 NOT_CONNECTED_USERS_NOTIFICATIONS_AFTER_HOURS=[6, 24, 48]
-
-### CLOUDFLARE ###
-# USED ONLY FOR docker-compose-prod-with-cf.yml
-# NOT USED BY THE APP ITSELF
-CLOUDFLARE_TOKEN=ey...
 
 ### Database ###
 ### For Postgres Docker container ###
@@ -170,9 +164,10 @@ x-env: &env
 
 services:
   remnawave-db:
-    image: postgres:18.3
+    image: postgres:18
     container_name: 'remnawave-db'
     hostname: remnawave-db
+    shm_size: 512mb
     <<: [*common, *logging, *env, *networks]
     environment:
       - POSTGRES_USER=\${POSTGRES_USER}
@@ -190,7 +185,7 @@ services:
       retries: 3
 
   remnawave:
-    image: remnawave/backend:2
+    image: remnawave/backend:3
     container_name: remnawave
     hostname: remnawave
     <<: [*common, *logging, *env, *networks]
@@ -212,7 +207,7 @@ services:
         condition: service_healthy
 
   remnawave-redis:
-    image: valkey/valkey:9.0.3-alpine
+    image: valkey/valkey:9-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     <<: [*common, *logging, *networks]
@@ -279,7 +274,7 @@ installation_panel() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:7.2.6
+    image: remnawave/subscription-page:8.0.0
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]
@@ -312,6 +307,29 @@ EOL
 
     cat > /opt/remnawave/nginx.conf <<EOL
 server_names_hash_bucket_size 64;
+
+# Gzip Compression
+# Remnawave 3.x does not compress response bodies itself, so the reverse proxy
+# has to. https://f.docs.rw/t/topic/354/3
+gzip_vary on;
+gzip_proxied any;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_types
+    application/javascript
+    application/json
+    application/manifest+json
+    application/xml
+    application/wasm
+    font/opentype
+    font/eot
+    font/otf
+    font/ttf
+    image/svg+xml
+    text/css
+    text/javascript
+    text/plain
+    text/xml;
 
 upstream remnawave {
     server 127.0.0.1:3000;
@@ -357,6 +375,7 @@ server {
     server_name $PANEL_DOMAIN;
     listen 443 ssl;
     http2 on;
+    gzip on;
 
     ssl_certificate "/etc/nginx/ssl/$PANEL_CERT_DOMAIN/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/$PANEL_CERT_DOMAIN/privkey.pem";
@@ -408,6 +427,7 @@ server {
     server_name $SUB_DOMAIN;
     listen 443 ssl;
     http2 on;
+    gzip on;
 
     ssl_certificate "/etc/nginx/ssl/$SUB_CERT_DOMAIN/fullchain.pem";
     ssl_certificate_key "/etc/nginx/ssl/$SUB_CERT_DOMAIN/privkey.pem";
@@ -472,6 +492,10 @@ EOL
 
     # Register Remnawave
     local token=$(register_remnawave "$domain_url" "$SUPERADMIN_USERNAME" "$SUPERADMIN_PASSWORD")
+    case "$token" in
+        ey*) ;;
+        *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
+    esac
     echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
     # Generate Xray keys

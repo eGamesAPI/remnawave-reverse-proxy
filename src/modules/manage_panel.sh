@@ -5,16 +5,38 @@ show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
+    show_panel_upgrade_notice nohint
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[UPDATE_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[VIEW_LOGS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[REMNAWAVE_CLI]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
+
+    # Both extra entries act on a panel, so a node-only box sees neither and its
+    # menu stays exactly what it was. The upgrade entry additionally appears only
+    # while there is something to upgrade, and the entry below it takes the freed
+    # number rather than leaving a hole in the list.
+    local last=6
+    local opt_upgrade="__none__"
+    local opt_minclientver="__none__"
+
+    if panel_is_installed; then
+        if panel_needs_v3_migration; then
+            last=$((last + 1))
+            opt_upgrade=$last
+            echo -e "${COLOR_YELLOW}${last}. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
+        fi
+
+        last=$((last + 1))
+        opt_minclientver=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[MINCLIENTVER_MENU]}${COLOR_RESET}"
+    fi
+
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[MANAGE_PANEL_NODE_PROMPT]}" SUB_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" SUB_OPTION
 
     case $SUB_OPTION in
         1)
@@ -53,15 +75,31 @@ show_manage_panel_menu() {
             log_clear
             show_manage_panel_menu
             ;;
+        "$opt_upgrade")
+            upgrade_panel_to_v3
+            sleep 2
+            log_clear
+            show_manage_panel_menu
+            ;;
+        "$opt_minclientver")
+            set_reality_min_client_ver
+            sleep 2
+            log_clear
+            show_manage_panel_menu
+            ;;
         0)
             remnawave_reverse
             ;;
         *)
-            echo -e "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}"
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
             sleep 1
             show_manage_panel_menu
             ;;
     esac
+}
+
+remnawave_container_running() {
+    docker ps --format '{{.Names}}' | grep -qE '^(remnawave|remnanode)$'
 }
 
 run_remnawave_cli() {
@@ -74,7 +112,11 @@ run_remnawave_cli() {
     exec > /dev/tty 2>&1
 
     echo -e "${COLOR_YELLOW}${LANG[RUNNING_CLI]}${COLOR_RESET}"
-    if docker exec -it -e TERM=xterm-256color remnawave remnawave; then
+    local cli_bin="remnawave"
+    if docker exec remnawave sh -c 'command -v cli' > /dev/null 2>&1; then
+        cli_bin="cli"
+    fi
+    if docker exec -it -e TERM=xterm-256color remnawave "$cli_bin"; then
         echo -e "${COLOR_GREEN}${LANG[CLI_SUCCESS]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[CLI_FAILED]}${COLOR_RESET}"
@@ -98,7 +140,7 @@ start_panel_node() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:2.8.0" | grep -q . || docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
+    if remnawave_container_running; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}...${COLOR_RESET}"
@@ -121,7 +163,7 @@ stop_panel_node() {
     fi
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:2.8.0" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
+    if ! remnawave_container_running; then
         echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}...${COLOR_RESET}"
@@ -146,6 +188,11 @@ update_panel_node() {
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
     echo -e "${COLOR_YELLOW}${LANG[UPDATING]}${COLOR_RESET}"
     sleep 1
+
+    if [ "$dir" = "/opt/remnawave" ] && panel_needs_v3_migration "$dir"; then
+        echo -e "${COLOR_YELLOW}${LANG[UPGRADE_REQUIRED_V3]}${COLOR_RESET}"
+        return 1
+    fi
 
     images_before=$(docker compose config --images | sort -u)
     if [ -n "$images_before" ]; then
@@ -183,6 +230,351 @@ update_panel_node() {
     fi
 }
 
+# Read a single key from an .env-style file without sourcing it.
+read_env_value() {
+    local file="$1"
+    local key="$2"
+    [ -f "$file" ] || return 1
+    sed -n "s/^${key}=//p" "$file" | head -n 1 | sed -e 's/^"//' -e 's/"$//'
+}
+
+# The first 3.x boot runs prisma migrations and seeders before the app listens,
+# so a short health deadline is really a migration deadline: interrupting it can
+# leave a failed row in _prisma_migrations that blocks every later deploy.
+# Wait generously, and fail fast only on the two states that mean "it is dead":
+# the container exited, or restart: always is looping it.
+wait_for_container_health() {
+    local name="$1"
+    local timeout="${2:-300}"
+    local waited=0
+    local state=""
+    local health=""
+    local restarts=""
+
+    while [ "$waited" -lt "$timeout" ]; do
+        state=$(docker inspect --format '{{.State.Status}}' "$name" 2>/dev/null)
+        case "$state" in
+            exited|dead)
+                return 1
+                ;;
+        esac
+
+        restarts=$(docker inspect --format '{{.RestartCount}}' "$name" 2>/dev/null)
+        if [ -n "$restarts" ] && [ "$restarts" -gt 2 ] 2>/dev/null; then
+            return 1
+        fi
+
+        health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)
+        if [ "$health" = "healthy" ]; then
+            return 0
+        fi
+        if [ "$health" = "none" ] && [ "$state" = "running" ]; then
+            return 0
+        fi
+
+        sleep 5
+        waited=$((waited + 5))
+    done
+
+    return 1
+}
+
+# Move an installed panel from the 2.x line to 3.x.
+upgrade_panel_to_v3() {
+    local dir="/opt/remnawave"
+
+    if [ ! -f "$dir/docker-compose.yml" ] || [ ! -f "$dir/.env" ]; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_NOT_A_PANEL]}${COLOR_RESET}"
+        return 1
+    fi
+
+    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; return 1; }
+
+    local current_tag
+    current_tag=$(sed -n 's|^[[:space:]]*image:[[:space:]]*remnawave/backend:\([^[:space:]]*\).*|\1|p' docker-compose.yml | head -n 1)
+    if [ -z "$current_tag" ]; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_NOT_A_PANEL]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if ! panel_needs_v3_migration "$dir"; then
+        printf "${COLOR_GREEN}${LANG[UPGRADE_ALREADY_V3]}${COLOR_RESET}\n" "$current_tag"
+        return 0
+    fi
+
+    # 3.x reads one APP_SECRET where 2.x accepted JWT_AUTH_SECRET as a deprecated
+    # alias for the same value. It signs sessions and API tokens and is mixed into
+    # every admin password hash, so it has to be carried over, never regenerated.
+    # A box that already carries APP_SECRET (added by hand, or by a previous run
+    # that stopped before the tag moved) keeps the value it has.
+    local app_secret
+    app_secret=$(read_env_value .env APP_SECRET)
+    if [ -z "$app_secret" ]; then
+        app_secret=$(read_env_value .env JWT_AUTH_SECRET)
+    fi
+    if [ -z "$app_secret" ]; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_NO_SECRET]}${COLOR_RESET}"
+        return 1
+    fi
+
+    echo -e ""
+    echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[UPGRADE_WARNING]}${COLOR_RESET}"
+    echo -e ""
+    reading "${LANG[UPGRADE_CONFIRM_PROMPT]}" upgrade_confirm
+    if [ "$upgrade_confirm" != "upgrade" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[UPGRADE_CANCELLED]}${COLOR_RESET}"
+        return 1
+    fi
+
+    local ts backup_dir pg_user pg_db
+    ts=$(date +%Y%m%d-%H%M%S)
+    backup_dir="$dir/backup/$ts"
+    if ! mkdir -p "$backup_dir"; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
+        return 1
+    fi
+
+    pg_user=$(read_env_value .env POSTGRES_USER)
+    pg_user="${pg_user:-postgres}"
+    pg_db=$(read_env_value .env POSTGRES_DB)
+    pg_db="${pg_db:-postgres}"
+
+    cp -a .env docker-compose.yml "$backup_dir/"
+    [ -f nginx.conf ] && cp -a nginx.conf "$backup_dir/"
+    [ -f Caddyfile ] && cp -a Caddyfile "$backup_dir/"
+    docker compose images > "$backup_dir/images-before.txt" 2>&1
+
+    echo -e "${COLOR_YELLOW}${LANG[UPGRADE_BACKUP]}${COLOR_RESET}"
+    docker compose up -d remnawave-db > /dev/null 2>&1
+    if ! wait_for_container_health remnawave-db 120; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
+        return 1
+    fi
+    if ! docker compose exec -T remnawave-db pg_dump -U "$pg_user" -d "$pg_db" -Fc --no-owner --no-privileges > "$backup_dir/remnawave-db.dump" 2> "$backup_dir/pg_dump.log"; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
+        cat "$backup_dir/pg_dump.log"
+        return 1
+    fi
+    if [ ! -s "$backup_dir/remnawave-db.dump" ]; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
+        return 1
+    fi
+    printf "${COLOR_GREEN}${LANG[UPGRADE_BACKUP_OK]}${COLOR_RESET}\n" "$backup_dir"
+
+    # Append only: the 2.x keys stay in place so the backed-up .env is a working
+    # rollback, and 3.x silently ignores keys it does not know.
+    if ! grep -q '^APP_SECRET=' .env; then
+        {
+            printf '\n### SECRETS ###\n'
+            printf '# 3.x dropped the JWT_AUTH_SECRET alias. The value below is the same one\n'
+            printf '# the panel already used, so admin logins and API tokens keep working.\n'
+            printf 'APP_SECRET=%s\n' "$app_secret"
+        } >> .env
+    fi
+    if ! grep -q '^PANEL_DOMAIN=' .env; then
+        local front_end
+        front_end=$(read_env_value .env FRONT_END_DOMAIN)
+        if [ -n "$front_end" ] && [ "$front_end" != "*" ]; then
+            printf 'PANEL_DOMAIN=%s\n' "$front_end" >> .env
+        fi
+    fi
+
+    # :latest and :dev already resolve to a 3.x image, so only the pinned old
+    # majors need the tag rewritten.
+    case "$current_tag" in
+        1|1.*|2|2.*)
+            sed -i "s|image: remnawave/backend:${current_tag}|image: remnawave/backend:3|" docker-compose.yml
+            if ! grep -qE '^[[:space:]]*image:[[:space:]]*remnawave/backend:3[[:space:]]*$' docker-compose.yml; then
+                printf "${COLOR_RED}${LANG[UPGRADE_TAG_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+                return 1
+            fi
+            ;;
+    esac
+
+    echo -e "${COLOR_YELLOW}${LANG[UPGRADE_PULLING]}${COLOR_RESET}"
+    if ! docker compose pull remnawave > "$backup_dir/pull.log" 2>&1; then
+        # Nothing has been recreated yet, so put the compose file back rather
+        # than leaving a :3 tag for the next unrelated "up" to apply.
+        cp -a "$backup_dir/docker-compose.yml" ./docker-compose.yml
+        printf "${COLOR_RED}${LANG[UPGRADE_PULL_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+        tail -n 10 "$backup_dir/pull.log"
+        return 1
+    fi
+
+    # --no-deps keeps compose from walking the service_healthy dependencies of
+    # the node and the subscription page while the first 3.x boot is still
+    # migrating: it would declare the backend unhealthy after ~2 minutes and
+    # abort, leaving both of them stopped.
+    echo -e "${COLOR_YELLOW}${LANG[UPGRADE_STARTING]}${COLOR_RESET}"
+    if ! docker compose up -d --no-deps --force-recreate remnawave > "$backup_dir/up.log" 2>&1; then
+        printf "${COLOR_RED}${LANG[UPGRADE_FAILED]}${COLOR_RESET}\n"
+        tail -n 20 "$backup_dir/up.log"
+        rollback_panel_from_v3 "$backup_dir" "$pg_user" "$pg_db"
+        return 1
+    fi
+
+    if ! wait_for_container_health remnawave 1800; then
+        echo -e "${COLOR_RED}${LANG[UPGRADE_FAILED]}${COLOR_RESET}"
+        docker compose logs --tail 60 remnawave
+        rollback_panel_from_v3 "$backup_dir" "$pg_user" "$pg_db"
+        return 1
+    fi
+
+    # Bring back whatever the recreate left behind: the subscription page and,
+    # on a combined box, the node.
+    docker compose up -d > "$backup_dir/up-rest.log" 2>&1
+
+    local stopped
+    stopped=$(docker compose ps --services --filter status=stopped 2>/dev/null | tr '\n' ' ')
+    if [ -n "${stopped// /}" ]; then
+        printf "${COLOR_RED}${LANG[UPGRADE_SERVICES_DOWN]}${COLOR_RESET}\n" "$stopped"
+        tail -n 20 "$backup_dir/up-rest.log"
+    fi
+
+    local new_version
+    new_version=$(docker exec remnawave cat /opt/app/package.json 2>/dev/null | jq -r '.version // empty' 2>/dev/null)
+    printf "${COLOR_GREEN}${LANG[UPGRADE_SUCCESS]}${COLOR_RESET}\n" "${new_version:-3.x}"
+    printf "${COLOR_YELLOW}${LANG[UPGRADE_NEXT_STEPS]}${COLOR_RESET}\n" "$backup_dir"
+}
+
+rollback_panel_from_v3() {
+    local backup_dir="$1"
+    local pg_user="$2"
+    local pg_db="$3"
+    local dir="/opt/remnawave"
+
+    echo -e "${COLOR_YELLOW}${LANG[ROLLBACK_START]}${COLOR_RESET}"
+    cd "$dir" || return 1
+
+    docker compose down > "$backup_dir/rollback-down.log" 2>&1
+    cp -a "$backup_dir/docker-compose.yml" "$backup_dir/.env" "$dir/"
+
+    # The 3.x migrations are one-way. Putting 2.x code back on a migrated schema
+    # is not a rollback, so restoring the dump is the default and declining it
+    # leaves the stack down rather than half-restored.
+    local restore_db=""
+    reading "${LANG[ROLLBACK_DB_PROMPT]}" restore_db
+    if [[ "$restore_db" =~ ^[nN] ]]; then
+        printf "${COLOR_RED}${LANG[ROLLBACK_DB_SKIPPED]}${COLOR_RESET}\n" "$backup_dir"
+        return 1
+    fi
+
+    docker compose up -d remnawave-db > /dev/null 2>&1
+    if ! wait_for_container_health remnawave-db 120; then
+        printf "${COLOR_RED}${LANG[ROLLBACK_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+        return 1
+    fi
+
+    # 3.x creates tables and types 2.x never knew about; dropping the schema is
+    # the only way --clean cannot leave them behind.
+    if ! docker compose exec -T remnawave-db psql -U "$pg_user" -d "$pg_db" -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' > "$backup_dir/rollback-schema.log" 2>&1; then
+        printf "${COLOR_RED}${LANG[ROLLBACK_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+        tail -n 20 "$backup_dir/rollback-schema.log"
+        return 1
+    fi
+    if ! docker compose exec -T remnawave-db pg_restore -U "$pg_user" -d "$pg_db" --no-owner --no-privileges --exit-on-error < "$backup_dir/remnawave-db.dump" > "$backup_dir/pg_restore.log" 2>&1; then
+        printf "${COLOR_RED}${LANG[ROLLBACK_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+        tail -n 20 "$backup_dir/pg_restore.log"
+        return 1
+    fi
+
+    docker compose up -d > "$backup_dir/rollback-up.log" 2>&1
+    if wait_for_container_health remnawave 300; then
+        printf "${COLOR_GREEN}${LANG[ROLLBACK_DONE]}${COLOR_RESET}\n" "$backup_dir"
+    else
+        printf "${COLOR_RED}${LANG[ROLLBACK_FAILED]}${COLOR_RESET}\n" "$backup_dir"
+    fi
+}
+
+# Write realitySettings.minClientVer = 0.0.0 into REALITY inbounds that do not
+# define it. Xray-core >= 26.7.11 otherwise applies a default floor of 26.3.27
+# and refuses any client below it, which covers mihomo, sing-box and older Happ.
+# Note this lowers a floor rather than repairing anything: an operator who wants
+# the floor should leave it alone, or set a version of their own.
+set_reality_min_client_ver() {
+    local domain_url="127.0.0.1:3000"
+
+    echo -e "${COLOR_YELLOW}${LANG[MINCLIENTVER_EXPLAIN]}${COLOR_RESET}"
+    echo -e ""
+
+    if ! declare -F make_api_request > /dev/null 2>&1; then
+        load_api_module || return 1
+    fi
+
+    if ! docker ps --format '{{.Names}}' | grep -q '^remnawave$'; then
+        echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
+        return 1
+    fi
+
+    get_panel_token || return 1
+    local token
+    token=$(cat "$TOKEN_FILE" 2>/dev/null)
+    if [ -z "$token" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    local profiles uuids
+    profiles=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
+    if ! echo "$profiles" | jq -e '.response.configProfiles' > /dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[MINCLIENTVER_FAILED]}${COLOR_RESET}"
+        return 1
+    fi
+    uuids=$(echo "$profiles" | jq -r '.response.configProfiles[] | .uuid')
+    if [ -z "$uuids" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[MINCLIENTVER_NONE]}${COLOR_RESET}"
+        return 0
+    fi
+
+    local uuid profile missing preset config body response
+    local patched=0
+    local untouched=0
+    local failed=0
+    local custom=0
+
+    while IFS= read -r uuid; do
+        [ -n "$uuid" ] || continue
+
+        profile=$(make_api_request "GET" "http://$domain_url/api/config-profiles/$uuid" "$token")
+        if ! echo "$profile" | jq -e '.response.config' > /dev/null 2>&1; then
+            failed=$((failed + 1))
+            printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
+            continue
+        fi
+
+        missing=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings | type) == "object") | select(.streamSettings.realitySettings | has("minClientVer") | not)] | length')
+        preset=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings.minClientVer? // "0.0.0") != "0.0.0")] | length')
+        [ -n "$preset" ] && [ "$preset" != "0" ] && custom=$((custom + 1))
+
+        if [ -z "$missing" ] || [ "$missing" = "0" ]; then
+            untouched=$((untouched + 1))
+            continue
+        fi
+
+        config=$(echo "$profile" | jq '.response.config | .inbounds |= map(if (.streamSettings.security? == "reality") and ((.streamSettings.realitySettings | type) == "object") then (.streamSettings.realitySettings.minClientVer //= "0.0.0") else . end)')
+        if [ -z "$config" ]; then
+            failed=$((failed + 1))
+            printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
+            continue
+        fi
+
+        body=$(jq -n --arg uuid "$uuid" --argjson config "$config" '{uuid: $uuid, config: $config}')
+        response=$(make_api_request "PATCH" "http://$domain_url/api/config-profiles" "$token" "$body")
+        if echo "$response" | jq -e '.response.uuid' > /dev/null 2>&1; then
+            patched=$((patched + 1))
+        else
+            failed=$((failed + 1))
+            printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
+        fi
+    done <<< "$uuids"
+
+    printf "${COLOR_GREEN}${LANG[MINCLIENTVER_DONE]}${COLOR_RESET}\n" "$patched" "$untouched" "$failed"
+    if [ "$custom" -gt 0 ]; then
+        printf "${COLOR_YELLOW}${LANG[MINCLIENTVER_CUSTOM]}${COLOR_RESET}\n" "$custom"
+    fi
+}
+
 view_logs() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
@@ -196,9 +588,9 @@ view_logs() {
 
     cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
-    if ! docker ps -q --filter "ancestor=remnawave/backend:latest" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/node:latest" | grep -q . || docker ps -q --filter "ancestor=remnawave/node:2.8.0" | grep -q . && ! docker ps -q --filter "ancestor=remnawave/backend:2" | grep -q .; then
+    if ! remnawave_container_running; then
         echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     echo -e "${COLOR_YELLOW}${LANG[VIEW_LOGS]}${COLOR_RESET}"

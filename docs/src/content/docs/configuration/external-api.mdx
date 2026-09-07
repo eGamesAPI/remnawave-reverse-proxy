@@ -27,7 +27,7 @@ location ^~ /api/ {
 This opens access to the API from the outside, while the API will still be protected by an authorization token.
 
 :::danger
-Right after this, in the `.env` file, replace the line `IS_DOCS_ENABLED=true` with `IS_DOCS_ENABLED=false` to avoid "exposing" the documentation to the external internet.
+Remnawave 3.x no longer has an `IS_DOCS_ENABLED` switch: the API docs live behind `/api/backend-tools`, which the panel gates with a cookie signed by `APP_SECRET`. Keep that path closed on your reverse proxy if you do not want it reachable from outside.
 :::
 
 ## Accessing API through cookies

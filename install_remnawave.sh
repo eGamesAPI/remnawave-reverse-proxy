@@ -4,8 +4,24 @@ SCRIPT_VERSION="3.0.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
+
 SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
 LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/lang"
+
+# The module and language cache under DIR_REMNAWAVE belongs to one version of
+# this script. Sourcing files an older release left behind would run code this
+# version was never tested against, so the cache carries a stamp.
+SOURCE_STAMP_FILE="${DIR_REMNAWAVE}source"
+SOURCE_STAMP="$SCRIPT_VERSION"
+
+# A src/ directory next to this script wins over the network, so a change can
+# be run before it is pushed. Empty when the script runs from /usr/local/bin.
+LOCAL_SRC_DIR=""
+if [ -n "${BASH_SOURCE[0]}" ]; then
+    _self_dir="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)"
+    [ -d "${_self_dir}/src" ] && LOCAL_SRC_DIR="${_self_dir}/src"
+    unset _self_dir
+fi
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -75,6 +91,20 @@ validate_downloaded_file() {
         return 1
     fi
     
+    # Our own sources start with the bash shebang, and an HTML error page never
+    # does. Decide on that first: the heuristics below grep for strings this
+    # script itself contains ("404"/"Not Found", "Terms of Service"/"scraping"),
+    # so running them over a genuine install_remnawave.sh rejected every copy.
+    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
+        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
+            return 1
+        fi
+        if [ "$file_type" = "lang" ] && ! grep -q "declare -gA LANG" "$file"; then
+            return 1
+        fi
+        return 0
+    fi
+    
     # Check for HTTP error responses or rate limit errors
     if grep -q "429" "$file" && grep -q "Too Many Requests" "$file"; then
         return 1
@@ -87,20 +117,6 @@ validate_downloaded_file() {
     # Check for Terms of Service warnings (GitHub scraping warning)
     if grep -q "Terms of Service" "$file" && grep -q "scraping" "$file"; then
         return 1
-    fi
-    
-    # For bash scripts, check for proper shebang
-    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
-        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
-            return 1
-        fi
-    fi
-    
-    # For language files, check for LANG array declaration
-    if [ "$file_type" = "lang" ]; then
-        if ! grep -q "declare -gA LANG" "$file"; then
-            return 1
-        fi
     fi
     
     return 0
@@ -143,6 +159,11 @@ set_language() {
 
      unset LANG
      declare -gA LANG
+
+     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/lang/${lang}.sh" ]; then
+         source "${LOCAL_SRC_DIR}/lang/${lang}.sh"
+         return 0
+     fi
 
      if [ "$force_update" = "true" ] || [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
@@ -191,6 +212,19 @@ reading() {
 error() {
     echo -e "${COLOR_RED}$*${COLOR_RESET}"
     exit 1
+}
+
+# Abort after the superadmin already exists. The credentials live in memory and
+# are printed only by the final banner, so an early exit would lose them.
+abort_with_credentials() {
+    if [ -n "$SUPERADMIN_USERNAME" ] && [ -n "$SUPERADMIN_PASSWORD" ]; then
+        echo -e ""
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_USERNAME}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_PASSWORD}${COLOR_RESET}"
+        echo -e ""
+    fi
+    error "$*"
 }
 
 check_os() {
@@ -443,19 +477,48 @@ remove_script() {
 }
 
 install_script_if_missing() {
-    if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
+    local stamp_stored=""
+    [ -f "$SOURCE_STAMP_FILE" ] && stamp_stored=$(cat "$SOURCE_STAMP_FILE" 2>/dev/null)
+
+    if [ "$stamp_stored" != "$SOURCE_STAMP" ] || [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
         mkdir -p "${DIR_REMNAWAVE}"
-        
-        # Use download_with_mirrors for reliable download
-        if ! download_with_mirrors "$SCRIPT_URL" "${DIR_REMNAWAVE}remnawave_reverse" "script"; then
-            # Fallback: try direct download
-            if ! wget -q -O "${DIR_REMNAWAVE}remnawave_reverse" "$SCRIPT_URL" 2>/dev/null; then
-                exit 1
+
+        # Modules cached from another repository or another version would be
+        # sourced verbatim by this script, so they go first.
+        rm -rf "${DIR_REMNAWAVE}api" "${DIR_REMNAWAVE}modules" "${DIR_REMNAWAVE}nginx" "${DIR_REMNAWAVE}caddy" "${DIR_REMNAWAVE}lang"
+
+        local self_path=""
+        if [ -n "${BASH_SOURCE[0]}" ]; then
+            self_path=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)
+        fi
+
+        local staged="${DIR_REMNAWAVE}remnawave_reverse.new"
+        rm -f "$staged"
+
+        # A checkout or an already-installed copy beats the network, and it is
+        # the only source that works before a fork has been pushed.
+        if [ -n "$self_path" ] && [ -f "$self_path" ] && [ "$self_path" != "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+            cp -f "$self_path" "$staged" 2>/dev/null
+        elif ! download_with_mirrors "$SCRIPT_URL" "$staged" "script"; then
+            if command -v curl &> /dev/null; then
+                curl -fsSL "$SCRIPT_URL" -o "$staged" 2>/dev/null
+            elif command -v wget &> /dev/null; then
+                wget -q -O "$staged" "$SCRIPT_URL" 2>/dev/null
             fi
         fi
-        
-        chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
-        ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+
+        if [ -s "$staged" ] && head -1 "$staged" | grep -q "^#!/bin/bash"; then
+            mv -f "$staged" "${DIR_REMNAWAVE}remnawave_reverse"
+            chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
+            ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+            printf '%s\n' "$SOURCE_STAMP" > "$SOURCE_STAMP_FILE"
+        else
+            rm -f "$staged"
+            if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+                error "Failed to download $SCRIPT_URL"
+            fi
+            echo -e "${COLOR_RED}Failed to download $SCRIPT_URL, keeping the installed copy${COLOR_RESET}"
+        fi
     fi
 
     local bashrc_file="/etc/bash.bashrc"
@@ -558,6 +621,72 @@ check_update_status() {
     fi
 }
 
+# True when a panel is installed at $dir. Node-only boxes have /opt/remnanode
+# and must not be offered panel actions.
+panel_is_installed() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/docker-compose.yml" ] && [ -f "$dir/.env" ]
+}
+
+# True when the panel at $dir still has to be taken to 3.x. Two independent
+# signals, either of which is enough:
+#   - the compose still pins an old major (:2, :2.8.1, :1.6.16)
+#   - .env has no APP_SECRET, which 3.x requires and refuses to boot without
+# The tag alone misses a box whose compose floats on :latest or :dev, and the
+# .env alone misses a box where APP_SECRET was added by hand but the tag never
+# moved. Checking both leaves no panel stranded.
+panel_needs_v3_migration() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/.env" ] || return 1
+
+    grep -q '^APP_SECRET=' "$dir/.env" || return 0
+
+    case "$(panel_image_tag "$dir")" in
+        1|1.*|2|2.*) return 0 ;;
+    esac
+    return 1
+}
+
+# The backend image tag from the compose file, or empty.
+panel_image_tag() {
+    local compose="${1:-/opt/remnawave}/docker-compose.yml"
+    [ -f "$compose" ] || return 1
+    sed -n 's|^[[:space:]]*image:[[:space:]]*remnawave/backend:\([^[:space:]]*\).*|\1|p' "$compose" | head -n 1
+}
+
+# Version to show in the notice, read from the compose tag. Deliberately does
+# not call docker: this runs on every menu render.
+panel_installed_version() {
+    local tag
+    tag=$(panel_image_tag "/opt/remnawave") || return 1
+    case "$tag" in
+        1)      echo "1.x" ;;
+        2)      echo "2.x" ;;
+        1.*|2.*) echo "$tag" ;;
+        *)      return 1 ;;
+    esac
+}
+
+# Shown in the main menu and in the panel menu, so an outdated panel is visible
+# without the operator having to go looking for it.
+# Pass "nohint" from a menu that already shows the upgrade entry itself.
+show_panel_upgrade_notice() {
+    # Same gate as the menu entry it points at, so the two can never disagree.
+    panel_is_installed || return 0
+    panel_needs_v3_migration || return 0
+
+    local version
+    if version=$(panel_installed_version); then
+        printf "${COLOR_RED}${LANG[PANEL_V2_NOTICE]}${COLOR_RESET}\n" "$version"
+    else
+        echo -e "${COLOR_RED}${LANG[PANEL_V2_NOTICE_UNKNOWN]}${COLOR_RESET}"
+    fi
+    if [ "${1:-}" != "nohint" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    fi
+    echo -e ""
+}
+
 show_menu() {
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
@@ -567,6 +696,7 @@ show_menu() {
     fi
     echo -e "${COLOR_GRAY}Wiki: https://wiki.egam.es/${COLOR_RESET}"
     echo -e ""
+    show_panel_upgrade_notice
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}" # Install Remnawave Components
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
@@ -2318,6 +2448,11 @@ load_module() {
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
     local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
+
+    if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
+        source "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh"
+        return 0
+    fi
 
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
