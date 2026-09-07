@@ -274,7 +274,7 @@ installation_panel() {
     cat >> /opt/remnawave/docker-compose.yml <<EOL
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:7.2.6
+    image: remnawave/subscription-page:8.0.0
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]

@@ -254,7 +254,7 @@ services:
           start_period: 5s
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:7.2.6
+    image: remnawave/subscription-page:8.0.0
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]
