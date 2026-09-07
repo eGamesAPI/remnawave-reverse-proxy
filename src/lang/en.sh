@@ -205,7 +205,7 @@ LANG[STARTING_NODE]="Starting node"
 LANG[STOPPING_REMNAWAVE]="Stopping panel and node"
 LANG[IMAGES_DETECTED]="Images detected, restarting containers..."
 #Upgrade to Remnawave 3.x
-LANG[UPGRADE_REQUIRED_V3]="This panel predates Remnawave 3.x and its .env has no APP_SECRET, so pulling new images would leave it unable to start. Use "Upgrade panel to Remnawave 3.x" in this menu first."
+LANG[UPGRADE_REQUIRED_V3]="This panel predates Remnawave 3.x and its .env has no APP_SECRET, so pulling new images would leave it unable to start. Use 'Upgrade panel to Remnawave 3.x' in this menu first."
 LANG[UPGRADE_NOT_A_PANEL]="/opt/remnawave with docker-compose.yml and .env not found, nothing to upgrade"
 LANG[UPGRADE_ALREADY_V3]="Panel already runs remnawave/backend:%s, use 'Update panel/node'"
 LANG[UPGRADE_NO_SECRET]="Neither APP_SECRET nor JWT_AUTH_SECRET found in .env. Upgrading would lock every admin out of the panel, aborting."
