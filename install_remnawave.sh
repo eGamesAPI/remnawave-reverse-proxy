@@ -621,6 +621,60 @@ check_update_status() {
     fi
 }
 
+# True when the panel at $dir still has to be taken to 3.x. Two independent
+# signals, either of which is enough:
+#   - the compose still pins an old major (:2, :2.8.1, :1.6.16)
+#   - .env has no APP_SECRET, which 3.x requires and refuses to boot without
+# The tag alone misses a box whose compose floats on :latest or :dev, and the
+# .env alone misses a box where APP_SECRET was added by hand but the tag never
+# moved. Checking both leaves no panel stranded.
+panel_needs_v3_migration() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/.env" ] || return 1
+
+    grep -q '^APP_SECRET=' "$dir/.env" || return 0
+
+    case "$(panel_image_tag "$dir")" in
+        1|1.*|2|2.*) return 0 ;;
+    esac
+    return 1
+}
+
+# The backend image tag from the compose file, or empty.
+panel_image_tag() {
+    local compose="${1:-/opt/remnawave}/docker-compose.yml"
+    [ -f "$compose" ] || return 1
+    sed -n 's|^[[:space:]]*image:[[:space:]]*remnawave/backend:\([^[:space:]]*\).*|\1|p' "$compose" | head -n 1
+}
+
+# Version to show in the notice, read from the compose tag. Deliberately does
+# not call docker: this runs on every menu render.
+panel_installed_version() {
+    local tag
+    tag=$(panel_image_tag "/opt/remnawave") || return 1
+    case "$tag" in
+        1)      echo "1.x" ;;
+        2)      echo "2.x" ;;
+        1.*|2.*) echo "$tag" ;;
+        *)      return 1 ;;
+    esac
+}
+
+# Shown in the main menu and in the panel menu, so an outdated panel is visible
+# without the operator having to go looking for it.
+show_panel_upgrade_notice() {
+    panel_needs_v3_migration || return 0
+
+    local version
+    if version=$(panel_installed_version); then
+        printf "${COLOR_RED}${LANG[PANEL_V2_NOTICE]}${COLOR_RESET}\n" "$version"
+    else
+        echo -e "${COLOR_RED}${LANG[PANEL_V2_NOTICE_UNKNOWN]}${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    echo -e ""
+}
+
 show_menu() {
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
@@ -630,6 +684,7 @@ show_menu() {
     fi
     echo -e "${COLOR_GRAY}Wiki: https://wiki.egam.es/${COLOR_RESET}"
     echo -e ""
+    show_panel_upgrade_notice
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}" # Install Remnawave Components
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node

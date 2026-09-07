@@ -5,6 +5,7 @@ show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
+    show_panel_upgrade_notice
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[UPDATE_PANEL_NODE]}${COLOR_RESET}"
@@ -218,16 +219,6 @@ read_env_value() {
     sed -n "s/^${key}=//p" "$file" | head -n 1 | sed -e 's/^"//' -e 's/"$//'
 }
 
-# A panel installed before the 3.x switch has no APP_SECRET, and 3.x refuses to
-# boot without it. That is a far more reliable marker than the image tag, which
-# across this installer's history has been :2, :latest, :dev and :1.6.16.
-panel_needs_v3_migration() {
-    local dir="${1:-/opt/remnawave}"
-    [ -f "$dir/.env" ] || return 1
-    grep -q '^APP_SECRET=' "$dir/.env" && return 1
-    return 0
-}
-
 # The first 3.x boot runs prisma migrations and seeders before the app listens,
 # so a short health deadline is really a migration deadline: interrupting it can
 # leave a failed row in _prisma_migrations that blocks every later deploy.
@@ -295,8 +286,13 @@ upgrade_panel_to_v3() {
     # 3.x reads one APP_SECRET where 2.x accepted JWT_AUTH_SECRET as a deprecated
     # alias for the same value. It signs sessions and API tokens and is mixed into
     # every admin password hash, so it has to be carried over, never regenerated.
+    # A box that already carries APP_SECRET (added by hand, or by a previous run
+    # that stopped before the tag moved) keeps the value it has.
     local app_secret
-    app_secret=$(read_env_value .env JWT_AUTH_SECRET)
+    app_secret=$(read_env_value .env APP_SECRET)
+    if [ -z "$app_secret" ]; then
+        app_secret=$(read_env_value .env JWT_AUTH_SECRET)
+    fi
     if [ -z "$app_secret" ]; then
         echo -e "${COLOR_RED}${LANG[UPGRADE_NO_SECRET]}${COLOR_RESET}"
         return 1
@@ -349,12 +345,14 @@ upgrade_panel_to_v3() {
 
     # Append only: the 2.x keys stay in place so the backed-up .env is a working
     # rollback, and 3.x silently ignores keys it does not know.
-    {
-        printf '\n### SECRETS ###\n'
-        printf '# 3.x dropped the JWT_AUTH_SECRET alias. The value below is the same one\n'
-        printf '# the panel already used, so admin logins and API tokens keep working.\n'
-        printf 'APP_SECRET=%s\n' "$app_secret"
-    } >> .env
+    if ! grep -q '^APP_SECRET=' .env; then
+        {
+            printf '\n### SECRETS ###\n'
+            printf '# 3.x dropped the JWT_AUTH_SECRET alias. The value below is the same one\n'
+            printf '# the panel already used, so admin logins and API tokens keep working.\n'
+            printf 'APP_SECRET=%s\n' "$app_secret"
+        } >> .env
+    fi
     if ! grep -q '^PANEL_DOMAIN=' .env; then
         local front_end
         front_end=$(read_env_value .env FRONT_END_DOMAIN)
