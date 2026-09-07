@@ -88,7 +88,7 @@ services:
           start_period: 5s
 
     remnanode:
-      image: remnawave/node:latest
+      image: remnawave/node:2.8.0
       container_name: remnanode
       hostname: remnanode
       <<: [*common, *logging]
