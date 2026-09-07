@@ -12,12 +12,27 @@ show_manage_panel_menu() {
     echo -e "${COLOR_YELLOW}4. ${LANG[VIEW_LOGS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[REMNAWAVE_CLI]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}7. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}8. ${LANG[FIX_MINCLIENTVER]}${COLOR_RESET}"
+
+    # The upgrade entry exists only while there is something to upgrade. The
+    # numbering below it shifts rather than leaving a hole in the list.
+    local last=6
+    local opt_upgrade="__none__"
+    local opt_minclientver="__none__"
+
+    if panel_needs_v3_migration; then
+        last=$((last + 1))
+        opt_upgrade=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
+    fi
+
+    last=$((last + 1))
+    opt_minclientver=$last
+    echo -e "${COLOR_YELLOW}${last}. ${LANG[MINCLIENTVER_MENU]}${COLOR_RESET}"
+
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[MANAGE_PANEL_NODE_PROMPT]}" SUB_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" SUB_OPTION
 
     case $SUB_OPTION in
         1)
@@ -56,14 +71,14 @@ show_manage_panel_menu() {
             log_clear
             show_manage_panel_menu
             ;;
-        7)
+        "$opt_upgrade")
             upgrade_panel_to_v3
             sleep 2
             log_clear
             show_manage_panel_menu
             ;;
-        8)
-            fix_reality_min_client_ver
+        "$opt_minclientver")
+            set_reality_min_client_ver
             sleep 2
             log_clear
             show_manage_panel_menu
@@ -72,7 +87,7 @@ show_manage_panel_menu() {
             remnawave_reverse
             ;;
         *)
-            echo -e "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}"
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
             sleep 1
             show_manage_panel_menu
             ;;
@@ -468,11 +483,16 @@ rollback_panel_from_v3() {
     fi
 }
 
-# Add realitySettings.minClientVer = 0.0.0 to config profiles created before the
-# installer started setting it. Without it an Xray core >= 26.7.11 defaults the
-# field to 26.3.27 and rejects mihomo, sing-box and older Happ clients.
-fix_reality_min_client_ver() {
+# Write realitySettings.minClientVer = 0.0.0 into REALITY inbounds that do not
+# define it. Xray-core >= 26.7.11 otherwise applies a default floor of 26.3.27
+# and refuses any client below it, which covers mihomo, sing-box and older Happ.
+# Note this lowers a floor rather than repairing anything: an operator who wants
+# the floor should leave it alone, or set a version of their own.
+set_reality_min_client_ver() {
     local domain_url="127.0.0.1:3000"
+
+    echo -e "${COLOR_YELLOW}${LANG[MINCLIENTVER_EXPLAIN]}${COLOR_RESET}"
+    echo -e ""
 
     if ! declare -F make_api_request > /dev/null 2>&1; then
         load_api_module || return 1
