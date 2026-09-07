@@ -52,7 +52,7 @@ get_panel_token() {
         local github_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.github // false' 2>/dev/null)
         local yandex_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.yandex // false' 2>/dev/null)
         local pocketid_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.pocketid // false' 2>/dev/null)
-        local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.tgAuth.enabled // false' 2>/dev/null)
+        local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.telegram // .response.authentication.tgAuth.enabled // false' 2>/dev/null)
 
         if [ "$github_enabled" = "true" ] || [ "$yandex_enabled" = "true" ] || \
            [ "$pocketid_enabled" = "true" ] || [ "$telegram_enabled" = "true" ]; then
@@ -127,11 +127,13 @@ get_public_key() {
 
     if [ -z "$api_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_PUBLIC_KEY]}${COLOR_RESET}"
+        return 1
     fi
 
-    local pubkey=$(echo "$api_response" | jq -r '.response.pubKey')
-    if [ -z "$pubkey" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}${COLOR_RESET}"
+    local pubkey=$(echo "$api_response" | jq -r '.response.secretKey // .response.pubKey // empty')
+    if [ -z "$pubkey" ] || [ "$pubkey" = "null" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PUBLIC_KEY]}: $api_response${COLOR_RESET}"
+        return 1
     fi
 
     sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=\"$pubkey\"|g" "$target_dir/docker-compose.yml"
@@ -211,7 +213,6 @@ create_node() {
     "trafficLimitBytes": 0,
     "notifyPercent": 0,
     "trafficResetDay": 31,
-    "excludedInbounds": [],
     "countryCode": "XX",
     "consumptionMultiplier": 1.0
 }
@@ -304,6 +305,7 @@ create_config_profile() {
                         xver: 1,
                         dest: "/dev/shm/nginx.sock",
                         spiderX: "",
+                        minClientVer: "0.0.0",
                         shortIds: [$short_id],
                         privateKey: $private_key,
                         serverNames: [$domain]
@@ -358,7 +360,6 @@ create_host() {
         host: "",
         alpn: null,
         fingerprint: "chrome",
-        allowInsecure: false,
         isDisabled: false,
         securityLayer: "DEFAULT"
     }')
@@ -464,9 +465,9 @@ create_api_token() {
     local target_dir=$3
     local token_name="${4:-subscription-page}"
 
-    local token_data='{"tokenName":"'"$token_name"'"}'
-    local api_response
-    api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+    local token_data='{"name":"'"$token_name"'","expiresInDays":365,"scopes":["*"]}'
+
+    local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
 
     if [ -z "$api_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
@@ -474,16 +475,15 @@ create_api_token() {
     fi
 
     local api_token
-    api_token=$(echo "$api_response" | jq -r '.response.token')
-
+    api_token=$(echo "$api_response" | jq -r '.response.token // .response.token // ""')
     if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
         return 1
     fi
 
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
-
     sleep 1
 
     echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}" >&2
+    return 0
 }
