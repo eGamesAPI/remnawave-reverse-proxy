@@ -5,7 +5,7 @@ show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
-    show_panel_upgrade_notice
+    show_panel_upgrade_notice nohint
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[UPDATE_PANEL_NODE]}${COLOR_RESET}"
@@ -13,21 +13,25 @@ show_manage_panel_menu() {
     echo -e "${COLOR_YELLOW}5. ${LANG[REMNAWAVE_CLI]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
 
-    # The upgrade entry exists only while there is something to upgrade. The
-    # numbering below it shifts rather than leaving a hole in the list.
+    # Both extra entries act on a panel, so a node-only box sees neither and its
+    # menu stays exactly what it was. The upgrade entry additionally appears only
+    # while there is something to upgrade, and the entry below it takes the freed
+    # number rather than leaving a hole in the list.
     local last=6
     local opt_upgrade="__none__"
     local opt_minclientver="__none__"
 
-    if panel_needs_v3_migration; then
-        last=$((last + 1))
-        opt_upgrade=$last
-        echo -e "${COLOR_YELLOW}${last}. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
-    fi
+    if panel_is_installed; then
+        if panel_needs_v3_migration; then
+            last=$((last + 1))
+            opt_upgrade=$last
+            echo -e "${COLOR_YELLOW}${last}. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
+        fi
 
-    last=$((last + 1))
-    opt_minclientver=$last
-    echo -e "${COLOR_YELLOW}${last}. ${LANG[MINCLIENTVER_MENU]}${COLOR_RESET}"
+        last=$((last + 1))
+        opt_minclientver=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[MINCLIENTVER_MENU]}${COLOR_RESET}"
+    fi
 
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"

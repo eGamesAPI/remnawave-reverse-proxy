@@ -621,6 +621,13 @@ check_update_status() {
     fi
 }
 
+# True when a panel is installed at $dir. Node-only boxes have /opt/remnanode
+# and must not be offered panel actions.
+panel_is_installed() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/docker-compose.yml" ] && [ -f "$dir/.env" ]
+}
+
 # True when the panel at $dir still has to be taken to 3.x. Two independent
 # signals, either of which is enough:
 #   - the compose still pins an old major (:2, :2.8.1, :1.6.16)
@@ -662,7 +669,10 @@ panel_installed_version() {
 
 # Shown in the main menu and in the panel menu, so an outdated panel is visible
 # without the operator having to go looking for it.
+# Pass "nohint" from a menu that already shows the upgrade entry itself.
 show_panel_upgrade_notice() {
+    # Same gate as the menu entry it points at, so the two can never disagree.
+    panel_is_installed || return 0
     panel_needs_v3_migration || return 0
 
     local version
@@ -671,7 +681,9 @@ show_panel_upgrade_notice() {
     else
         echo -e "${COLOR_RED}${LANG[PANEL_V2_NOTICE_UNKNOWN]}${COLOR_RESET}"
     fi
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    if [ "${1:-}" != "nohint" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    fi
     echo -e ""
 }
 
