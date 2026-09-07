@@ -199,7 +199,7 @@ LANG[STARTING_NODE]="Запуск ноды"
 LANG[STOPPING_REMNAWAVE]="Остановка панели и ноды"
 LANG[IMAGES_DETECTED]="Обнаружены новые образы, перезапускаем контейнеры..."
 #Upgrade to Remnawave 3.x
-LANG[UPGRADE_REQUIRED_V3]="Эта панель старше Remnawave 3.x, в её .env нет APP_SECRET — после обновления образов она просто не запустится. Сначала используйте пункт "Обновить панель до Remnawave 3.x"."
+LANG[UPGRADE_REQUIRED_V3]="Эта панель старше Remnawave 3.x, в её .env нет APP_SECRET — после обновления образов она просто не запустится. Сначала используйте пункт «Обновить панель до Remnawave 3.x»."
 LANG[UPGRADE_NOT_A_PANEL]="/opt/remnawave с docker-compose.yml и .env не найден, обновлять нечего"
 LANG[UPGRADE_ALREADY_V3]="Панель уже работает на remnawave/backend:%s, используйте 'Обновить панель/ноду'"
 LANG[UPGRADE_NO_SECRET]="В .env нет ни APP_SECRET, ни JWT_AUTH_SECRET. После обновления вход в панель стал бы невозможен, отмена."
