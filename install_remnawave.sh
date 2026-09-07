@@ -1,11 +1,31 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.0.0"
+SCRIPT_VERSION="3.1.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
-LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/lang"
+
+# Source repository. Override without editing the script:
+#   REMNAWAVE_REPO=owner/repo REMNAWAVE_BRANCH=branch remnawave_reverse
+REPO_SLUG="${REMNAWAVE_REPO:-UnderGut/remnawave-reverse-proxy}"
+REPO_BRANCH="${REMNAWAVE_BRANCH:-dev}"
+REPO_RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/refs/heads/${REPO_BRANCH}"
+SCRIPT_URL="${REPO_RAW_BASE}/install_remnawave.sh"
+LANG_BASE_URL="${REPO_RAW_BASE}/src/lang"
+
+# A checkout sitting next to this script wins over the network, so a fork can be
+# tested before it is pushed. Empty when the script runs from /usr/local/bin.
+LOCAL_SRC_DIR=""
+# Everything under DIR_REMNAWAVE is a cache of one repository at one version.
+# Sourcing a module another fork or an older release left behind would run code
+# this script was never tested against, so the cache carries a stamp.
+SOURCE_STAMP_FILE="${DIR_REMNAWAVE}source"
+SOURCE_STAMP="${REPO_SLUG}@${REPO_BRANCH}#${SCRIPT_VERSION}"
+if [ -n "${BASH_SOURCE[0]}" ]; then
+    _self_dir="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)"
+    [ -d "${_self_dir}/src" ] && LOCAL_SRC_DIR="${_self_dir}/src"
+    unset _self_dir
+fi
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -13,6 +33,99 @@ COLOR_YELLOW="\033[1;33m"
 COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
 COLOR_GRAY='\033[0;90m'
+
+# Download file with multiple mirrors and validation
+download_with_mirrors() {
+    local file_url="$1"
+    local dest_file="$2"
+    local file_type="${3:-script}"  # script, lang, module
+    
+    # Mirror URLs (GitHub raw content proxies)
+    local rel_path="${file_url#${REPO_RAW_BASE}/}"
+    local mirrors=(
+        "$file_url"
+        "https://cdn.jsdelivr.net/gh/${REPO_SLUG}@${REPO_BRANCH}/${rel_path}"
+        "https://raw.githack.com/${REPO_SLUG}/${REPO_BRANCH}/${rel_path}"
+        "https://ghproxy.com/${file_url}"
+    )
+    
+    local temp_file="${dest_file}.tmp"
+    local download_success=false
+    local http_code=""
+    
+    # Try each mirror
+    for mirror_url in "${mirrors[@]}"; do
+        if command -v curl &> /dev/null; then
+            http_code=$(curl -sL -w "%{http_code}" --connect-timeout 10 --max-time 30 "$mirror_url" -o "$temp_file" 2>/dev/null)
+            if [ "$http_code" = "200" ] && [ -s "$temp_file" ]; then
+                # Validate file content
+                if validate_downloaded_file "$temp_file" "$file_type"; then
+                    download_success=true
+                    break
+                fi
+            fi
+        elif command -v wget &> /dev/null; then
+            if wget -q --timeout=10 --tries=1 "$mirror_url" -O "$temp_file" 2>/dev/null; then
+                if [ -s "$temp_file" ]; then
+                    # Validate file content
+                    if validate_downloaded_file "$temp_file" "$file_type"; then
+                        download_success=true
+                        break
+                    fi
+                fi
+            fi
+        fi
+    done
+    
+    if [ "$download_success" = "true" ]; then
+        mv "$temp_file" "$dest_file"
+        rm -f "${dest_file}.bak"
+        return 0
+    else
+        rm -f "$temp_file"
+        return 1
+    fi
+}
+
+# Validate downloaded file content
+validate_downloaded_file() {
+    local file="$1"
+    local file_type="$2"
+    
+    if [ ! -s "$file" ]; then
+        return 1
+    fi
+    
+    # Our own sources start with the bash shebang, and an HTML error page never
+    # does. Decide on that first: the heuristics below grep for strings this
+    # script itself contains ("404"/"Not Found", "Terms of Service"/"scraping"),
+    # so running them over a genuine install_remnawave.sh rejected every copy.
+    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
+        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
+            return 1
+        fi
+        if [ "$file_type" = "lang" ] && ! grep -q "declare -gA LANG" "$file"; then
+            return 1
+        fi
+        return 0
+    fi
+    
+    # Check for HTTP error responses or rate limit errors
+    if grep -q "429" "$file" && grep -q "Too Many Requests" "$file"; then
+        return 1
+    fi
+    
+    if grep -q "404" "$file" && grep -q "Not Found" "$file"; then
+        return 1
+    fi
+    
+    # Check for Terms of Service warnings (GitHub scraping warning)
+    if grep -q "Terms of Service" "$file" && grep -q "scraping" "$file"; then
+        return 1
+    fi
+    
+    return 0
+}
 
 load_language() {
     if [ -f "$LANG_FILE" ]; then
@@ -52,24 +165,43 @@ set_language() {
      unset LANG
      declare -gA LANG
 
+     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/lang/${lang}.sh" ]; then
+         source "${LOCAL_SRC_DIR}/lang/${lang}.sh"
+         return 0
+     fi
+
      if [ "$force_update" = "true" ] || [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
          mkdir -p "${DIR_REMNAWAVE}lang"
-         if command -v curl &> /dev/null; then
-             curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
-         elif command -v wget &> /dev/null; then
-             wget -q "$lang_url" -O "$lang_file" 2>/dev/null
+         
+         # Use download_with_mirrors for reliable download
+         if ! download_with_mirrors "$lang_url" "$lang_file" "lang"; then
+             # Fallback: try direct download if mirrors fail
+             if command -v curl &> /dev/null; then
+                 curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
+             elif command -v wget &> /dev/null; then
+                 wget -q "$lang_url" -O "$lang_file" 2>/dev/null
+             fi
          fi
      fi
 
      if [ -f "$lang_file" ]; then
          source "$lang_file"
      else
+         # Emergency fallback: download English from mirrors
          local en_url="${LANG_BASE_URL}/en.sh"
-         if command -v curl &> /dev/null; then
-             source <(curl -sL "$en_url" 2>/dev/null)
-         elif command -v wget &> /dev/null; then
-             source <(wget -qO- "$en_url" 2>/dev/null)
+         local temp_en_file="${DIR_REMNAWAVE}lang/en_temp.sh"
+         
+         if download_with_mirrors "$en_url" "$temp_en_file" "lang"; then
+             source "$temp_en_file"
+             mv "$temp_en_file" "${DIR_REMNAWAVE}lang/en.sh"
+         else
+             # Last resort: direct download
+             if command -v curl &> /dev/null; then
+                 source <(curl -sL "$en_url" 2>/dev/null)
+             elif command -v wget &> /dev/null; then
+                 source <(wget -qO- "$en_url" 2>/dev/null)
+             fi
          fi
      fi
 }
@@ -85,6 +217,19 @@ reading() {
 error() {
     echo -e "${COLOR_RED}$*${COLOR_RESET}"
     exit 1
+}
+
+# Abort after the superadmin already exists. The credentials live in memory and
+# are printed only by the final banner, so an early exit would lose them.
+abort_with_credentials() {
+    if [ -n "$SUPERADMIN_USERNAME" ] && [ -n "$SUPERADMIN_PASSWORD" ]; then
+        echo -e ""
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_USERNAME}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_PASSWORD}${COLOR_RESET}"
+        echo -e ""
+    fi
+    error "$*"
 }
 
 check_os() {
@@ -206,7 +351,9 @@ update_remnawave_reverse() {
     echo -e ""
 
     local temp_script="${DIR_REMNAWAVE}remnawave_reverse.tmp"
-    if wget -q -O "$temp_script" "$SCRIPT_URL"; then
+    
+    # Use download_with_mirrors for reliable script download
+    if download_with_mirrors "$SCRIPT_URL" "$temp_script" "script"; then
         local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
         if [ "$downloaded_version" != "$remote_version" ]; then
             echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
@@ -233,6 +380,35 @@ update_remnawave_reverse() {
         echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_GREEN} remnawave_reverse${COLOR_RESET}"
         exit 0
     else
+        # Fallback: try direct download with wget
+        if wget -q -O "$temp_script" "$SCRIPT_URL" 2>/dev/null; then
+            local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
+            if [ "$downloaded_version" != "$remote_version" ]; then
+                echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
+                rm -f "$temp_script"
+                return 1
+            fi
+
+            if [ -f "$update_script" ]; then
+                rm -f "$update_script"
+            fi
+            mv "$temp_script" "$update_script"
+            chmod +x "$update_script"
+
+            if [ -e "$bin_link" ]; then
+                rm -f "$bin_link"
+            fi
+            ln -s "$update_script" "$bin_link"
+
+            hash -r
+
+            printf "${COLOR_GREEN}${LANG[UPDATE_SUCCESS]}${COLOR_RESET}\n" "$remote_version"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[RESTART_REQUIRED]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_GREEN} remnawave_reverse${COLOR_RESET}"
+            exit 0
+        fi
+        
         echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
         rm -f "$temp_script"
         return 1
@@ -306,13 +482,48 @@ remove_script() {
 }
 
 install_script_if_missing() {
-    if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
+    local stamp_stored=""
+    [ -f "$SOURCE_STAMP_FILE" ] && stamp_stored=$(cat "$SOURCE_STAMP_FILE" 2>/dev/null)
+
+    if [ "$stamp_stored" != "$SOURCE_STAMP" ] || [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
         mkdir -p "${DIR_REMNAWAVE}"
-        if ! wget -q -O "${DIR_REMNAWAVE}remnawave_reverse" "$SCRIPT_URL"; then
-            exit 1
+
+        # Modules cached from another repository or another version would be
+        # sourced verbatim by this script, so they go first.
+        rm -rf "${DIR_REMNAWAVE}api" "${DIR_REMNAWAVE}modules" "${DIR_REMNAWAVE}nginx" "${DIR_REMNAWAVE}caddy" "${DIR_REMNAWAVE}lang"
+
+        local self_path=""
+        if [ -n "${BASH_SOURCE[0]}" ]; then
+            self_path=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)
         fi
-        chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
-        ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+
+        local staged="${DIR_REMNAWAVE}remnawave_reverse.new"
+        rm -f "$staged"
+
+        # A checkout or an already-installed copy beats the network, and it is
+        # the only source that works before a fork has been pushed.
+        if [ -n "$self_path" ] && [ -f "$self_path" ] && [ "$self_path" != "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+            cp -f "$self_path" "$staged" 2>/dev/null
+        elif ! download_with_mirrors "$SCRIPT_URL" "$staged" "script"; then
+            if command -v curl &> /dev/null; then
+                curl -fsSL "$SCRIPT_URL" -o "$staged" 2>/dev/null
+            elif command -v wget &> /dev/null; then
+                wget -q -O "$staged" "$SCRIPT_URL" 2>/dev/null
+            fi
+        fi
+
+        if [ -s "$staged" ] && head -1 "$staged" | grep -q "^#!/bin/bash"; then
+            mv -f "$staged" "${DIR_REMNAWAVE}remnawave_reverse"
+            chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
+            ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+            printf '%s\n' "$SOURCE_STAMP" > "$SOURCE_STAMP_FILE"
+        else
+            rm -f "$staged"
+            if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+                error "Failed to download $SCRIPT_URL"
+            fi
+            echo -e "${COLOR_RED}Failed to download $SCRIPT_URL, keeping the installed copy${COLOR_RESET}"
+        fi
     fi
 
     local bashrc_file="/etc/bash.bashrc"
@@ -415,6 +626,60 @@ check_update_status() {
     fi
 }
 
+# True when the panel at $dir still has to be taken to 3.x. Two independent
+# signals, either of which is enough:
+#   - the compose still pins an old major (:2, :2.8.1, :1.6.16)
+#   - .env has no APP_SECRET, which 3.x requires and refuses to boot without
+# The tag alone misses a box whose compose floats on :latest or :dev, and the
+# .env alone misses a box where APP_SECRET was added by hand but the tag never
+# moved. Checking both leaves no panel stranded.
+panel_needs_v3_migration() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/.env" ] || return 1
+
+    grep -q '^APP_SECRET=' "$dir/.env" || return 0
+
+    case "$(panel_image_tag "$dir")" in
+        1|1.*|2|2.*) return 0 ;;
+    esac
+    return 1
+}
+
+# The backend image tag from the compose file, or empty.
+panel_image_tag() {
+    local compose="${1:-/opt/remnawave}/docker-compose.yml"
+    [ -f "$compose" ] || return 1
+    sed -n 's|^[[:space:]]*image:[[:space:]]*remnawave/backend:\([^[:space:]]*\).*|\1|p' "$compose" | head -n 1
+}
+
+# Version to show in the notice, read from the compose tag. Deliberately does
+# not call docker: this runs on every menu render.
+panel_installed_version() {
+    local tag
+    tag=$(panel_image_tag "/opt/remnawave") || return 1
+    case "$tag" in
+        1)      echo "1.x" ;;
+        2)      echo "2.x" ;;
+        1.*|2.*) echo "$tag" ;;
+        *)      return 1 ;;
+    esac
+}
+
+# Shown in the main menu and in the panel menu, so an outdated panel is visible
+# without the operator having to go looking for it.
+show_panel_upgrade_notice() {
+    panel_needs_v3_migration || return 0
+
+    local version
+    if version=$(panel_installed_version); then
+        printf "${COLOR_RED}${LANG[PANEL_V2_NOTICE]}${COLOR_RESET}\n" "$version"
+    else
+        echo -e "${COLOR_RED}${LANG[PANEL_V2_NOTICE_UNKNOWN]}${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    echo -e ""
+}
+
 show_menu() {
     echo -e "${COLOR_GREEN}${LANG[MENU_TITLE]}${COLOR_RESET}"
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
@@ -424,6 +689,7 @@ show_menu() {
     fi
     echo -e "${COLOR_GRAY}Wiki: https://wiki.egam.es/${COLOR_RESET}"
     echo -e ""
+    show_panel_upgrade_notice
     echo -e "${COLOR_YELLOW}1. ${LANG[MENU_1]}${COLOR_RESET}" # Install Remnawave Components
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
@@ -476,7 +742,6 @@ manage_install() {
     reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
     case $INSTALL_OPTION in
         1)
-            # Показать предупреждение для установки панели+ноды на один сервер
             echo -e ""
             echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
             echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_WARNING]}${COLOR_RESET}"
@@ -487,9 +752,7 @@ manage_install() {
             
             if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                log_clear
-                manage_install
-                return
+                exit 0
             fi
             
             show_webserver_select
@@ -1548,6 +1811,12 @@ EOL
             ;;
         2)
             # ACME HTTP-01 (without wildcard)
+            local nginx_was_running=false
+            if docker ps --filter "name=^/remnawave-nginx$" --format '{{.Names}}' | grep -qx "remnawave-nginx"; then
+                nginx_was_running=true
+                docker stop remnawave-nginx > /dev/null
+            fi
+
             ufw allow 80/tcp comment 'HTTP for ACME challenge' > /dev/null 2>&1
 
             certbot certonly \
@@ -1559,9 +1828,18 @@ EOL
                 --http-01-port 80 \
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
+            local certbot_status=$?
 
             ufw delete allow 80/tcp > /dev/null 2>&1
             ufw reload > /dev/null 2>&1
+
+            if [ "$nginx_was_running" = true ]; then
+                docker start remnawave-nginx > /dev/null
+            fi
+
+            if [ "$certbot_status" -ne 0 ]; then
+                return "$certbot_status"
+            fi
             ;;
         3)
             # Gcore DNS-01 (wildcard)
@@ -1771,7 +2049,7 @@ EOL
             fi
 
             if [ "$certbot_exit_code" -ne 0 ]; then
-                cert_status["$cert_domain"]="${LANG[ERROR_UPDATE]}: ${LANG[RATE_LIMIT_EXCEEDED]}"
+                cert_status["$cert_domain"]="${LANG[ERROR_UPDATE]}: ${LANG[CERTBOT_RENEWAL_FAILED]}"
                 continue
             fi
 
@@ -1891,6 +2169,23 @@ check_cert_expiry() {
     return 0
 }
 
+configure_certbot_renewal_hooks() {
+    local renewal_conf="$1"
+
+    if [ ! -f "$renewal_conf" ]; then
+        return 1
+    fi
+
+    sed -i -E '/^(pre_hook|post_hook|renew_hook|deploy_hook) = /d' "$renewal_conf"
+
+    if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$renewal_conf"; then
+        echo "pre_hook = /usr/bin/docker stop remnawave-nginx" >> "$renewal_conf"
+        echo "post_hook = /usr/bin/docker start remnawave-nginx" >> "$renewal_conf"
+    else
+        echo "deploy_hook = /usr/bin/docker restart remnawave-nginx" >> "$renewal_conf"
+    fi
+}
+
 fix_letsencrypt_structure() {
     local domain=$1
     local live_dir="/etc/letsencrypt/live/$domain"
@@ -1953,9 +2248,7 @@ fix_letsencrypt_structure() {
         sed -i "s|^privkey =.*|privkey = $privkey_path|" "$renewal_conf"
     fi
 
-    local expected_hook="renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose exec remnawave-nginx nginx -s reload'"
-    sed -i '/^renew_hook/d' "$renewal_conf"
-    echo "$expected_hook" >> "$renewal_conf"
+    configure_certbot_renewal_hooks "$renewal_conf"
 
     chmod 644 "$live_dir/cert.pem" "$live_dir/chain.pem" "$live_dir/fullchain.pem"
     chmod 600 "$live_dir/privkey.pem"
@@ -1967,7 +2260,7 @@ handle_certificates() {
     local -n domains_to_check_ref=$1
     local cert_method="$2"
     local letsencrypt_email="$3"
-    local target_dir="/opt/remnawave"
+    local target_dir="${4:-/opt/remnawave}"
 
     declare -A unique_domains
     local need_certificates=false
@@ -2016,6 +2309,22 @@ handle_certificates() {
     else
         echo -e "${COLOR_GREEN}${LANG[CERTS_SKIPPED]}${COLOR_RESET}"
         cert_method="1"
+        for domain in "${!domains_to_check_ref[@]}"; do
+            local existing_conf="/etc/letsencrypt/renewal/$domain.conf"
+            local base_domain
+            base_domain=$(extract_domain "$domain")
+            if [ -f "/etc/letsencrypt/renewal/$base_domain.conf" ] && is_wildcard_cert "$base_domain"; then
+                existing_conf="/etc/letsencrypt/renewal/$base_domain.conf"
+            fi
+
+            if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$existing_conf" 2>/dev/null; then
+                # Opening port 80 is required if any managed certificate uses HTTP-01.
+                cert_method="2"
+                break
+            elif grep -q "dns-gcore" "$existing_conf" 2>/dev/null; then
+                cert_method="3"
+            fi
+        done
     fi
 
     declare -A cert_domains_added
@@ -2093,7 +2402,7 @@ handle_certificates() {
 
     local cron_command
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80 && /usr/bin/certbot renew --quiet && ufw delete allow 80 && ufw reload && cd /opt/remnawave && docker compose down && docker compose up"
+        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
     else
         cron_command="/usr/bin/certbot renew --quiet"
     fi
@@ -2110,15 +2419,17 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}${LANG[CRON_ALREADY_EXISTS]}${COLOR_RESET}"
     fi
 
-    for domain in "${!unique_domains[@]}"; do
-        if [ -f "/etc/letsencrypt/renewal/$domain.conf" ]; then
-            desired_hook="renew_hook = sh -c 'cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx'"
-            if ! grep -q "renew_hook" "/etc/letsencrypt/renewal/$domain.conf"; then
-                echo "$desired_hook" >> "/etc/letsencrypt/renewal/$domain.conf"
-            elif ! grep -Fx "$desired_hook" "/etc/letsencrypt/renewal/$domain.conf"; then
-                sed -i "/renew_hook/c\\$desired_hook" "/etc/letsencrypt/renewal/$domain.conf"
-                echo -e "${COLOR_YELLOW}${LANG[UPDATED_RENEW_AUTH]}${COLOR_RESET}"
-            fi
+    for domain in "${!domains_to_check_ref[@]}"; do
+        local cert_domain="$domain"
+        local base_domain
+        base_domain=$(extract_domain "$domain")
+        if [ -f "/etc/letsencrypt/renewal/$base_domain.conf" ] && is_wildcard_cert "$base_domain"; then
+            cert_domain="$base_domain"
+        fi
+
+        local renewal_conf="/etc/letsencrypt/renewal/$cert_domain.conf"
+        if [ -f "$renewal_conf" ]; then
+            configure_certbot_renewal_hooks "$renewal_conf"
         fi
     done
 }
@@ -2128,8 +2439,13 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
+    local module_url="${REPO_RAW_BASE}/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
+
+    if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
+        source "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh"
+        return 0
+    fi
 
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
@@ -2139,28 +2455,36 @@ load_module() {
             cp "$module_file" "$backup_file"
         fi
 
-        local download_success=false
-        if command -v curl &> /dev/null; then
-            local http_code
-            http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
-            if [ "$http_code" = "200" ] && [ -s "$module_file" ]; then
-                download_success=true
+        # Use download_with_mirrors for reliable download
+        if download_with_mirrors "$module_url" "$module_file" "module"; then
+            rm -f "$backup_file"
+        else
+            # Fallback: try direct download if mirrors fail
+            if command -v curl &> /dev/null; then
+                local http_code
+                http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
+                if [ "$http_code" != "200" ] || [ ! -s "$module_file" ]; then
+                    if [ -f "$backup_file" ]; then
+                        mv "$backup_file" "$module_file"
+                    fi
+                    return 1
+                fi
+            elif command -v wget &> /dev/null; then
+                wget -q "$module_url" -O "$module_file" 2>/dev/null
+                if [ ! -s "$module_file" ]; then
+                    if [ -f "$backup_file" ]; then
+                        mv "$backup_file" "$module_file"
+                    fi
+                    return 1
+                fi
+            else
+                if [ -f "$backup_file" ]; then
+                    mv "$backup_file" "$module_file"
+                fi
+                return 1
             fi
-        elif command -v wget &> /dev/null; then
-            wget -q "$module_url" -O "$module_file" 2>/dev/null
-            if [ -s "$module_file" ]; then
-                download_success=true
-            fi
+            rm -f "$backup_file"
         fi
-
-        if [ "$download_success" = "false" ]; then
-            if [ -f "$backup_file" ]; then
-                mv "$backup_file" "$module_file"
-            fi
-            return 1
-        fi
-
-        rm -f "$backup_file"
     fi
 
     if [ -f "$module_file" ]; then
@@ -2220,7 +2544,7 @@ case $OPTION in
         ;;
     4)
         load_selfsteal_templates_module
-        if [ ! -d "/opt/remnawave" ]; then
+        if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
             echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
             exit 1
         else
