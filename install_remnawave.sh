@@ -4,8 +4,24 @@ SCRIPT_VERSION="3.0.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
+
 SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
 LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/lang"
+
+# The module and language cache under DIR_REMNAWAVE belongs to one version of
+# this script. Sourcing files an older release left behind would run code this
+# version was never tested against, so the cache carries a stamp.
+SOURCE_STAMP_FILE="${DIR_REMNAWAVE}source"
+SOURCE_STAMP="$SCRIPT_VERSION"
+
+# A src/ directory next to this script wins over the network, so a change can
+# be run before it is pushed. Empty when the script runs from /usr/local/bin.
+LOCAL_SRC_DIR=""
+if [ -n "${BASH_SOURCE[0]}" ]; then
+    _self_dir="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)"
+    [ -d "${_self_dir}/src" ] && LOCAL_SRC_DIR="${_self_dir}/src"
+    unset _self_dir
+fi
 
 COLOR_RESET="\033[0m"
 COLOR_GREEN="\033[1;32m"
@@ -75,6 +91,20 @@ validate_downloaded_file() {
         return 1
     fi
     
+    # Our own sources start with the bash shebang, and an HTML error page never
+    # does. Decide on that first: the heuristics below grep for strings this
+    # script itself contains ("404"/"Not Found", "Terms of Service"/"scraping"),
+    # so running them over a genuine install_remnawave.sh rejected every copy.
+    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
+        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
+            return 1
+        fi
+        if [ "$file_type" = "lang" ] && ! grep -q "declare -gA LANG" "$file"; then
+            return 1
+        fi
+        return 0
+    fi
+    
     # Check for HTTP error responses or rate limit errors
     if grep -q "429" "$file" && grep -q "Too Many Requests" "$file"; then
         return 1
@@ -87,20 +117,6 @@ validate_downloaded_file() {
     # Check for Terms of Service warnings (GitHub scraping warning)
     if grep -q "Terms of Service" "$file" && grep -q "scraping" "$file"; then
         return 1
-    fi
-    
-    # For bash scripts, check for proper shebang
-    if [[ "$file_type" == "script" ]] || [[ "$file_type" == "lang" ]] || [[ "$file_type" == "module" ]]; then
-        if ! head -1 "$file" | grep -q "^#!/bin/bash"; then
-            return 1
-        fi
-    fi
-    
-    # For language files, check for LANG array declaration
-    if [ "$file_type" = "lang" ]; then
-        if ! grep -q "declare -gA LANG" "$file"; then
-            return 1
-        fi
     fi
     
     return 0
@@ -143,6 +159,11 @@ set_language() {
 
      unset LANG
      declare -gA LANG
+
+     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/lang/${lang}.sh" ]; then
+         source "${LOCAL_SRC_DIR}/lang/${lang}.sh"
+         return 0
+     fi
 
      if [ "$force_update" = "true" ] || [ ! -f "$lang_file" ]; then
          local lang_url="${LANG_BASE_URL}/${lang}.sh"
@@ -191,6 +212,19 @@ reading() {
 error() {
     echo -e "${COLOR_RED}$*${COLOR_RESET}"
     exit 1
+}
+
+# Abort after the superadmin already exists. The credentials live in memory and
+# are printed only by the final banner, so an early exit would lose them.
+abort_with_credentials() {
+    if [ -n "$SUPERADMIN_USERNAME" ] && [ -n "$SUPERADMIN_PASSWORD" ]; then
+        echo -e ""
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_USERNAME}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}${SUPERADMIN_PASSWORD}${COLOR_RESET}"
+        echo -e ""
+    fi
+    error "$*"
 }
 
 check_os() {
@@ -443,19 +477,48 @@ remove_script() {
 }
 
 install_script_if_missing() {
-    if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
+    local stamp_stored=""
+    [ -f "$SOURCE_STAMP_FILE" ] && stamp_stored=$(cat "$SOURCE_STAMP_FILE" 2>/dev/null)
+
+    if [ "$stamp_stored" != "$SOURCE_STAMP" ] || [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
         mkdir -p "${DIR_REMNAWAVE}"
-        
-        # Use download_with_mirrors for reliable download
-        if ! download_with_mirrors "$SCRIPT_URL" "${DIR_REMNAWAVE}remnawave_reverse" "script"; then
-            # Fallback: try direct download
-            if ! wget -q -O "${DIR_REMNAWAVE}remnawave_reverse" "$SCRIPT_URL" 2>/dev/null; then
-                exit 1
+
+        # Modules cached from another repository or another version would be
+        # sourced verbatim by this script, so they go first.
+        rm -rf "${DIR_REMNAWAVE}api" "${DIR_REMNAWAVE}modules" "${DIR_REMNAWAVE}nginx" "${DIR_REMNAWAVE}caddy" "${DIR_REMNAWAVE}lang"
+
+        local self_path=""
+        if [ -n "${BASH_SOURCE[0]}" ]; then
+            self_path=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)
+        fi
+
+        local staged="${DIR_REMNAWAVE}remnawave_reverse.new"
+        rm -f "$staged"
+
+        # A checkout or an already-installed copy beats the network, and it is
+        # the only source that works before a fork has been pushed.
+        if [ -n "$self_path" ] && [ -f "$self_path" ] && [ "$self_path" != "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+            cp -f "$self_path" "$staged" 2>/dev/null
+        elif ! download_with_mirrors "$SCRIPT_URL" "$staged" "script"; then
+            if command -v curl &> /dev/null; then
+                curl -fsSL "$SCRIPT_URL" -o "$staged" 2>/dev/null
+            elif command -v wget &> /dev/null; then
+                wget -q -O "$staged" "$SCRIPT_URL" 2>/dev/null
             fi
         fi
-        
-        chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
-        ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+
+        if [ -s "$staged" ] && head -1 "$staged" | grep -q "^#!/bin/bash"; then
+            mv -f "$staged" "${DIR_REMNAWAVE}remnawave_reverse"
+            chmod +x "${DIR_REMNAWAVE}remnawave_reverse"
+            ln -sf "${DIR_REMNAWAVE}remnawave_reverse" /usr/local/bin/remnawave_reverse
+            printf '%s\n' "$SOURCE_STAMP" > "$SOURCE_STAMP_FILE"
+        else
+            rm -f "$staged"
+            if [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ]; then
+                error "Failed to download $SCRIPT_URL"
+            fi
+            echo -e "${COLOR_RED}Failed to download $SCRIPT_URL, keeping the installed copy${COLOR_RESET}"
+        fi
     fi
 
     local bashrc_file="/etc/bash.bashrc"
@@ -2318,6 +2381,11 @@ load_module() {
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
     local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
+
+    if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
+        source "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh"
+        return 0
+    fi
 
     if [ "$force_update" = "true" ] || [ ! -f "$module_file" ]; then
         mkdir -p "${DIR_REMNAWAVE}${module_type}"
