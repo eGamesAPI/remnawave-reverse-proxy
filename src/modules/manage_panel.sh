@@ -351,6 +351,25 @@ upgrade_panel_to_v3() {
         echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
         return 1
     fi
+    # The 3.x migration chain rewrites tables, so it needs room for a second copy
+    # of the data, and the dump below lands on disk too. Running out midway leaves
+    # prisma with a failed migration row that blocks every later start, panel and
+    # rollback alike.
+    local db_bytes need_kb free_kb docker_root
+    db_bytes=$(docker compose exec -T remnawave-db psql -U "$pg_user" -d "$pg_db" -tAc "SELECT pg_database_size('$pg_db')" 2>/dev/null | tr -dc '0-9')
+    [ -n "$db_bytes" ] || db_bytes=0
+    need_kb=$(( db_bytes / 1024 * 3 + 524288 ))
+    docker_root=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)
+    for fs in "$dir" "${docker_root:-$dir}"; do
+        free_kb=$(df -Pk "$fs" 2>/dev/null | awk 'NR==2 {print $4}')
+        [ -n "$free_kb" ] || continue
+        if [ "$free_kb" -lt "$need_kb" ] 2>/dev/null; then
+            printf "${COLOR_RED}${LANG[UPGRADE_NO_DISK_SPACE]}${COLOR_RESET}\n" \
+                "$fs" "$((free_kb / 1024))" "$((need_kb / 1024))"
+            return 1
+        fi
+    done
+
     if ! docker compose exec -T remnawave-db pg_dump -U "$pg_user" -d "$pg_db" -Fc --no-owner --no-privileges > "$backup_dir/remnawave-db.dump" 2> "$backup_dir/pg_dump.log"; then
         echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
         cat "$backup_dir/pg_dump.log"
