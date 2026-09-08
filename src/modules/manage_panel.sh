@@ -527,7 +527,7 @@ set_reality_min_client_ver() {
         return 0
     fi
 
-    local uuid profile missing preset config body response
+    local uuid profile current missing preset config body response
     local patched=0
     local untouched=0
     local failed=0
@@ -537,23 +537,32 @@ set_reality_min_client_ver() {
         [ -n "$uuid" ] || continue
 
         profile=$(make_api_request "GET" "http://$domain_url/api/config-profiles/$uuid" "$token")
-        if ! echo "$profile" | jq -e '.response.config' > /dev/null 2>&1; then
+
+        # The contract declares config as unknown, and a panel may hand it back
+        # as a JSON string instead of an object. Normalise once, and treat a jq
+        # failure here as a failure: folding it into "nothing to do" reports a
+        # profile as already correct while it was never even read.
+        if ! current=$(echo "$profile" | jq -e 'if (.response.config | type) == "string" then (.response.config | fromjson) else .response.config end' 2>/dev/null); then
             failed=$((failed + 1))
             printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
             continue
         fi
 
-        missing=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings | type) == "object") | select(.streamSettings.realitySettings | has("minClientVer") | not)] | length')
-        preset=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings.minClientVer? // "0.0.0") != "0.0.0")] | length')
+        if ! missing=$(echo "$current" | jq -e '[.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings | type) == "object") | select(.streamSettings.realitySettings | has("minClientVer") | not)] | length' 2>/dev/null); then
+            failed=$((failed + 1))
+            printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
+            continue
+        fi
+
+        preset=$(echo "$current" | jq '[.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings.minClientVer? // "0.0.0") != "0.0.0")] | length' 2>/dev/null)
         [ -n "$preset" ] && [ "$preset" != "0" ] && custom=$((custom + 1))
 
-        if [ -z "$missing" ] || [ "$missing" = "0" ]; then
+        if [ "$missing" = "0" ]; then
             untouched=$((untouched + 1))
             continue
         fi
 
-        config=$(echo "$profile" | jq '.response.config | .inbounds |= map(if (.streamSettings.security? == "reality") and ((.streamSettings.realitySettings | type) == "object") then (.streamSettings.realitySettings.minClientVer //= "0.0.0") else . end)')
-        if [ -z "$config" ]; then
+        if ! config=$(echo "$current" | jq -e '.inbounds |= map(if (.streamSettings.security? == "reality") and ((.streamSettings.realitySettings | type) == "object") then (.streamSettings.realitySettings.minClientVer //= "0.0.0") else . end)' 2>/dev/null); then
             failed=$((failed + 1))
             printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
             continue
