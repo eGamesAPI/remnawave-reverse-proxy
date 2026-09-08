@@ -2498,7 +2498,7 @@ load_module() {
         source "$module_file"
         return 0
     else
-        error "Failed to load ${module_name} module"
+        echo -e "${COLOR_RED}Failed to load ${module_name} module${COLOR_RESET}"
         return 1
     fi
 }
