@@ -70,7 +70,7 @@ x-logging: &logging
 
 services:
   remnawave-nginx:
-    image: nginx:1.28
+    image: nginx:1.30
     container_name: remnawave-nginx
     hostname: remnawave-nginx
     <<: [*common, *logging]
@@ -114,7 +114,7 @@ installation_node() {
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
 
   remnanode:
-    image: remnawave/node:2.8.0
+    image: remnawave/node:latest
     container_name: remnanode
     hostname: remnanode
     <<: [*common, *logging]

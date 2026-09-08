@@ -165,7 +165,7 @@ x-env: &env
 
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.6
     container_name: 'remnawave-db'
     hostname: remnawave-db
     shm_size: 512mb
@@ -208,7 +208,7 @@ services:
         condition: service_healthy
 
   remnawave-redis:
-    image: valkey/valkey:9-alpine
+    image: valkey/valkey:9.1.2-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     <<: [*common, *logging, *networks]
@@ -230,7 +230,7 @@ services:
       retries: 3
 
   remnawave-caddy:
-      image: caddy:2.11.2
+      image: caddy:2.11.4
       container_name: remnawave-caddy
       hostname: remnawave-caddy
       <<: [*common, *logging]
@@ -254,7 +254,7 @@ services:
           start_period: 5s
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:8.0.0
+    image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]

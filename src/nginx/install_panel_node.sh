@@ -175,7 +175,7 @@ x-env: &env
 
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.6
     container_name: 'remnawave-db'
     hostname: remnawave-db
     shm_size: 512mb
@@ -218,7 +218,7 @@ services:
         condition: service_healthy
 
   remnawave-redis:
-    image: valkey/valkey:9-alpine
+    image: valkey/valkey:9.1.2-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     <<: [*common, *logging, *networks]
@@ -240,7 +240,7 @@ services:
       retries: 3
 
   remnawave-nginx:
-    image: nginx:1.28
+    image: nginx:1.30
     container_name: remnawave-nginx
     hostname: remnawave-nginx
     <<: [*common, *logging]
@@ -292,7 +292,7 @@ installation() {
     command: sh -c 'rm -f /dev/shm/nginx.sock && exec nginx -g "daemon off;"'
 
   remnawave-subscription-page:
-    image: remnawave/subscription-page:8.0.0
+    image: remnawave/subscription-page:latest
     container_name: remnawave-subscription-page
     hostname: remnawave-subscription-page
     <<: [*common, *logging, *networks]
@@ -307,7 +307,7 @@ installation() {
       - '127.0.0.1:3010:3010'
 
   remnanode:
-    image: remnawave/node:2.8.0
+    image: remnawave/node:latest
     container_name: remnanode
     hostname: remnanode
     <<: [*common, *logging]
