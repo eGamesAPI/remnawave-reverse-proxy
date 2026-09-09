@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.1.4"
+SCRIPT_VERSION="3.2.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -207,6 +207,26 @@ question() {
 
 reading() {
     read -rp " $(question "$1")" "$2"
+}
+
+read_yn() {
+    local __var="$1" __ans
+    while true; do
+        read -r __ans || { printf -v "$__var" 'n'; echo; return 1; }
+        case "${__ans,,}" in
+            y|yes|д|да) printf -v "$__var" 'y'; return 0 ;;
+            n|no|н|нет) printf -v "$__var" 'n'; return 1 ;;
+            *) echo -e "${COLOR_RED}${LANG[INVALID_YN]}${COLOR_RESET}" ;;
+        esac
+    done
+}
+
+step_do() {
+    echo -e "${COLOR_YELLOW}[ * ]${COLOR_RESET} ${COLOR_YELLOW}$*${COLOR_RESET}"
+}
+
+step_ok() {
+    echo -e "${COLOR_GREEN}[ ✓ ]${COLOR_RESET} $*"
 }
 
 error() {
@@ -424,7 +444,7 @@ remove_script() {
     case $SUB_OPTION in
         1)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_SCRIPT]}${COLOR_RESET}"
-            read confirm
+            read_yn confirm
             if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
@@ -438,25 +458,16 @@ remove_script() {
             ;;
         2)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_ALL]}${COLOR_RESET}"
-            read confirm
+            read_yn confirm
             if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
             fi
 
-            if [ -d "/opt/remnawave" ]; then
-                cd /opt/remnawave || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} /opt/remnawave${COLOR_RESET}"; exit 1; }
-                docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-                spinner $! "${LANG[WAITING]}"
-                rm -rf /opt/remnawave 2>/dev/null
-            fi
-            if [ -d "/opt/remnanode" ]; then
-                cd /opt/remnanode || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} /opt/remnanode${COLOR_RESET}"; exit 1; }
-                docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-                spinner $! "${LANG[WAITING]}"
-                rm -rf /opt/remnanode 2>/dev/null
-            fi
-            docker system prune -a --volumes -f > /dev/null 2>&1 &
+            wipe_compose_dir /opt/remnawave
+            wipe_compose_dir /opt/remnanode
+            wipe_compose_dir /opt/subscription
+            docker image prune -f > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
             rm -rf /usr/local/remnawave_reverse 2>/dev/null
             rm -f /usr/local/bin/remnawave_reverse 2>/dev/null
@@ -739,6 +750,8 @@ show_install_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[INSTALL_PANEL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[INSTALL_ADD_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[INSTALL_NODE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[INSTALL_PANEL_ONLY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}6. ${LANG[INSTALL_SUB_ONLY]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -806,6 +819,7 @@ manage_install() {
             log_clear
             ;;
         2)
+            PANEL_WITH_SUB=true
             show_webserver_select
             case $WEBSERVER_OPTION in
                 1)
@@ -897,6 +911,93 @@ manage_install() {
             sleep 2
             log_clear
             ;;
+        5)
+            PANEL_WITH_SUB=false
+            show_webserver_select
+            case $WEBSERVER_OPTION in
+                1)
+                    load_install_panel_module
+                    load_api_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_panel
+                    ;;
+                2)
+                    load_caddy_panel_module
+                    load_api_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_panel_caddy
+                    ;;
+                0)
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    log_clear
+                    remnawave_reverse
+                    return
+                    ;;
+                *)
+                    echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
+                    sleep 2
+                    log_clear
+                    manage_install
+                    return
+                    ;;
+            esac
+            sleep 2
+            log_clear
+            ;;
+        6)
+            show_webserver_select
+            case $WEBSERVER_OPTION in
+                1)
+                    load_install_sub_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_sub
+                    ;;
+                2)
+                    load_caddy_sub_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_sub_caddy
+                    ;;
+                0)
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    log_clear
+                    remnawave_reverse
+                    return
+                    ;;
+                *)
+                    echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
+                    sleep 2
+                    log_clear
+                    manage_install
+                    return
+                    ;;
+            esac
+            sleep 2
+            log_clear
+            ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
             log_clear
@@ -920,6 +1021,8 @@ show_reinstall_options() {
     echo -e "${COLOR_YELLOW}1. ${LANG[INSTALL_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[INSTALL_PANEL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[INSTALL_NODE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[INSTALL_PANEL_ONLY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[INSTALL_SUB_ONLY]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -929,9 +1032,9 @@ choose_reinstall_type() {
     show_reinstall_options
     reading "${LANG[REINSTALL_PROMPT]}" REINSTALL_OPTION
     case $REINSTALL_OPTION in
-        1|2|3)
+        1|2|3|4)
                 echo -e "${COLOR_RED}${LANG[REINSTALL_WARNING]}${COLOR_RESET}"
-                read confirm
+                read_yn confirm
                 if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
                     reinstall_remnawave
                     if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
@@ -942,16 +1045,51 @@ choose_reinstall_type() {
                         1)
                             case $REINSTALL_OPTION in
                                 1) load_install_panel_node_module; load_api_module; installation ;;
-                                2) load_install_panel_module; load_api_module; installation_panel ;;
+                                2) PANEL_WITH_SUB=true; load_install_panel_module; load_api_module; installation_panel ;;
                                 3) load_install_node_module; load_api_module; installation_node ;;
+                                4) PANEL_WITH_SUB=false; load_install_panel_module; load_api_module; installation_panel ;;
                             esac
                             ;;
                         2)
                             case $REINSTALL_OPTION in
                                 1) load_caddy_module; load_api_module; installation_panel_node_caddy ;;
-                                2) load_caddy_panel_module; load_api_module; installation_panel_caddy ;;
+                                2) PANEL_WITH_SUB=true; load_caddy_panel_module; load_api_module; installation_panel_caddy ;;
                                 3) load_caddy_node_module; installation_node_caddy ;;
+                                4) PANEL_WITH_SUB=false; load_caddy_panel_module; load_api_module; installation_panel_caddy ;;
                             esac
+                            ;;
+                        0)
+                            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                            exit 0
+                            ;;
+                        *)
+                            echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
+                            exit 1
+                            ;;
+                    esac
+                    log_clear
+                else
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    exit 0
+                fi
+                ;;
+        5)
+                echo -e "${COLOR_RED}${LANG[REINSTALL_WARNING]}${COLOR_RESET}"
+                read_yn confirm
+                if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+                    reinstall_subscription
+                    if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
+                        install_packages
+                    fi
+                    show_webserver_select
+                    case $WEBSERVER_OPTION in
+                        1)
+                            load_install_sub_module
+                            installation_sub
+                            ;;
+                        2)
+                            load_caddy_sub_module
+                            installation_sub_caddy
                             ;;
                         0)
                             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -979,20 +1117,29 @@ choose_reinstall_type() {
         esac
 }
 
+# Tear down the compose project living in $1 and delete the directory.
+# Only touches that project's containers, networks, volumes and images.
+wipe_compose_dir() {
+    local dir="$1"
+    [ -d "$dir" ] || return 0
+    cd "$dir" 2>/dev/null || return 1
+    docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
+    rm -rf "$dir" 2>/dev/null
+}
+
 reinstall_remnawave() {
-    if [ -d "/opt/remnawave" ]; then
-        cd /opt/remnawave || return
-        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        rm -rf /opt/remnawave 2>/dev/null
-    fi
-    if [ -d "/opt/remnanode" ]; then
-        cd /opt/remnanode || return
-        docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        rm -rf /opt/remnanode 2>/dev/null
-    fi
-    docker system prune -a --volumes -f > /dev/null 2>&1 &
+    wipe_compose_dir /opt/remnawave
+    wipe_compose_dir /opt/remnanode
+    wipe_compose_dir /opt/subscription
+    docker image prune -f > /dev/null 2>&1 &
+    spinner $! "${LANG[WAITING]}"
+}
+
+# Wipe only the standalone subscription page, leaving panel/node untouched.
+reinstall_subscription() {
+    wipe_compose_dir /opt/subscription
+    docker image prune -f > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 }
 #Show Reinstall Options
@@ -1423,7 +1570,7 @@ delete_applications() {
     local selected_app=${app_map[$APP_DELETE_OPTION]}
     
     printf "${COLOR_YELLOW}${LANG[CONFIRM_DELETE_APP]}${COLOR_RESET}\n" "$selected_app" "$selected_platform"
-    read confirm
+    read_yn confirm
     
     if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
         # Remove the application from the platform array
@@ -1496,6 +1643,31 @@ show_custom_legiz_menu() {
     echo -e ""
 }
 
+ensure_cron() {
+    local started=0
+
+    if ! command -v crontab >/dev/null 2>&1; then
+        apt-get install -y cron >/dev/null 2>&1 || true
+    fi
+
+    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl enable --now cron >/dev/null 2>&1 && started=1
+    fi
+    if [ "$started" -ne 1 ] && command -v service >/dev/null 2>&1; then
+        service cron start >/dev/null 2>&1 && started=1
+    fi
+    if [ "$started" -ne 1 ] && [ -x /etc/init.d/cron ]; then
+        /etc/init.d/cron start >/dev/null 2>&1 && started=1
+    fi
+
+    pgrep -x cron >/dev/null 2>&1 && started=1
+
+    if [ "$started" -ne 1 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[CRON_START_WARN]}${COLOR_RESET}" >&2
+    fi
+    return 0
+}
+
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
 
@@ -1509,25 +1681,7 @@ install_packages() {
         return 1
     fi
 
-    if ! dpkg -l | grep -q '^ii.*cron '; then
-        if ! apt-get install -y cron; then
-            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CRON]}" "${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
-
-    if ! systemctl is-active --quiet cron; then
-        if ! systemctl start cron; then
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
-    if ! systemctl is-enabled --quiet cron; then
-        if ! systemctl enable cron; then
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
+    ensure_cron
 
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
@@ -2113,12 +2267,22 @@ generate_new_certificates() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[CERT_METHOD_CHOOSE]}" CERT_METHOD
 
-    if [ "$CERT_METHOD" == "0" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-        exit 1
-    fi
+    while true; do
+        reading "${LANG[CERT_METHOD_CHOOSE]}" CERT_METHOD
+        case "$CERT_METHOD" in
+            0)
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                exit 1
+                ;;
+            1|2|3)
+                break
+                ;;
+            *)
+                echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                ;;
+        esac
+    done
 
     local LETSENCRYPT_EMAIL=""
     if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ]; then
@@ -2302,17 +2466,26 @@ handle_certificates() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
 
-        if [ "$cert_method" == "0" ]; then
-            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            exit 1
-        elif [ "$cert_method" == "2" ] || [ "$cert_method" == "3" ]; then
-            reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
-        elif [ "$cert_method" != "1" ]; then
-            echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
-            exit 1
-        fi
+        while true; do
+            reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            case "$cert_method" in
+                0)
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    exit 1
+                    ;;
+                1)
+                    break
+                    ;;
+                2|3)
+                    reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
+                    break
+                    ;;
+                *)
+                    echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                    ;;
+            esac
+        done
     else
         echo -e "${COLOR_GREEN}${LANG[CERTS_SKIPPED]}${COLOR_RESET}"
         cert_method="1"
@@ -2507,12 +2680,14 @@ load_module() {
 load_install_panel_node_module() { load_module "install_panel_node" "nginx" "${1:-false}"; }
 load_install_panel_module() { load_module "install_panel" "nginx" "${1:-false}"; }
 load_install_node_module() { load_module "install_node" "nginx" "${1:-false}"; }
+load_install_sub_module() { load_module "install_sub" "nginx" "${1:-false}"; }
 load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
 load_manage_panel_module() { load_module "manage_panel" "modules" "${1:-false}"; }
 load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 load_caddy_module() { load_module "install_panel_node" "caddy" "${1:-false}"; }
 load_caddy_panel_module() { load_module "install_panel" "caddy" "${1:-false}"; }
 load_caddy_node_module() { load_module "install_node" "caddy" "${1:-false}"; }
+load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }

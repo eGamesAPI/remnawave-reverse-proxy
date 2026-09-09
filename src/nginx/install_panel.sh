@@ -12,26 +12,34 @@ install_panel_nginx() {
         exit 1
     fi
 
-    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
-    check_domain "$SUB_DOMAIN" true true
-    local sub_check_result=$?
-    if [ $sub_check_result -eq 2 ]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
+        check_domain "$SUB_DOMAIN" true true
+        local sub_check_result=$?
+        if [ $sub_check_result -eq 2 ]; then
+            echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
+            exit 1
+        fi
     fi
 
     reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
 
-    if [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
+    if [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
+        echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
+        exit 1
+    fi
+    if [ "$PANEL_WITH_SUB" != "false" ] && { [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; }; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
         exit 1
     fi
 
     PANEL_BASE_DOMAIN=$(extract_domain "$PANEL_DOMAIN")
-    SUB_BASE_DOMAIN=$(extract_domain "$SUB_DOMAIN")
 
     unique_domains["$PANEL_BASE_DOMAIN"]=1
-    unique_domains["$SUB_BASE_DOMAIN"]=1
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        SUB_BASE_DOMAIN=$(extract_domain "$SUB_DOMAIN")
+        unique_domains["$SUB_BASE_DOMAIN"]=1
+    fi
 
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
@@ -248,7 +256,9 @@ installation_panel() {
 
     declare -A domains_to_check
     domains_to_check["$PANEL_DOMAIN"]=1
-    domains_to_check["$SUB_DOMAIN"]=1
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        domains_to_check["$SUB_DOMAIN"]=1
+    fi
 
     handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
 
@@ -262,16 +272,19 @@ installation_panel() {
     fi
 
     if [ "$CERT_METHOD" == "1" ]; then
-        local base_domain=$(extract_domain "$PANEL_DOMAIN")
-        local sub_base_domain=$(extract_domain "$SUB_DOMAIN")
-        PANEL_CERT_DOMAIN="$base_domain"
-        SUB_CERT_DOMAIN="$sub_base_domain"
+        PANEL_CERT_DOMAIN="$(extract_domain "$PANEL_DOMAIN")"
+        if [ "$PANEL_WITH_SUB" != "false" ]; then
+            SUB_CERT_DOMAIN="$(extract_domain "$SUB_DOMAIN")"
+        fi
     else
         PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
-        SUB_CERT_DOMAIN="$SUB_DOMAIN"
+        if [ "$PANEL_WITH_SUB" != "false" ]; then
+            SUB_CERT_DOMAIN="$SUB_DOMAIN"
+        fi
     fi
 
-    cat >> /opt/remnawave/docker-compose.yml <<EOL
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        cat >> /opt/remnawave/docker-compose.yml <<EOL
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:8.0.0
@@ -287,6 +300,10 @@ installation_panel() {
       - REMNAWAVE_API_TOKEN=\$api_token
     ports:
       - '127.0.0.1:3010:3010'
+EOL
+    fi
+
+    cat >> /opt/remnawave/docker-compose.yml <<EOL
 
 networks:
   remnawave-network:
@@ -422,6 +439,10 @@ server {
         proxy_read_timeout 60s;
     }
 }
+EOL
+
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        cat >> /opt/remnawave/nginx.conf <<EOL
 
 server {
     server_name $SUB_DOMAIN;
@@ -454,6 +475,10 @@ server {
         return 444;
     }
 }
+EOL
+    fi
+
+    cat >> /opt/remnawave/nginx.conf <<EOL
 
 server {
     listen 443 ssl default_server;
@@ -472,10 +497,9 @@ EOL
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
 
-    echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 20
 
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
+    step_do "${LANG[CHECK_CONTAINERS]}"
     local attempts=0
     local max_attempts=5
     until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
@@ -496,52 +520,44 @@ EOL
         ey*) ;;
         *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
     esac
-    echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
     # Generate Xray keys
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
     local private_key=$(generate_xray_keys "$domain_url" "$token")
-    printf "${COLOR_GREEN}${LANG[GENERATE_KEYS_SUCCESS]}${COLOR_RESET}\n"
 
     # Delete default config profile
     delete_config_profile "$domain_url" "$token"
 
     # Create config profile
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_CONFIG_PROFILE]}${COLOR_RESET}"
     read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key")
-    echo -e "${COLOR_GREEN}${LANG[CONFIG_PROFILE_CREATED]}${COLOR_RESET}"
 
     # Create node with config profile binding
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
     create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
 
     # Create host
-    echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
     create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid"
 
     # Get UUID default squad
-    echo -e "${COLOR_YELLOW}${LANG[GET_DEFAULT_SQUAD]}${COLOR_RESET}"
     local squad_uuid=$(get_default_squad "$domain_url" "$token")
 
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-    echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
 
-    # Create API token for subscription page
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
-    create_api_token "$domain_url" "$token" "$target_dir"
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        # Create API token for subscription page
+        create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave Subscription Page
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
-    sleep 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+        # Stop and start Remnawave Subscription Page
+        step_do "${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}"
+        sleep 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
-    sleep 1
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+        step_do "${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}"
+        sleep 1
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    fi
 
     clear
 

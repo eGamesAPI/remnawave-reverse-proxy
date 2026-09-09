@@ -171,7 +171,6 @@ manage_warp_add_config() {
         echo -e "${COLOR_YELLOW}${LANG[WARP_WARNING2]}${COLOR_RESET}"
     else
         local warp_rule='{
-            "type": "field",
             "domain": ["whoer.net", "browserleaks.com", "2ip.io", "2ip.ru"],
             "outboundTag": "warp-out"
         }'

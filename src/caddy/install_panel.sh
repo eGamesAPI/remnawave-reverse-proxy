@@ -12,12 +12,14 @@ install_panel_caddy() {
         exit 1
     fi
 
-    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
-    check_domain "$SUB_DOMAIN" true true
-    local sub_check_result=$?
-    if [ $sub_check_result -eq 2 ]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
+        check_domain "$SUB_DOMAIN" true true
+        local sub_check_result=$?
+        if [ $sub_check_result -eq 2 ]; then
+            echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
+            exit 1
+        fi
     fi
 
     reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
@@ -28,7 +30,11 @@ install_panel_caddy() {
         exit 1
     fi
 
-    if [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
+    if [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
+        echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
+        exit 1
+    fi
+    if [ "$PANEL_WITH_SUB" != "false" ] && { [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; }; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
         exit 1
     fi
@@ -243,7 +249,6 @@ services:
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
           - PANEL_DOMAIN=${PANEL_DOMAIN}
-          - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
           - SUB_BACKEND_URL=127.0.0.1:3010
       healthcheck:
@@ -252,6 +257,10 @@ services:
           timeout: 5s
           retries: 15
           start_period: 5s
+EOL
+
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        cat >> docker-compose.yml <<EOL
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -267,6 +276,10 @@ services:
     depends_on:
       remnawave:
         condition: service_healthy
+EOL
+    fi
+
+    cat >> docker-compose.yml <<EOL
 
 networks:
   remnawave-network:
@@ -345,6 +358,10 @@ https://{\$PANEL_DOMAIN} {
         header_up Host {host}
     }
 }
+EOL
+
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        cat >> /opt/remnawave/Caddyfile <<EOL
 
 https://{\$SUB_DOMAIN} {
     encode
@@ -355,6 +372,10 @@ https://{\$SUB_DOMAIN} {
         }
     }
 }
+EOL
+    fi
+
+    cat >> /opt/remnawave/Caddyfile <<EOL
 
 :80 {
     bind 0.0.0.0
@@ -377,10 +398,9 @@ installation_panel_caddy() {
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
 
-    echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 20
 
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
+    step_do "${LANG[CHECK_CONTAINERS]}"
     local attempts=0
     local max_attempts=5
     until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
@@ -401,52 +421,44 @@ installation_panel_caddy() {
         ey*) ;;
         *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
     esac
-    echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
     # Generate Xray keys
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
     local private_key=$(generate_xray_keys "$domain_url" "$token")
-    printf "${COLOR_GREEN}${LANG[GENERATE_KEYS_SUCCESS]}${COLOR_RESET}\n"
 
     # Delete default config profile
     delete_config_profile "$domain_url" "$token"
 
     # Create config profile
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_CONFIG_PROFILE]}${COLOR_RESET}"
     read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key")
-    echo -e "${COLOR_GREEN}${LANG[CONFIG_PROFILE_CREATED]}${COLOR_RESET}"
 
     # Create node with config profile binding
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
     create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
 
     # Create host
-    echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
     create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid"
 
     # Get UUID default squad
-    echo -e "${COLOR_YELLOW}${LANG[GET_DEFAULT_SQUAD]}${COLOR_RESET}"
     local squad_uuid=$(get_default_squad "$domain_url" "$token")
 
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-    echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
 
-    # Create API token for subscription page
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
-    create_api_token "$domain_url" "$token" "$target_dir"
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        # Create API token for subscription page
+        create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave Subscription Page
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
-    sleep 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+        # Stop and start Remnawave Subscription Page
+        step_do "${LANG[STOPPING_REMNAWAVE_SUBSCRIPTION_PAGE]}"
+        sleep 1
+        docker compose down remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}${COLOR_RESET}"
-    sleep 1
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+        step_do "${LANG[STARTING_REMNAWAVE_SUBSCRIPTION_PAGE]}"
+        sleep 1
+        docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+    fi
 
     clear
 

@@ -98,10 +98,6 @@ show_manage_panel_menu() {
     esac
 }
 
-remnawave_container_running() {
-    docker ps --format '{{.Names}}' | grep -qE '^(remnawave|remnanode)$'
-}
-
 run_remnawave_cli() {
     if ! docker ps --format '{{.Names}}' | grep -q '^remnawave$'; then
         echo -e "${COLOR_YELLOW}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
@@ -127,107 +123,111 @@ run_remnawave_cli() {
     exec 1>&3 2>&4
 }
 
+managed_compose_dirs() {
+    local dir
+    for dir in /opt/remnawave /opt/remnanode /opt/subscription; do
+        [ -d "$dir" ] && echo "$dir"
+    done
+}
+
+compose_stack_running() {
+    docker compose ps --status running --quiet 2>/dev/null | grep -q .
+}
+
 start_panel_node() {
-    local dir=""
-    if [ -d "/opt/remnawave" ]; then
-        dir="/opt/remnawave"
-    elif [ -d "/opt/remnanode" ]; then
-        dir="/opt/remnanode"
-    else
-        echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
-    fi
+    local dir any=0
+    while IFS= read -r dir; do
+        [ -n "$dir" ] || continue
+        any=1
+        cd "$dir" 2>/dev/null || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}" >&2; continue; }
 
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
+        if compose_stack_running; then
+            echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]} ($dir)${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]} ($dir)...${COLOR_RESET}"
+            sleep 1
+            docker compose up -d > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            echo -e "${COLOR_GREEN}${LANG[PANEL_RUN]} ($dir)${COLOR_RESET}"
+        fi
+    done < <(managed_compose_dirs)
 
-    if remnawave_container_running; then
-        echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]}${COLOR_RESET}"
-    else
-        echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}...${COLOR_RESET}"
-        sleep 1
-        docker compose up -d > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        echo -e "${COLOR_GREEN}${LANG[PANEL_RUN]}${COLOR_RESET}"
-    fi
+    [ "$any" -eq 1 ] || { echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"; exit 1; }
 }
 
 stop_panel_node() {
-    local dir=""
-    if [ -d "/opt/remnawave" ]; then
-        dir="/opt/remnawave"
-    elif [ -d "/opt/remnanode" ]; then
-        dir="/opt/remnanode"
-    else
-        echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
-    fi
+    local dir any=0
+    while IFS= read -r dir; do
+        [ -n "$dir" ] || continue
+        any=1
+        cd "$dir" 2>/dev/null || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}" >&2; continue; }
 
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-    if ! remnawave_container_running; then
-        echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]}${COLOR_RESET}"
-    else
-        echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}...${COLOR_RESET}"
-        sleep 1
-        docker compose down > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        echo -e "${COLOR_GREEN}${LANG[PANEL_STOP]}${COLOR_RESET}"
-    fi
+        if ! compose_stack_running; then
+            echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]} ($dir)${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]} ($dir)...${COLOR_RESET}"
+            sleep 1
+            docker compose down > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            echo -e "${COLOR_GREEN}${LANG[PANEL_STOP]} ($dir)${COLOR_RESET}"
+        fi
+    done < <(managed_compose_dirs)
+
+    [ "$any" -eq 1 ] || { echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"; exit 1; }
 }
 
 update_panel_node() {
-    local dir=""
-    if [ -d "/opt/remnawave" ]; then
-        dir="/opt/remnawave"
-    elif [ -d "/opt/remnanode" ]; then
-        dir="/opt/remnanode"
-    else
-        echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
-    fi
+    local dir any=0
+    while IFS= read -r dir; do
+        [ -n "$dir" ] || continue
+        any=1
+        cd "$dir" 2>/dev/null || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}" >&2; continue; }
 
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-    echo -e "${COLOR_YELLOW}${LANG[UPDATING]}${COLOR_RESET}"
-    sleep 1
-
-    if [ "$dir" = "/opt/remnawave" ] && panel_needs_v3_migration "$dir"; then
-        echo -e "${COLOR_YELLOW}${LANG[UPGRADE_REQUIRED_V3]}${COLOR_RESET}"
-        return 1
-    fi
-
-    images_before=$(docker compose config --images | sort -u)
-    if [ -n "$images_before" ]; then
-        before=$(echo "$images_before" | xargs -I {} docker images -q {} | sort -u)
-    else
-        before=""
-    fi
-
-    tmpfile=$(mktemp)
-    docker compose pull > "$tmpfile" 2>&1 &
-    spinner $! "${LANG[WAITING]}"
-    pull_output=$(cat "$tmpfile")
-    rm -f "$tmpfile"
-
-    images_after=$(docker compose config --images | sort -u)
-    if [ -n "$images_after" ]; then
-        after=$(echo "$images_after" | xargs -I {} docker images -q {} | sort -u)
-    else
-        after=""
-    fi
-
-    if [ "$before" != "$after" ] || echo "$pull_output" | grep -q "Pull complete"; then
-        echo -e ""
-	echo -e "${COLOR_YELLOW}${LANG[IMAGES_DETECTED]}${COLOR_RESET}"
-        docker compose down > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-        sleep 5
-        docker compose up -d > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
+        echo -e "${COLOR_YELLOW}${LANG[UPDATING]} ($dir)${COLOR_RESET}"
         sleep 1
-        docker image prune -f > /dev/null 2>&1
-        echo -e "${COLOR_GREEN}${LANG[UPDATE_SUCCESS1]}${COLOR_RESET}"
-    else
-        echo -e "${COLOR_YELLOW}${LANG[NO_UPDATE]}${COLOR_RESET}"
-    fi
+
+        if [ "$dir" = "/opt/remnawave" ] && panel_needs_v3_migration "$dir"; then
+            echo -e "${COLOR_YELLOW}${LANG[UPGRADE_REQUIRED_V3]}${COLOR_RESET}"
+            continue
+        fi
+
+        images_before=$(docker compose config --images | sort -u)
+        if [ -n "$images_before" ]; then
+            before=$(echo "$images_before" | xargs -I {} docker images -q {} | sort -u)
+        else
+            before=""
+        fi
+
+        tmpfile=$(mktemp)
+        docker compose pull > "$tmpfile" 2>&1 &
+        spinner $! "${LANG[WAITING]}"
+        pull_output=$(cat "$tmpfile")
+        rm -f "$tmpfile"
+
+        images_after=$(docker compose config --images | sort -u)
+        if [ -n "$images_after" ]; then
+            after=$(echo "$images_after" | xargs -I {} docker images -q {} | sort -u)
+        else
+            after=""
+        fi
+
+        if [ "$before" != "$after" ] || echo "$pull_output" | grep -q "Pull complete"; then
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[IMAGES_DETECTED]} ($dir)${COLOR_RESET}"
+            docker compose down > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            sleep 5
+            docker compose up -d > /dev/null 2>&1 &
+            spinner $! "${LANG[WAITING]}"
+            sleep 1
+            docker image prune -f > /dev/null 2>&1
+            echo -e "${COLOR_GREEN}${LANG[UPDATE_SUCCESS1]} ($dir)${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[NO_UPDATE]} ($dir)${COLOR_RESET}"
+        fi
+    done < <(managed_compose_dirs)
+
+    [ "$any" -eq 1 ] || { echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"; exit 1; }
 }
 
 # Read a single key from an .env-style file without sourcing it.
@@ -604,24 +604,47 @@ set_reality_min_client_ver() {
 }
 
 view_logs() {
-    local dir=""
-    if [ -d "/opt/remnawave" ]; then
-        dir="/opt/remnawave"
-    elif [ -d "/opt/remnanode" ]; then
-        dir="/opt/remnanode"
-    else
+    local dirs=()
+    local dir
+    while IFS= read -r dir; do
+        [ -n "$dir" ] && dirs+=("$dir")
+    done < <(managed_compose_dirs)
+
+    if [ ${#dirs[@]} -eq 0 ]; then
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
+    local target="${dirs[0]}"
+    if [ ${#dirs[@]} -gt 1 ]; then
+        echo -e ""
+        echo -e "${COLOR_YELLOW}${LANG[SELECT_STACK_LOGS]}${COLOR_RESET}"
+        local i=1
+        for dir in "${dirs[@]}"; do
+            echo -e "${COLOR_YELLOW}${i}. ${dir}${COLOR_RESET}"
+            i=$((i + 1))
+        done
+        echo -e ""
 
-    if ! remnawave_container_running; then
+        local choice
+        while true; do
+            reading "${LANG[SELECT_STACK_LOGS_PROMPT]}" choice
+            if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#dirs[@]} ]; then
+                break
+            fi
+            echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+        done
+        target="${dirs[$((choice - 1))]}"
+    fi
+
+    cd "$target" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $target${COLOR_RESET}"; return 1; }
+
+    if ! compose_stack_running; then
         echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
         return 1
     fi
 
-    echo -e "${COLOR_YELLOW}${LANG[VIEW_LOGS]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[VIEW_LOGS]} ($target)${COLOR_RESET}"
     docker compose logs -f -t
 }
 
