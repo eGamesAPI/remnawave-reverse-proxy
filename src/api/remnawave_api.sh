@@ -495,17 +495,19 @@ create_api_token() {
     local token_name="${4:-subscription-page}"
 
     step_do "${LANG[CREATING_API_TOKEN]}" >&2
-    local token_data='{"name":"'"$token_name"'","expiresInDays":365,"scopes":["*"]}'
+
+    local token_data='{"name":"'"$token_name"'","expiresInDays":3650,"scopes":["subscription-page-configs:list","subscription-page-configs:get","subscriptions:subpage-config","system:metadata","users:by-username"]}'
 
     local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+    local api_token
+    api_token=$(echo "$api_response" | jq -r '.response.token // ""')
 
-    if [ -z "$api_response" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}${COLOR_RESET}" >&2
-        return 1
+    if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
+        token_data='{"name":"'"$token_name"'","expiresInDays":3650,"scopes":["*"]}'
+        api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
+        api_token=$(echo "$api_response" | jq -r '.response.token // ""')
     fi
 
-    local api_token
-    api_token=$(echo "$api_response" | jq -r '.response.token // .response.token // ""')
     if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
         return 1
