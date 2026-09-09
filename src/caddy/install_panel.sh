@@ -61,14 +61,6 @@ install_panel_caddy() {
         esac
     done
 
-    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
-        AUTHP_ADMIN_USER="$SUPERADMIN_USERNAME"
-        AUTHP_ADMIN_EMAIL="${SUPERADMIN_USERNAME}@${PANEL_DOMAIN}"
-        AUTHP_ADMIN_SECRET=$(generate_password)
-        AUTHP_ENV=$(printf '\n          - AUTHP_ADMIN_USER=%s\n          - AUTHP_ADMIN_EMAIL=%s\n          - AUTHP_ADMIN_SECRET=%s\n          - AUTH_TOKEN_LIFETIME=604800' \
-            "$AUTHP_ADMIN_USER" "$AUTHP_ADMIN_EMAIL" "$AUTHP_ADMIN_SECRET")
-    fi
-
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
@@ -80,6 +72,14 @@ install_panel_caddy() {
 
     APP_SECRET=$(openssl rand -hex 64)
     API_TOKEN=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
+
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        AUTHP_ADMIN_USER="$SUPERADMIN_USERNAME"
+        AUTHP_ADMIN_EMAIL="${SUPERADMIN_USERNAME}@${PANEL_DOMAIN}"
+        AUTHP_ADMIN_SECRET=$(generate_password)
+        AUTHP_ENV=$(printf '\n          - AUTHP_ADMIN_USER=%s\n          - AUTHP_ADMIN_EMAIL=%s\n          - AUTHP_ADMIN_SECRET=%s\n          - AUTH_TOKEN_LIFETIME=604800' \
+            "$AUTHP_ADMIN_USER" "$AUTHP_ADMIN_EMAIL" "$AUTHP_ADMIN_SECRET")
+    fi
 
     cat > .env <<EOL
 ### APP ###
