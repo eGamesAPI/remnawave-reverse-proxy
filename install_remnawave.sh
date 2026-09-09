@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.1.5"
+SCRIPT_VERSION="DEV 3.1.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -39,8 +39,8 @@ download_with_mirrors() {
     # Mirror URLs (GitHub raw content proxies)
     local mirrors=(
         "$file_url"
-        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@dev/${file_url#*dev/}"
-        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/dev/${file_url#*dev/}"
+        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/${file_url#*main/}"
+        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/main/${file_url#*main/}"
         "https://ghproxy.com/${file_url}"
     )
     
@@ -759,6 +759,8 @@ show_install_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[INSTALL_PANEL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[INSTALL_ADD_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[INSTALL_NODE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[INSTALL_PANEL_ONLY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}6. ${LANG[INSTALL_SUB_ONLY]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -826,6 +828,7 @@ manage_install() {
             log_clear
             ;;
         2)
+            PANEL_WITH_SUB=true
             show_webserver_select
             case $WEBSERVER_OPTION in
                 1)
@@ -899,6 +902,93 @@ manage_install() {
                         }
                     fi
                     installation_node_caddy
+                    ;;
+                0)
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    log_clear
+                    remnawave_reverse
+                    return
+                    ;;
+                *)
+                    echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
+                    sleep 2
+                    log_clear
+                    manage_install
+                    return
+                    ;;
+            esac
+            sleep 2
+            log_clear
+            ;;
+        5)
+            PANEL_WITH_SUB=false
+            show_webserver_select
+            case $WEBSERVER_OPTION in
+                1)
+                    load_install_panel_module
+                    load_api_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_panel
+                    ;;
+                2)
+                    load_caddy_panel_module
+                    load_api_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_panel_caddy
+                    ;;
+                0)
+                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                    log_clear
+                    remnawave_reverse
+                    return
+                    ;;
+                *)
+                    echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
+                    sleep 2
+                    log_clear
+                    manage_install
+                    return
+                    ;;
+            esac
+            sleep 2
+            log_clear
+            ;;
+        6)
+            show_webserver_select
+            case $WEBSERVER_OPTION in
+                1)
+                    load_install_sub_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_sub
+                    ;;
+                2)
+                    load_caddy_sub_module
+                    if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                        install_packages || {
+                            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                            log_clear
+                            exit 1
+                        }
+                    fi
+                    installation_sub_caddy
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -2534,12 +2624,14 @@ load_module() {
 load_install_panel_node_module() { load_module "install_panel_node" "nginx" "${1:-false}"; }
 load_install_panel_module() { load_module "install_panel" "nginx" "${1:-false}"; }
 load_install_node_module() { load_module "install_node" "nginx" "${1:-false}"; }
+load_install_sub_module() { load_module "install_sub" "nginx" "${1:-false}"; }
 load_add_node_module() { load_module "add_node" "modules" "${1:-false}"; }
 load_manage_panel_module() { load_module "manage_panel" "modules" "${1:-false}"; }
 load_api_module() { load_module "remnawave_api" "api" "${1:-false}"; }
 load_caddy_module() { load_module "install_panel_node" "caddy" "${1:-false}"; }
 load_caddy_panel_module() { load_module "install_panel" "caddy" "${1:-false}"; }
 load_caddy_node_module() { load_module "install_node" "caddy" "${1:-false}"; }
+load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
