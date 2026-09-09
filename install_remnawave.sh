@@ -1,26 +1,22 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.1.0"
+SCRIPT_VERSION="DEV 3.1.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
 
-# Source repository. Override without editing the script:
-#   REMNAWAVE_REPO=owner/repo REMNAWAVE_BRANCH=branch remnawave_reverse
-REPO_SLUG="${REMNAWAVE_REPO:-eGamesAPI/remnawave-reverse-proxy}"
-REPO_BRANCH="${REMNAWAVE_BRANCH:-dev}"
-REPO_RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/refs/heads/${REPO_BRANCH}"
-SCRIPT_URL="${REPO_RAW_BASE}/install_remnawave.sh"
-LANG_BASE_URL="${REPO_RAW_BASE}/src/lang"
+SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
+LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/lang"
 
-# A checkout sitting next to this script wins over the network, so a fork can be
-# tested before it is pushed. Empty when the script runs from /usr/local/bin.
-LOCAL_SRC_DIR=""
-# Everything under DIR_REMNAWAVE is a cache of one repository at one version.
-# Sourcing a module another fork or an older release left behind would run code
-# this script was never tested against, so the cache carries a stamp.
+# The module and language cache under DIR_REMNAWAVE belongs to one version of
+# this script. Sourcing files an older release left behind would run code this
+# version was never tested against, so the cache carries a stamp.
 SOURCE_STAMP_FILE="${DIR_REMNAWAVE}source"
-SOURCE_STAMP="${REPO_SLUG}@${REPO_BRANCH}#${SCRIPT_VERSION}"
+SOURCE_STAMP="$SCRIPT_VERSION"
+
+# A src/ directory next to this script wins over the network, so a change can
+# be run before it is pushed. Empty when the script runs from /usr/local/bin.
+LOCAL_SRC_DIR=""
 if [ -n "${BASH_SOURCE[0]}" ]; then
     _self_dir="$(cd -- "$(dirname -- "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" 2>/dev/null && pwd)"
     [ -d "${_self_dir}/src" ] && LOCAL_SRC_DIR="${_self_dir}/src"
@@ -41,11 +37,10 @@ download_with_mirrors() {
     local file_type="${3:-script}"  # script, lang, module
     
     # Mirror URLs (GitHub raw content proxies)
-    local rel_path="${file_url#${REPO_RAW_BASE}/}"
     local mirrors=(
         "$file_url"
-        "https://cdn.jsdelivr.net/gh/${REPO_SLUG}@${REPO_BRANCH}/${rel_path}"
-        "https://raw.githack.com/${REPO_SLUG}/${REPO_BRANCH}/${rel_path}"
+        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@dev/${file_url#*dev/}"
+        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/dev/${file_url#*dev/}"
         "https://ghproxy.com/${file_url}"
     )
     
@@ -212,6 +207,26 @@ question() {
 
 reading() {
     read -rp " $(question "$1")" "$2"
+}
+
+read_yn() {
+    local __var="$1" __ans
+    while true; do
+        read -r __ans || { printf -v "$__var" 'n'; echo; return 1; }
+        case "${__ans,,}" in
+            y|yes|д|да) printf -v "$__var" 'y'; return 0 ;;
+            n|no|н|нет) printf -v "$__var" 'n'; return 1 ;;
+            *) echo -e "${COLOR_RED}${LANG[INVALID_YN]}${COLOR_RESET}" ;;
+        esac
+    done
+}
+
+step_do() {
+    echo -e "${COLOR_YELLOW}[ * ]${COLOR_RESET} ${COLOR_YELLOW}$*${COLOR_RESET}"
+}
+
+step_ok() {
+    echo -e "${COLOR_GREEN}[ ✓ ]${COLOR_RESET} $*"
 }
 
 error() {
@@ -429,7 +444,7 @@ remove_script() {
     case $SUB_OPTION in
         1)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_SCRIPT]}${COLOR_RESET}"
-            read confirm
+            read_yn confirm
             if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
@@ -443,7 +458,7 @@ remove_script() {
             ;;
         2)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_ALL]}${COLOR_RESET}"
-            read confirm
+            read_yn confirm
             if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
@@ -626,6 +641,13 @@ check_update_status() {
     fi
 }
 
+# True when a panel is installed at $dir. Node-only boxes have /opt/remnanode
+# and must not be offered panel actions.
+panel_is_installed() {
+    local dir="${1:-/opt/remnawave}"
+    [ -f "$dir/docker-compose.yml" ] && [ -f "$dir/.env" ]
+}
+
 # True when the panel at $dir still has to be taken to 3.x. Two independent
 # signals, either of which is enough:
 #   - the compose still pins an old major (:2, :2.8.1, :1.6.16)
@@ -667,7 +689,10 @@ panel_installed_version() {
 
 # Shown in the main menu and in the panel menu, so an outdated panel is visible
 # without the operator having to go looking for it.
+# Pass "nohint" from a menu that already shows the upgrade entry itself.
 show_panel_upgrade_notice() {
+    # Same gate as the menu entry it points at, so the two can never disagree.
+    panel_is_installed || return 0
     panel_needs_v3_migration || return 0
 
     local version
@@ -676,7 +701,9 @@ show_panel_upgrade_notice() {
     else
         echo -e "${COLOR_RED}${LANG[PANEL_V2_NOTICE_UNKNOWN]}${COLOR_RESET}"
     fi
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    if [ "${1:-}" != "nohint" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_V2_NOTICE_HINT]}${COLOR_RESET}"
+    fi
     echo -e ""
 }
 
@@ -924,7 +951,7 @@ choose_reinstall_type() {
     case $REINSTALL_OPTION in
         1|2|3)
                 echo -e "${COLOR_RED}${LANG[REINSTALL_WARNING]}${COLOR_RESET}"
-                read confirm
+                read_yn confirm
                 if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
                     reinstall_remnawave
                     if [ ! -f ${DIR_REMNAWAVE}install_packages ]; then
@@ -1416,7 +1443,7 @@ delete_applications() {
     local selected_app=${app_map[$APP_DELETE_OPTION]}
     
     printf "${COLOR_YELLOW}${LANG[CONFIRM_DELETE_APP]}${COLOR_RESET}\n" "$selected_app" "$selected_platform"
-    read confirm
+    read_yn confirm
     
     if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
         # Remove the application from the platform array
@@ -1489,6 +1516,31 @@ show_custom_legiz_menu() {
     echo -e ""
 }
 
+ensure_cron() {
+    local started=0
+
+    if ! command -v crontab >/dev/null 2>&1; then
+        apt-get install -y cron >/dev/null 2>&1 || true
+    fi
+
+    if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl enable --now cron >/dev/null 2>&1 && started=1
+    fi
+    if [ "$started" -ne 1 ] && command -v service >/dev/null 2>&1; then
+        service cron start >/dev/null 2>&1 && started=1
+    fi
+    if [ "$started" -ne 1 ] && [ -x /etc/init.d/cron ]; then
+        /etc/init.d/cron start >/dev/null 2>&1 && started=1
+    fi
+
+    pgrep -x cron >/dev/null 2>&1 && started=1
+
+    if [ "$started" -ne 1 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[CRON_START_WARN]}${COLOR_RESET}" >&2
+    fi
+    return 0
+}
+
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
 
@@ -1502,25 +1554,7 @@ install_packages() {
         return 1
     fi
 
-    if ! dpkg -l | grep -q '^ii.*cron '; then
-        if ! apt-get install -y cron; then
-            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CRON]}" "${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
-
-    if ! systemctl is-active --quiet cron; then
-        if ! systemctl start cron; then
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
-    if ! systemctl is-enabled --quiet cron; then
-        if ! systemctl enable cron; then
-            echo -e "${COLOR_RED}${LANG[START_CRON_ERROR]}${COLOR_RESET}" >&2
-            return 1
-        fi
-    fi
+    ensure_cron
 
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
@@ -2439,7 +2473,7 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="${REPO_RAW_BASE}/src/${module_type}/${module_name}.sh"
+    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
 
     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
@@ -2491,7 +2525,7 @@ load_module() {
         source "$module_file"
         return 0
     else
-        error "Failed to load ${module_name} module"
+        echo -e "${COLOR_RED}Failed to load ${module_name} module${COLOR_RESET}"
         return 1
     fi
 }
