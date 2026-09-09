@@ -36,6 +36,28 @@ install_panel_node_caddy() {
         exit 1
     fi
 
+    PANEL_AUTH_MODE=cookie
+    CADDY_IMAGE="caddy:2.11.4"
+    AUTHP_ENV=""
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[PANEL_AUTH_OPT_COOKIE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_PORTAL]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" auth_choice
+        case "$auth_choice" in
+            1) break ;;
+            2)
+                PANEL_AUTH_MODE=portal
+                CADDY_IMAGE="remnawave/caddy-with-auth:latest"
+                break
+                ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
@@ -47,6 +69,15 @@ install_panel_node_caddy() {
 
     APP_SECRET=$(openssl rand -hex 64)
     API_TOKEN=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
+
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        AUTHP_ADMIN_USER="$SUPERADMIN_USERNAME"
+        AUTHP_ADMIN_EMAIL="${SUPERADMIN_USERNAME}@${PANEL_DOMAIN}"
+        AUTHP_ADMIN_SECRET=$(generate_password)
+        AUTHP_ENV=$(printf '\n          - AUTHP_ADMIN_USER=%s\n          - AUTHP_ADMIN_EMAIL=%s\n          - AUTHP_ADMIN_SECRET=%s\n          - AUTH_TOKEN_LIFETIME=604800' \
+            "$AUTHP_ADMIN_USER" "$AUTHP_ADMIN_EMAIL" "$AUTHP_ADMIN_SECRET")
+        PORTAL_ORDER=$(printf '\n    order authenticate before respond\n    order authorize before respond')
+    fi
 
     cat > .env <<EOL
 ### APP ###
@@ -233,7 +264,7 @@ services:
       retries: 3
 
   remnawave-caddy:
-      image: caddy:2.11.4
+      image: ${CADDY_IMAGE}
       container_name: remnawave-caddy
       hostname: remnawave-caddy
       <<: [*common, *logging]
@@ -250,7 +281,7 @@ services:
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
-          - SUB_BACKEND_URL=127.0.0.1:3010
+          - SUB_BACKEND_URL=127.0.0.1:3010${AUTHP_ENV}
       healthcheck:
           test: ["CMD", "test", "-S", "/dev/shm/nginx.sock"]
           interval: 2s
@@ -316,7 +347,7 @@ EOL
 
     cat > /opt/remnawave/Caddyfile <<EOL
 {
-    admin off
+    admin off${PORTAL_ORDER}
     servers {
         listener_wrappers {
             proxy_protocol
@@ -342,6 +373,65 @@ http://{\$PANEL_DOMAIN} {
     bind 0.0.0.0
     redir https://{\$PANEL_DOMAIN}{uri} permanent
 }
+EOL
+
+    local portal_sec_block=""
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        # The security block is extracted verbatim from the official
+        # caddy-with-auth example so the plugin directives always match
+        # upstream; only the site routes below are ours.
+        portal_sec_block=$(curl -fsSL --connect-timeout 10 --max-time 30 \
+            "https://raw.githubusercontent.com/remnawave/caddy-with-auth/main/examples/minimal-security-setup-with-mfa-with-api-without-auth/Caddyfile" 2>/dev/null \
+            | awk '/^security \{/,0' \
+            | sed 's|\$REMNAWAVE_PANEL_DOMAIN|\$PANEL_DOMAIN|g')
+        if [ -z "$portal_sec_block" ] || ! echo "$portal_sec_block" | grep -q "authentication portal"; then
+            echo -e "${COLOR_YELLOW}${LANG[PORTAL_DOWNLOAD_WARN]}${COLOR_RESET}"
+            PANEL_AUTH_MODE=cookie
+            portal_sec_block=""
+        fi
+    fi
+
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        cat >> /opt/remnawave/Caddyfile <<EOL
+
+https://{\$PANEL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    encode
+
+    # Open routes: the panel API carries its own Bearer-token auth, and
+    # Telegram OAuth callbacks must reach the backend untouched.
+    route /api/* {
+        reverse_proxy {\$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+
+    route /oauth2/* {
+        reverse_proxy {\$BACKEND_URL} {
+            header_up Host {host}
+        }
+    }
+
+    route /r {
+        rewrite * /auth
+        authenticate with remnawaveportal
+    }
+
+    route /r* {
+        authenticate with remnawaveportal
+    }
+
+    authorize with panelpolicy
+
+    reverse_proxy {\$BACKEND_URL} {
+        header_up X-Real-IP {remote}
+        header_up Host {host}
+    }
+}
+EOL
+    else
+        cat >> /opt/remnawave/Caddyfile <<EOL
 
 https://{\$PANEL_DOMAIN} {
     bind unix/{\$CADDY_SOCKET_PATH}
@@ -392,6 +482,10 @@ https://{\$PANEL_DOMAIN} {
         header_up Host {host}
     }
 }
+EOL
+    fi
+
+    cat >> /opt/remnawave/Caddyfile <<EOL
 
 http://{\$SUB_DOMAIN} {
     bind 0.0.0.0
@@ -414,6 +508,10 @@ https://{\$SUB_DOMAIN} {
     respond 204
 }
 EOL
+
+    if [ -n "$portal_sec_block" ]; then
+        printf '\n%s\n' "$portal_sec_block" >> /opt/remnawave/Caddyfile
+    fi
 }
 
 installation_panel_node_caddy() {
@@ -508,6 +606,15 @@ installation_panel_node_caddy() {
     echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_ACCESS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/r${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$AUTHP_ADMIN_USER${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$AUTHP_ADMIN_SECRET${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_MFA_NOTE]}${COLOR_RESET}"
+    fi
     echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
