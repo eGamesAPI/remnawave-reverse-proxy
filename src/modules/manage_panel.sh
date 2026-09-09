@@ -5,19 +5,38 @@ show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
-    show_panel_upgrade_notice
+    show_panel_upgrade_notice nohint
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[UPDATE_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[VIEW_LOGS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[REMNAWAVE_CLI]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}7. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}8. ${LANG[FIX_MINCLIENTVER]}${COLOR_RESET}"
+
+    # Both extra entries act on a panel, so a node-only box sees neither and its
+    # menu stays exactly what it was. The upgrade entry additionally appears only
+    # while there is something to upgrade, and the entry below it takes the freed
+    # number rather than leaving a hole in the list.
+    local last=6
+    local opt_upgrade="__none__"
+    local opt_minclientver="__none__"
+
+    if panel_is_installed; then
+        if panel_needs_v3_migration; then
+            last=$((last + 1))
+            opt_upgrade=$last
+            echo -e "${COLOR_YELLOW}${last}. ${LANG[UPGRADE_PANEL_V3]}${COLOR_RESET}"
+        fi
+
+        last=$((last + 1))
+        opt_minclientver=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[MINCLIENTVER_MENU]}${COLOR_RESET}"
+    fi
+
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[MANAGE_PANEL_NODE_PROMPT]}" SUB_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" SUB_OPTION
 
     case $SUB_OPTION in
         1)
@@ -56,14 +75,14 @@ show_manage_panel_menu() {
             log_clear
             show_manage_panel_menu
             ;;
-        7)
+        "$opt_upgrade")
             upgrade_panel_to_v3
             sleep 2
             log_clear
             show_manage_panel_menu
             ;;
-        8)
-            fix_reality_min_client_ver
+        "$opt_minclientver")
+            set_reality_min_client_ver
             sleep 2
             log_clear
             show_manage_panel_menu
@@ -72,7 +91,7 @@ show_manage_panel_menu() {
             remnawave_reverse
             ;;
         *)
-            echo -e "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}"
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
             sleep 1
             show_manage_panel_menu
             ;;
@@ -332,6 +351,25 @@ upgrade_panel_to_v3() {
         echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
         return 1
     fi
+    # The 3.x migration chain rewrites tables, so it needs room for a second copy
+    # of the data, and the dump below lands on disk too. Running out midway leaves
+    # prisma with a failed migration row that blocks every later start, panel and
+    # rollback alike.
+    local db_bytes need_kb free_kb docker_root
+    db_bytes=$(docker compose exec -T remnawave-db psql -U "$pg_user" -d "$pg_db" -tAc "SELECT pg_database_size('$pg_db')" 2>/dev/null | tr -dc '0-9')
+    [ -n "$db_bytes" ] || db_bytes=0
+    need_kb=$(( db_bytes / 1024 * 3 + 524288 ))
+    docker_root=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)
+    for fs in "$dir" "${docker_root:-$dir}"; do
+        free_kb=$(df -Pk "$fs" 2>/dev/null | awk 'NR==2 {print $4}')
+        [ -n "$free_kb" ] || continue
+        if [ "$free_kb" -lt "$need_kb" ] 2>/dev/null; then
+            printf "${COLOR_RED}${LANG[UPGRADE_NO_DISK_SPACE]}${COLOR_RESET}\n" \
+                "$fs" "$((free_kb / 1024))" "$((need_kb / 1024))"
+            return 1
+        fi
+    done
+
     if ! docker compose exec -T remnawave-db pg_dump -U "$pg_user" -d "$pg_db" -Fc --no-owner --no-privileges > "$backup_dir/remnawave-db.dump" 2> "$backup_dir/pg_dump.log"; then
         echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
         cat "$backup_dir/pg_dump.log"
@@ -468,11 +506,16 @@ rollback_panel_from_v3() {
     fi
 }
 
-# Add realitySettings.minClientVer = 0.0.0 to config profiles created before the
-# installer started setting it. Without it an Xray core >= 26.7.11 defaults the
-# field to 26.3.27 and rejects mihomo, sing-box and older Happ clients.
-fix_reality_min_client_ver() {
+# Write realitySettings.minClientVer = 0.0.0 into REALITY inbounds that do not
+# define it. Xray-core >= 26.7.11 otherwise applies a default floor of 26.3.27
+# and refuses any client below it, which covers mihomo, sing-box and older Happ.
+# Note this lowers a floor rather than repairing anything: an operator who wants
+# the floor should leave it alone, or set a version of their own.
+set_reality_min_client_ver() {
     local domain_url="127.0.0.1:3000"
+
+    echo -e "${COLOR_YELLOW}${LANG[MINCLIENTVER_EXPLAIN]}${COLOR_RESET}"
+    echo -e ""
 
     if ! declare -F make_api_request > /dev/null 2>&1; then
         load_api_module || return 1
@@ -503,7 +546,7 @@ fix_reality_min_client_ver() {
         return 0
     fi
 
-    local uuid profile missing preset config body response
+    local uuid profile current missing preset config body response
     local patched=0
     local untouched=0
     local failed=0
@@ -513,23 +556,32 @@ fix_reality_min_client_ver() {
         [ -n "$uuid" ] || continue
 
         profile=$(make_api_request "GET" "http://$domain_url/api/config-profiles/$uuid" "$token")
-        if ! echo "$profile" | jq -e '.response.config' > /dev/null 2>&1; then
+
+        # The contract declares config as unknown, and a panel may hand it back
+        # as a JSON string instead of an object. Normalise once, and treat a jq
+        # failure here as a failure: folding it into "nothing to do" reports a
+        # profile as already correct while it was never even read.
+        if ! current=$(echo "$profile" | jq -e 'if (.response.config | type) == "string" then (.response.config | fromjson) else .response.config end' 2>/dev/null); then
             failed=$((failed + 1))
             printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
             continue
         fi
 
-        missing=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings | type) == "object") | select(.streamSettings.realitySettings | has("minClientVer") | not)] | length')
-        preset=$(echo "$profile" | jq '[.response.config.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings.minClientVer? // "0.0.0") != "0.0.0")] | length')
+        if ! missing=$(echo "$current" | jq -e '[.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings | type) == "object") | select(.streamSettings.realitySettings | has("minClientVer") | not)] | length' 2>/dev/null); then
+            failed=$((failed + 1))
+            printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
+            continue
+        fi
+
+        preset=$(echo "$current" | jq '[.inbounds[]? | select(.streamSettings.security? == "reality") | select((.streamSettings.realitySettings.minClientVer? // "0.0.0") != "0.0.0")] | length' 2>/dev/null)
         [ -n "$preset" ] && [ "$preset" != "0" ] && custom=$((custom + 1))
 
-        if [ -z "$missing" ] || [ "$missing" = "0" ]; then
+        if [ "$missing" = "0" ]; then
             untouched=$((untouched + 1))
             continue
         fi
 
-        config=$(echo "$profile" | jq '.response.config | .inbounds |= map(if (.streamSettings.security? == "reality") and ((.streamSettings.realitySettings | type) == "object") then (.streamSettings.realitySettings.minClientVer //= "0.0.0") else . end)')
-        if [ -z "$config" ]; then
+        if ! config=$(echo "$current" | jq -e '.inbounds |= map(if (.streamSettings.security? == "reality") and ((.streamSettings.realitySettings | type) == "object") then (.streamSettings.realitySettings.minClientVer //= "0.0.0") else . end)' 2>/dev/null); then
             failed=$((failed + 1))
             printf "${COLOR_RED}${LANG[MINCLIENTVER_PROFILE_FAILED]}${COLOR_RESET}\n" "$uuid"
             continue
