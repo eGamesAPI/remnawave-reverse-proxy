@@ -265,7 +265,10 @@ delete_config_profile() {
     fi
 
     local delete_response=$(make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token")
-    if [ -z "$delete_response" ] || ! echo "$delete_response" | jq -e '.' > /dev/null 2>&1; then
+    if [ -z "$delete_response" ]; then
+        return 0
+    fi
+    if ! echo "$delete_response" | jq -e '.' > /dev/null 2>&1; then
         echo -e "${COLOR_RED}${LANG[ERROR_DELETE_PROFILE]}${COLOR_RESET}"
         return 1
     fi
