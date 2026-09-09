@@ -38,19 +38,18 @@ tinyauth_setup() {
 
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
-    TINYAUTH_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-    # bcrypt hash straight from the upstream CLI. The CLI reports the
-    # result as a colored structured log line ("... User created ...
-    # user=NAME:$2a$.."), so ANSI colors are stripped first, the pair is
-    # pulled out of the combined output and the dollars are escaped for
-    # docker compose here.
-    local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:latest"
+    # bcrypt hash straight from the upstream CLI. Depending on the build the
+    # pair appears as a standalone "name:hash" line or inside a structured
+    # log line ("... user=NAME:$2a$.."), so both forms are accepted; ANSI
+    # colors are stripped and the dollars are escaped for docker compose.
+    local tinyauth_image="ghcr.io/tinyauthapp/tinyauth:latest"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
         --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1 \
         | sed $'s/\x1b\\[[0-9;]*m//g')
     hash_out=$(echo "$run_out" | grep -oE 'user=[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1 | sed 's/^user=//')
+    [ -z "$hash_out" ] && hash_out=$(echo "$run_out" | grep -oE '^[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1)
 
     # Only a printable username:hash pair may reach the compose file —
     # a stray control character would break YAML parsing.
@@ -66,20 +65,24 @@ tinyauth_setup() {
 
 tinyauth_compose_service() {
     local dir="$1"
+    # Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
+    # TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
+    # sessions live in SQLite under /data.
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
-    image: ghcr.io/maposia/remnawave-tinyauth:latest
+    image: ghcr.io/tinyauthapp/tinyauth:latest
     container_name: tinyauth
     hostname: tinyauth
     restart: always
     ports:
       - '127.0.0.1:3002:3002'
     environment:
-      - PORT=3002
-      - APP_URL=https://$TINYAUTH_DOMAIN
-      - USERS=$TINYAUTH_USERS
-      - SECRET=$TINYAUTH_SECRET
+      - TINYAUTH_SERVER_PORT=3002
+      - TINYAUTH_APPURL=https://$TINYAUTH_DOMAIN
+      - TINYAUTH_AUTH_USERS=$TINYAUTH_USERS
+      - TINYAUTH_AUTH_SECURECOOKIE=true
+      - TINYAUTH_DATABASE_PATH=/data/tinyauth.db
     volumes:
       - ./data:/data
 EOL
@@ -99,6 +102,7 @@ tinyauth_nginx_sites() {
 
 upstream tinyauth {
     server 127.0.0.1:3002;
+    keepalive 16;
 }
 
 server {
@@ -167,18 +171,20 @@ server {
         proxy_pass http://tinyauth/api/auth/nginx;
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
-        proxy_set_header x-forwarded-proto \$scheme;
-        proxy_set_header x-forwarded-host \$http_host;
-        proxy_set_header x-forwarded-uri \$request_uri;
-    }
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Uri \$request_uri;
 
-    location @tinyauth_login {
-        return 302 https://$TINYAUTH_DOMAIN/login?redirect_uri=\$scheme://\$http_host\$request_uri;
+        # X-Api-Key authenticates the request in TinyAuth while the original
+        # Authorization header remains available to the protected application.
+        proxy_set_header X-Api-Key \$http_x_api_key;
+        proxy_set_header Authorization \$http_authorization;
     }
 
     location / {
         auth_request /tinyauth_check;
-        error_page 401 = @tinyauth_login;
+        auth_request_set \$tinyauth_location \$upstream_http_x_tinyauth_location;
+        error_page 401 403 =302 \$tinyauth_location;
 
         proxy_http_version 1.1;
         proxy_pass http://$backend;
@@ -190,6 +196,12 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
+
+        # Preserve credentials intended for the protected application, strip
+        # the TinyAuth ones.
+        proxy_set_header Authorization \$http_authorization;
+        proxy_set_header X-Api-Key "";
+
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
