@@ -168,7 +168,7 @@ x-env: &env
 
 services:
   remnawave-db:
-    image: postgres:18
+    image: postgres:18.6
     container_name: 'remnawave-db'
     hostname: remnawave-db
     shm_size: 512mb
@@ -211,7 +211,7 @@ services:
         condition: service_healthy
 
   remnawave-redis:
-    image: valkey/valkey:9-alpine
+    image: valkey/valkey:9.1.2-alpine
     container_name: remnawave-redis
     hostname: remnawave-redis
     <<: [*common, *logging, *networks]
@@ -233,7 +233,7 @@ services:
       retries: 3
 
   remnawave-caddy:
-      image: caddy:2.11.2
+      image: caddy:2.11.4
       container_name: remnawave-caddy
       hostname: remnawave-caddy
       <<: [*common, *logging]
@@ -433,10 +433,9 @@ installation_panel_node_caddy() {
     local domain_url="127.0.0.1:3000"
     local target_dir="/opt/remnawave"
 
-    echo -e "${COLOR_YELLOW}${LANG[REGISTERING_REMNAWAVE]}${COLOR_RESET}"
     sleep 20
 
-    echo -e "${COLOR_YELLOW}${LANG[CHECK_CONTAINERS]}${COLOR_RESET}"
+    step_do "${LANG[CHECK_CONTAINERS]}"
     local attempts=0
     local max_attempts=5
     until curl -s -f --max-time 30 "http://$domain_url/api/auth/status" \
@@ -457,54 +456,43 @@ installation_panel_node_caddy() {
         ey*) ;;
         *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
     esac
-    echo -e "${COLOR_GREEN}${LANG[REGISTRATION_SUCCESS]}${COLOR_RESET}"
 
     # Get public key
-    echo -e "${COLOR_YELLOW}${LANG[GET_PUBLIC_KEY]}${COLOR_RESET}"
     sleep 1
     get_public_key "$domain_url" "$token" "$target_dir" || abort_with_credentials "${LANG[ERROR_EXTRACT_PUBLIC_KEY]}"
 
     # Generate Xray keys
-    echo -e "${COLOR_YELLOW}${LANG[GENERATE_KEYS]}${COLOR_RESET}"
     sleep 1
     local private_key=$(generate_xray_keys "$domain_url" "$token")
-    printf "${COLOR_GREEN}${LANG[GENERATE_KEYS_SUCCESS]}${COLOR_RESET}\n"
 
     # Delete default config profile
     delete_config_profile "$domain_url" "$token"
 
     # Create config profile
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_CONFIG_PROFILE]}${COLOR_RESET}"
     read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key")
-    echo -e "${COLOR_GREEN}${LANG[CONFIG_PROFILE_CREATED]}${COLOR_RESET}"
 
     # Create node with config profile binding
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_NODE]}${COLOR_RESET}"
     create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid"
 
     # Create host
-    echo -e "${COLOR_YELLOW}${LANG[CREATE_HOST]}${COLOR_RESET}"
     create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid"
 
     # Get UUID default squad
-    echo -e "${COLOR_YELLOW}${LANG[GET_DEFAULT_SQUAD]}${COLOR_RESET}"
     local squad_uuid=$(get_default_squad "$domain_url" "$token")
 
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-    echo -e "${COLOR_GREEN}${LANG[UPDATE_SQUAD]}${COLOR_RESET}"
 
     # Create API token for subscription page
-    echo -e "${COLOR_YELLOW}${LANG[CREATING_API_TOKEN]}${COLOR_RESET}"
     create_api_token "$domain_url" "$token" "$target_dir"
 
     # Stop and start Remnawave
-    echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]}${COLOR_RESET}"
+    step_do "${LANG[STOPPING_REMNAWAVE]}"
     sleep 1
     docker compose down > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
+    step_do "${LANG[STARTING_PANEL_NODE]}"
     sleep 1
     docker compose up -d > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
