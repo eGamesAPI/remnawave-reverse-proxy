@@ -191,7 +191,7 @@ EOL
 
     while [ $attempt -le $max_attempts ]; do
         printf "${COLOR_YELLOW}${LANG[SUB_ATTEMPT]}${COLOR_RESET}\n" "$attempt" "$max_attempts"
-        if curl -s --fail --max-time 10 "https://$SUB_DOMAIN" > /dev/null; then
+        if curl -s -o /dev/null --max-time 10 "https://$SUB_DOMAIN"; then
             step_ok "${LANG[SUB_LAUNCHED]}"
             break
         else
