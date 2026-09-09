@@ -70,7 +70,7 @@ x-logging: &logging
 
 services:
   remnawave-nginx:
-    image: nginx:1.28
+    image: nginx:1.30
     container_name: remnawave-nginx
     hostname: remnawave-nginx
     <<: [*common, *logging]
@@ -90,7 +90,7 @@ installation_node() {
     declare -A domains_to_check
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/remnanode"
 
     if [ -z "$CERT_METHOD" ]; then
         local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
@@ -187,7 +187,7 @@ EOL
     while [ $attempt -le $max_attempts ]; do
         printf "${COLOR_YELLOW}${LANG[NODE_ATTEMPT]}${COLOR_RESET}\n" "$attempt" "$max_attempts"
         if curl -s --fail --max-time 10 "https://$SELFSTEAL_DOMAIN" | grep -q "html"; then
-            echo -e "${COLOR_GREEN}${LANG[NODE_LAUNCHED]}${COLOR_RESET}"
+            step_ok "${LANG[NODE_LAUNCHED]}"
             break
         else
             printf "${COLOR_RED}${LANG[NODE_UNAVAILABLE]}${COLOR_RESET}\n" "$attempt"
