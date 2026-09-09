@@ -41,6 +41,22 @@ install_panel_nginx() {
         unique_domains["$SUB_BASE_DOMAIN"]=1
     fi
 
+    PANEL_AUTH_MODE=cookie
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[PANEL_AUTH_OPT_COOKIE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_TINYAUTH]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" auth_choice
+        case "$auth_choice" in
+            1) break ;;
+            2) PANEL_AUTH_MODE=tinyauth; break ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
@@ -51,6 +67,11 @@ install_panel_nginx() {
     METRICS_PASS=$(generate_user)
 
     APP_SECRET=$(openssl rand -hex 64)
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        load_tinyauth_module
+        tinyauth_setup "$PANEL_BASE_DOMAIN" "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN"
+    fi
 
     cat > .env <<EOL
 ### APP ###
@@ -259,6 +280,9 @@ installation_panel() {
     if [ "$PANEL_WITH_SUB" != "false" ]; then
         domains_to_check["$SUB_DOMAIN"]=1
     fi
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        domains_to_check["$TINYAUTH_DOMAIN"]=1
+    fi
 
     handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
 
@@ -276,10 +300,16 @@ installation_panel() {
         if [ "$PANEL_WITH_SUB" != "false" ]; then
             SUB_CERT_DOMAIN="$(extract_domain "$SUB_DOMAIN")"
         fi
+        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+            TINYAUTH_CERT_DOMAIN="$(extract_domain "$TINYAUTH_DOMAIN")"
+        fi
     else
         PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
         if [ "$PANEL_WITH_SUB" != "false" ]; then
             SUB_CERT_DOMAIN="$SUB_DOMAIN"
+        fi
+        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+            TINYAUTH_CERT_DOMAIN="$TINYAUTH_DOMAIN"
         fi
     fi
 
@@ -301,6 +331,10 @@ installation_panel() {
     ports:
       - '127.0.0.1:3010:3010'
 EOL
+    fi
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_compose_service /opt/remnawave
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL
@@ -387,6 +421,32 @@ ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDS
 ssl_prefer_server_ciphers on;
 ssl_session_timeout 1d;
 ssl_session_cache shared:MozSSL:10m;
+EOL
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_nginx_sites "443 ssl" "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" "$TINYAUTH_CERT_DOMAIN" "remnawave" >> /opt/remnawave/nginx.conf
+    else
+        cat >> /opt/remnawave/nginx.conf <<EOL
+
+map \$http_cookie \$auth_cookie {
+    default 0;
+    "~*${cookies_random1}=${cookies_random2}" 1;
+}
+
+map \$arg_${cookies_random1} \$auth_query {
+    default 0;
+    "${cookies_random2}" 1;
+}
+
+map "\$auth_cookie\$auth_query" \$authorized {
+    "~1" 1;
+    default 0;
+}
+
+map \$arg_${cookies_random1} \$set_cookie_header {
+    "${cookies_random2}" "${cookies_random1}=${cookies_random2}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+    default "";
+}
 
 server {
     server_name $PANEL_DOMAIN;
@@ -440,6 +500,7 @@ server {
     }
 }
 EOL
+    fi
 
     if [ "$PANEL_WITH_SUB" != "false" ]; then
         cat >> /opt/remnawave/nginx.conf <<EOL
@@ -564,10 +625,16 @@ EOL
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
     echo -e "${COLOR_GREEN}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_banner
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    fi
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"

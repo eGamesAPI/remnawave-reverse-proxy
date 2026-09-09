@@ -44,6 +44,22 @@ install_panel_node_nginx() {
     unique_domains["$SUB_BASE_DOMAIN"]=1
     unique_domains["$SELFSTEAL_BASE_DOMAIN"]=1
 
+    PANEL_AUTH_MODE=cookie
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[PANEL_AUTH_OPT_COOKIE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_TINYAUTH]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" auth_choice
+        case "$auth_choice" in
+            1) break ;;
+            2) PANEL_AUTH_MODE=tinyauth; break ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
@@ -54,6 +70,11 @@ install_panel_node_nginx() {
     METRICS_PASS=$(generate_user)
 
     APP_SECRET=$(openssl rand -hex 64)
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        load_tinyauth_module
+        tinyauth_setup "$PANEL_BASE_DOMAIN" "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN"
+    fi
 
     cat > .env <<EOL
 ### APP ###
@@ -261,6 +282,9 @@ installation() {
     domains_to_check["$PANEL_DOMAIN"]=1
     domains_to_check["$SUB_DOMAIN"]=1
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        domains_to_check["$TINYAUTH_DOMAIN"]=1
+    fi
 
     handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
 
@@ -280,10 +304,16 @@ installation() {
         PANEL_CERT_DOMAIN="$base_domain"
         SUB_CERT_DOMAIN="$sub_base_domain"
         NODE_CERT_DOMAIN="$node_base_domain"
+        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+            TINYAUTH_CERT_DOMAIN="$(extract_domain "$TINYAUTH_DOMAIN")"
+        fi
     else
         PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
         SUB_CERT_DOMAIN="$SUB_DOMAIN"
         NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
+        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+            TINYAUTH_CERT_DOMAIN="$TINYAUTH_DOMAIN"
+        fi
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL
@@ -322,6 +352,13 @@ installation() {
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
+EOL
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_compose_service /opt/remnawave
+    fi
+
+    cat >> /opt/remnawave/docker-compose.yml <<EOL
 
 networks:
   remnawave-network:
@@ -382,6 +419,20 @@ map \$http_upgrade \$connection_upgrade {
     ""      close;
 }
 
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ecdh_curve X25519:prime256v1:secp384r1;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+ssl_prefer_server_ciphers on;
+ssl_session_timeout 1d;
+ssl_session_cache shared:MozSSL:10m;
+ssl_session_tickets off;
+EOL
+
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_nginx_sites "unix:/dev/shm/nginx.sock ssl proxy_protocol" "$PANEL_DOMAIN" "$PANEL_CERT_DOMAIN" "$TINYAUTH_CERT_DOMAIN" "remnawave" >> /opt/remnawave/nginx.conf
+    else
+        cat >> /opt/remnawave/nginx.conf <<EOL
+
 map \$http_cookie \$auth_cookie {
     default 0;
     "~*${cookies_random1}=${cookies_random2}" 1;
@@ -401,14 +452,6 @@ map \$arg_${cookies_random1} \$set_cookie_header {
     "${cookies_random2}" "${cookies_random1}=${cookies_random2}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
     default "";
 }
-
-ssl_protocols TLSv1.2 TLSv1.3;
-ssl_ecdh_curve X25519:prime256v1:secp384r1;
-ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-ssl_prefer_server_ciphers on;
-ssl_session_timeout 1d;
-ssl_session_cache shared:MozSSL:10m;
-ssl_session_tickets off;
 
 server {
     server_name $PANEL_DOMAIN;
@@ -471,6 +514,10 @@ server {
         proxy_read_timeout 60s;
     }
 }
+EOL
+    fi
+
+    cat >> /opt/remnawave/nginx.conf <<EOL
 
 server {
     server_name $SUB_DOMAIN;
@@ -609,10 +656,16 @@ EOL
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
     echo -e "${COLOR_GREEN}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        tinyauth_banner
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+    fi
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
