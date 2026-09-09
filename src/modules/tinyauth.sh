@@ -40,11 +40,31 @@ tinyauth_setup() {
     TINYAUTH_PASSWORD=$(generate_password)
     TINYAUTH_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-    # bcrypt hash in docker-escaped form, straight from the upstream CLI
-    TINYAUTH_USERS=$(docker run --rm ghcr.io/maposia/remnawave-tinyauth:latest \
-        user create --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" --docker 2>/dev/null | tail -n 1)
-    if [ -z "$TINYAUTH_USERS" ] || ! echo "$TINYAUTH_USERS" | grep -q ":"; then
-        echo -e "${COLOR_YELLOW}${LANG[TINYAUTH_CREATE_FAIL]}${COLOR_RESET}"
+    # bcrypt hash straight from the upstream CLI. --docker asks for the
+    # compose-escaped form; older builds may not know the flag (or the
+    # non-interactive flags at all), so retry without it and escape the
+    # dollars ourselves. stderr is kept for the failure message.
+    local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:latest"
+    local hash_out hash_err
+    hash_out=$(docker run --rm "$tinyauth_image" user create \
+        --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" --docker 2>/tmp/tinyauth-hash.err \
+        | grep -E '^[^:]+:(\$)+2[aby]\$' | tail -n 1)
+
+    if [ -z "$hash_out" ]; then
+        hash_out=$(docker run --rm "$tinyauth_image" user create \
+            --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>/tmp/tinyauth-hash.err \
+            | grep -E '^[^:]+:(\$)+2[aby]\$' | tail -n 1)
+        # plain form → compose-escaped form
+        hash_out=$(echo "$hash_out" | sed 's/\$/\$\$/g')
+    fi
+
+    if [ -n "$hash_out" ]; then
+        TINYAUTH_USERS="$hash_out"
+    else
+        hash_err=$(tail -n 3 /tmp/tinyauth-hash.err 2>/dev/null)
+        echo -e "${COLOR_RED}${LANG[TINYAUTH_CREATE_FAIL]}${COLOR_RESET}"
+        [ -n "$hash_err" ] && echo -e "${COLOR_RED}${hash_err}${COLOR_RESET}"
+        rm -f /tmp/tinyauth-hash.err
         PANEL_AUTH_MODE=cookie
     fi
 }
