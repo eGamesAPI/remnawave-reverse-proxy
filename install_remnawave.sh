@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.2.1"
+SCRIPT_VERSION="DEV 3.2.2"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1928,6 +1928,100 @@ check_api() {
     error "$(printf "${LANG[CF_INVALID]}" "$attempts")"
 }
 
+# Make sure $1 has an A record pointing at this server; offers to create
+# the record through the Cloudflare or Gcore API when it is missing.
+# Returns 0 when the record exists (or was created), 1 when the user chose
+# to create it manually — callers should only warn in that case.
+ensure_dns_record() {
+    local domain="$1"
+    local base_domain
+    base_domain=$(extract_domain "$domain")
+
+    local server_ip
+    server_ip=$(curl -s -4 --max-time 10 ifconfig.me || curl -s -4 --max-time 10 api.ipify.org || curl -s -4 --max-time 10 ipinfo.io/ip)
+
+    local domain_ip
+    domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+
+    # A record pointing at this server, or at Cloudflare (proxied) — fine.
+    if [ -n "$domain_ip" ] && { [ "$domain_ip" = "$server_ip" ] || curl -s --max-time 10 https://www.cloudflare.com/ips-v4 | grep -qF "$domain_ip"; }; then
+        return 0
+    fi
+
+    printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MISSING]}${COLOR_RESET}\n" "$domain"
+
+    local choice
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[DNS_RECORD_CREATE_CF]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[DNS_RECORD_CREATE_GC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}3. ${LANG[DNS_RECORD_MANUAL]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" choice
+        case "$choice" in
+            1) ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip"; return $? ;;
+            2) ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip"; return $? ;;
+            3) return 1 ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+}
+
+ensure_dns_record_cloudflare() {
+    local domain="$1" base_domain="$2" server_ip="$3"
+
+    reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+    local auth_header="Authorization: Bearer ${CLOUDFLARE_API_KEY}"
+    if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
+        reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+        auth_header="X-Auth-Key: ${CLOUDFLARE_API_KEY}"
+    fi
+
+    local zone_id
+    zone_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones?name=$base_domain" \
+        -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
+        | jq -r '.result[0].id // empty' 2>/dev/null)
+
+    if [ -z "$zone_id" ]; then
+        printf "${COLOR_RED}${LANG[DNS_RECORD_ZONE_NOT_FOUND]}${COLOR_RESET}\n" "$base_domain"
+        return 1
+    fi
+
+    local create_response
+    create_response=$(curl -s --max-time 20 -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+        -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
+        --data "{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$server_ip\",\"ttl\":120,\"proxied\":false}")
+
+    if echo "$create_response" | jq -e '.success == true' > /dev/null 2>&1; then
+        printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
+        return 0
+    fi
+
+    echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]}: $(echo "$create_response" | jq -r '.errors[0].message // "unknown error"')${COLOR_RESET}"
+    return 1
+}
+
+ensure_dns_record_gcore() {
+    local domain="$1" base_domain="$2" server_ip="$3"
+
+    reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+
+    local create_response http_code
+    create_response=$(curl -s --max-time 20 -X POST "https://api.gcore.com/dns/v2/zones/$base_domain/rrsets" \
+        -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
+        -w "\n%{http_code}" \
+        --data "{\"name\":\"$domain.\",\"type\":\"A\",\"ttl\":120,\"records\":[{\"content\":[\"$server_ip\"],\"enabled\":true}]}")
+    http_code=$(echo "$create_response" | tail -n 1)
+
+    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+        printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
+        return 0
+    fi
+
+    echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]} (HTTP $http_code)${COLOR_RESET}"
+    return 1
+}
+
 get_certificates() {
     local DOMAIN=$1
     local CERT_METHOD=$2
@@ -2691,6 +2785,7 @@ load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
+load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 
 log_entry
 
