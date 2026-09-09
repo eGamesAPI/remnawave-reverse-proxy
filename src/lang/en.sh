@@ -150,6 +150,13 @@ LANG[ENTER_SUB_API_TOKEN]="Enter the panel API token (created in the panel: Sett
 LANG[ENTER_SUB_PANEL_COOKIE]="Enter the panel cookie (format NAME=VALUE, e.g. zIdejKtN=MWbLrRzx — the same pair as in the panel login link auth/login?NAME=VALUE):"
 LANG[INVALID_COOKIE_FORMAT]="Invalid cookie format. Example: zIdejKtN=MWbLrRzx"
 LANG[SUB_PANEL_REMINDER]="Do not forget to configure the panel: set SUB_PUBLIC_DOMAIN=<subscription page domain> in /opt/remnawave/.env on the panel server and restart the panel container (cd /opt/remnawave && docker compose up -d remnawave)."
+LANG[PANEL_AUTH_PROMPT]="Panel protection method:"
+LANG[PANEL_AUTH_OPT_COOKIE]="Cookie protection (default)"
+LANG[PANEL_AUTH_OPT_PORTAL]="Login portal with MFA"
+LANG[PANEL_AUTH_PROMPT_CHOOSE]="Select action (1-2):"
+LANG[PORTAL_ACCESS]="Portal (panel login):"
+LANG[PORTAL_CREDS]="Portal login and password:"
+LANG[PORTAL_MFA_NOTE]="Set up MFA after the first login:"
 LANG[SUB_PANEL_GATE_WARNING]="The cookie must match the panel's current cookie: if the panel is reinstalled, update EGAMES_COOKIE in /opt/subscription/docker-compose.yml and restart the subscription page container (cd /opt/subscription && docker compose up -d remnawave-subscription-page)."
 #Manage IPv6
 LANG[IPV6_MENU_TITLE]="Manage IPv6"

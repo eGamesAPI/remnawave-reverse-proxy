@@ -146,6 +146,13 @@ LANG[ENTER_SUB_API_TOKEN]="Введите API-токен панели (созд�
 LANG[ENTER_SUB_PANEL_COOKIE]="Введите cookie панели (формат ИМЯ=ЗНАЧЕНИЕ, например zIdejKtN=MWbLrRzx — та же пара, что в ссылке входа в панель auth/login?ИМЯ=ЗНАЧЕНИЕ):"
 LANG[INVALID_COOKIE_FORMAT]="Некорректный формат куки. Пример: zIdejKtN=MWbLrRzx"
 LANG[SUB_PANEL_REMINDER]="Не забудьте настроить панель: в /opt/remnawave/.env укажите SUB_PUBLIC_DOMAIN=домен страницы подписки и перезапустите контейнер панели (cd /opt/remnawave && docker compose up -d remnawave)."
+LANG[PANEL_AUTH_PROMPT]="Способ защиты панели:"
+LANG[PANEL_AUTH_OPT_COOKIE]="Cookie-защита (по умолчанию)"
+LANG[PANEL_AUTH_OPT_PORTAL]="Портал с логином и MFA"
+LANG[PANEL_AUTH_PROMPT_CHOOSE]="Выберите действие (1-2):"
+LANG[PORTAL_ACCESS]="Портал (вход в панель):"
+LANG[PORTAL_CREDS]="Логин и пароль портала:"
+LANG[PORTAL_MFA_NOTE]="Настройте MFA после первого входа:"
 LANG[SUB_PANEL_GATE_WARNING]="Cookie должна совпадать с текущей кукой панели: если панель переустановят — обновите EGAMES_COOKIE в /opt/subscription/docker-compose.yml и перезапустите контейнер страницы подписки (cd /opt/subscription && docker compose up -d remnawave-subscription-page)."
 #Manage IPv6
 LANG[IPV6_MENU_TITLE]="Управление IPv6"

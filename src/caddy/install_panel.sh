@@ -39,6 +39,28 @@ install_panel_caddy() {
         exit 1
     fi
 
+    PANEL_AUTH_MODE=cookie
+    CADDY_IMAGE="caddy:2.11.4"
+    AUTHP_ENV=""
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[PANEL_AUTH_OPT_COOKIE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_PORTAL]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" auth_choice
+        case "$auth_choice" in
+            1) break ;;
+            2)
+                PANEL_AUTH_MODE=portal
+                CADDY_IMAGE="remnawave/caddy-with-auth:latest"
+                break
+                ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+
     SUPERADMIN_USERNAME=$(generate_user)
     SUPERADMIN_PASSWORD=$(generate_password)
 
@@ -50,6 +72,14 @@ install_panel_caddy() {
 
     APP_SECRET=$(openssl rand -hex 64)
     API_TOKEN=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
+
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        AUTHP_ADMIN_USER="$SUPERADMIN_USERNAME"
+        AUTHP_ADMIN_EMAIL="${SUPERADMIN_USERNAME}@${PANEL_DOMAIN}"
+        AUTHP_ADMIN_SECRET=$(generate_password)
+        AUTHP_ENV=$(printf '\n          - AUTHP_ADMIN_USER=%s\n          - AUTHP_ADMIN_EMAIL=%s\n          - AUTHP_ADMIN_SECRET=%s\n          - AUTH_TOKEN_LIFETIME=604800' \
+            "$AUTHP_ADMIN_USER" "$AUTHP_ADMIN_EMAIL" "$AUTHP_ADMIN_SECRET")
+    fi
 
     cat > .env <<EOL
 ### APP ###
@@ -236,7 +266,7 @@ services:
       retries: 3
 
   remnawave-caddy:
-      image: caddy:2.11.4
+      image: ${CADDY_IMAGE}
       container_name: remnawave-caddy
       hostname: remnawave-caddy
       <<: [*common, *logging]
@@ -250,7 +280,7 @@ services:
       environment:
           - PANEL_DOMAIN=${PANEL_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
-          - SUB_BACKEND_URL=127.0.0.1:3010
+          - SUB_BACKEND_URL=127.0.0.1:3010${AUTHP_ENV}
       healthcheck:
           test: ["CMD", "test", "-S", "/dev/shm/nginx.sock"]
           interval: 2s
@@ -302,6 +332,102 @@ volumes:
     external: false
 EOL
 
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        # Security block embedded verbatim from the official example
+        # (remnawave/caddy-with-auth: minimal-security-setup-with-mfa-
+        # with-api-without-auth); only the env var names are adapted.
+        cat > /opt/remnawave/Caddyfile <<EOL
+{
+    admin off
+    order authenticate before respond
+    order authorize before respond
+
+    security {
+        local identity store localdb {
+            realm local
+            path /data/.local/caddy/users.json
+        }
+
+        authentication portal remnawaveportal {
+            crypto default token lifetime {\$AUTH_TOKEN_LIFETIME}
+            enable identity store localdb
+            cookie domain {\$PANEL_DOMAIN}
+            ui {
+                links {
+                    "Remnawave" "/dashboard/home" icon "las la-tachometer-alt"
+                    "My Identity" "/r/whoami" icon "las la-user"
+                    "API Keys" "/r/settings/apikeys" icon "las la-key"
+                    "MFA" "/r/settings/mfa" icon "lab la-keycdn"
+                }
+            }
+            transform user {
+                match origin local
+                action add role authp/admin
+                require mfa
+            }
+        }
+
+        authorization policy panelpolicy {
+            set auth url /r
+            allow roles authp/admin
+            with api key auth portal remnawaveportal realm local
+            acl rule {
+                comment "Accept"
+                match role authp/admin
+                allow stop log info
+            }
+            acl rule {
+                comment "Deny"
+                match any
+                deny log warn
+            }
+        }
+    }
+}
+
+http://{\$PANEL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$PANEL_DOMAIN}{uri} permanent
+}
+
+https://{\$PANEL_DOMAIN} {
+    encode
+
+    # Open routes: the panel API carries its own Bearer-token auth, and
+    # Telegram OAuth callbacks must reach the backend untouched.
+    route /api/* {
+        reverse_proxy {\$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+
+    route /oauth2/* {
+        reverse_proxy {\$BACKEND_URL} {
+            header_up Host {host}
+        }
+    }
+
+    handle /r {
+        rewrite * /auth
+        request_header +X-Forwarded-Prefix /r
+        authenticate with remnawaveportal
+    }
+
+    route /r* {
+        authenticate with remnawaveportal
+    }
+
+    route /* {
+        authorize with panelpolicy
+        reverse_proxy {\$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+}
+EOL
+    else
     cat > /opt/remnawave/Caddyfile <<EOL
 {
     admin off
@@ -359,6 +485,7 @@ https://{\$PANEL_DOMAIN} {
     }
 }
 EOL
+    fi
 
     if [ "$PANEL_WITH_SUB" != "false" ]; then
         cat >> /opt/remnawave/Caddyfile <<EOL
@@ -465,12 +592,25 @@ installation_panel_caddy() {
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
     echo -e "${COLOR_GREEN}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_ACCESS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/r${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$AUTHP_ADMIN_USER${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$AUTHP_ADMIN_SECRET${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PORTAL_MFA_NOTE]} https://${PANEL_DOMAIN}/r/settings/mfa${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[PANEL_ACCESS]}${COLOR_RESET}"
+        echo -e "${COLOR_WHITE}https://${PANEL_DOMAIN}/auth/login?${cookies_random1}=${cookies_random2}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$SUPERADMIN_USERNAME${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$SUPERADMIN_PASSWORD${COLOR_RESET}"
+    fi
     echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
