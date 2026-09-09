@@ -76,7 +76,6 @@ install_panel_node_caddy() {
         AUTHP_ADMIN_SECRET=$(generate_password)
         AUTHP_ENV=$(printf '\n          - AUTHP_ADMIN_USER=%s\n          - AUTHP_ADMIN_EMAIL=%s\n          - AUTHP_ADMIN_SECRET=%s\n          - AUTH_TOKEN_LIFETIME=604800' \
             "$AUTHP_ADMIN_USER" "$AUTHP_ADMIN_EMAIL" "$AUTHP_ADMIN_SECRET")
-        PORTAL_ORDER=$(printf '\n    order authenticate before respond\n    order authorize before respond')
     fi
 
     cat > .env <<EOL
@@ -345,9 +344,58 @@ volumes:
     external: false
 EOL
 
-    cat > /opt/remnawave/Caddyfile <<EOL
+    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
+        # Security block embedded verbatim from the official example
+        # (remnawave/caddy-with-auth: minimal-security-setup-with-mfa-
+        # with-api-without-auth); only the env var names are adapted.
+        cat > /opt/remnawave/Caddyfile <<EOL
 {
-    admin off${PORTAL_ORDER}
+    admin off
+    order authenticate before respond
+    order authorize before respond
+
+    security {
+        local identity store localdb {
+            realm local
+            path /data/.local/caddy/users.json
+        }
+
+        authentication portal remnawaveportal {
+            crypto default token lifetime {\$AUTH_TOKEN_LIFETIME}
+            enable identity store localdb
+            cookie domain {\$PANEL_DOMAIN}
+            ui {
+                links {
+                    "Remnawave" "/dashboard/home" icon "las la-tachometer-alt"
+                    "My Identity" "/r/whoami" icon "las la-user"
+                    "API Keys" "/r/settings/apikeys" icon "las la-key"
+                    "MFA" "/r/settings/mfa" icon "lab la-keycdn"
+                }
+            }
+            transform user {
+                match origin local
+                action add role authp/admin
+                require mfa
+            }
+        }
+
+        authorization policy panelpolicy {
+            set auth url /r
+            allow roles authp/admin
+            with api key auth portal remnawaveportal realm local
+            acl rule {
+                comment "Accept"
+                match role authp/admin
+                allow stop log info
+            }
+            acl rule {
+                comment "Deny"
+                match any
+                deny log warn
+            }
+        }
+    }
+
     servers {
         listener_wrappers {
             proxy_protocol
@@ -374,21 +422,36 @@ http://{\$PANEL_DOMAIN} {
     redir https://{\$PANEL_DOMAIN}{uri} permanent
 }
 EOL
+    else
+    cat > /opt/remnawave/Caddyfile <<EOL
+{
+    admin off
+    servers {
+        listener_wrappers {
+            proxy_protocol
+            tls
+        }
+    }
+    auto_https disable_redirects
+}
 
-    local portal_sec_block=""
-    if [ "$PANEL_AUTH_MODE" = "portal" ]; then
-        # The security block is extracted verbatim from the official
-        # caddy-with-auth example so the plugin directives always match
-        # upstream; only the site routes below are ours.
-        portal_sec_block=$(curl -fsSL --connect-timeout 10 --max-time 30 \
-            "https://raw.githubusercontent.com/remnawave/caddy-with-auth/main/examples/minimal-security-setup-with-mfa-with-api-without-auth/Caddyfile" 2>/dev/null \
-            | awk '/^security \{/,0' \
-            | sed 's|\$REMNAWAVE_PANEL_DOMAIN|\$PANEL_DOMAIN|g')
-        if [ -z "$portal_sec_block" ] || ! echo "$portal_sec_block" | grep -q "authentication portal"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORTAL_DOWNLOAD_WARN]}${COLOR_RESET}"
-            PANEL_AUTH_MODE=cookie
-            portal_sec_block=""
-        fi
+http://{\$SELF_STEAL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$SELF_STEAL_DOMAIN}{uri} permanent
+}
+
+https://{\$SELF_STEAL_DOMAIN} {
+    bind unix/{\$CADDY_SOCKET_PATH}
+    root * /var/www/html
+    try_files {path} /index.html
+    file_server
+}
+
+http://{\$PANEL_DOMAIN} {
+    bind 0.0.0.0
+    redir https://{\$PANEL_DOMAIN}{uri} permanent
+}
+EOL
     fi
 
     if [ "$PANEL_AUTH_MODE" = "portal" ]; then
@@ -413,8 +476,9 @@ https://{\$PANEL_DOMAIN} {
         }
     }
 
-    route /r {
+    handle /r {
         rewrite * /auth
+        request_header +X-Forwarded-Prefix /r
         authenticate with remnawaveportal
     }
 
@@ -422,11 +486,12 @@ https://{\$PANEL_DOMAIN} {
         authenticate with remnawaveportal
     }
 
-    authorize with panelpolicy
-
-    reverse_proxy {\$BACKEND_URL} {
-        header_up X-Real-IP {remote}
-        header_up Host {host}
+    route /* {
+        authorize with panelpolicy
+        reverse_proxy {\$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
     }
 }
 EOL
@@ -508,10 +573,6 @@ https://{\$SUB_DOMAIN} {
     respond 204
 }
 EOL
-
-    if [ -n "$portal_sec_block" ]; then
-        printf '\n%s\n' "$portal_sec_block" >> /opt/remnawave/Caddyfile
-    fi
 }
 
 installation_panel_node_caddy() {
