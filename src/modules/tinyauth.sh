@@ -40,31 +40,22 @@ tinyauth_setup() {
     TINYAUTH_PASSWORD=$(generate_password)
     TINYAUTH_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
-    # bcrypt hash straight from the upstream CLI. --docker asks for the
-    # compose-escaped form; older builds may not know the flag (or the
-    # non-interactive flags at all), so retry without it and escape the
-    # dollars ourselves. stderr is kept for the failure message.
+    # bcrypt hash straight from the upstream CLI. The CLI reports the
+    # result as a structured log line ("... User created ... user=NAME:$2a$.."),
+    # so the pair is pulled out of the combined output and the dollars are
+    # escaped for docker compose here.
     local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:latest"
-    local hash_out hash_err
-    hash_out=$(docker run --rm "$tinyauth_image" user create \
-        --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" --docker 2>/tmp/tinyauth-hash.err \
-        | grep -E '^[^:]+:(\$)+2[aby]\$' | tail -n 1)
-
-    if [ -z "$hash_out" ]; then
-        hash_out=$(docker run --rm "$tinyauth_image" user create \
-            --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>/tmp/tinyauth-hash.err \
-            | grep -E '^[^:]+:(\$)+2[aby]\$' | tail -n 1)
-        # plain form → compose-escaped form
-        hash_out=$(echo "$hash_out" | sed 's/\$/\$\$/g')
-    fi
+    local run_out hash_out
+    run_out=$(docker run --rm "$tinyauth_image" user create \
+        --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1)
+    hash_out=$(echo "$run_out" | grep -oE 'user=[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1 | sed 's/^user=//')
 
     if [ -n "$hash_out" ]; then
-        TINYAUTH_USERS="$hash_out"
+        # plain bcrypt → docker compose escaped form
+        TINYAUTH_USERS=$(echo "$hash_out" | sed 's/\$/\$\$/g')
     else
-        hash_err=$(tail -n 3 /tmp/tinyauth-hash.err 2>/dev/null)
         echo -e "${COLOR_RED}${LANG[TINYAUTH_CREATE_FAIL]}${COLOR_RESET}"
-        [ -n "$hash_err" ] && echo -e "${COLOR_RED}${hash_err}${COLOR_RESET}"
-        rm -f /tmp/tinyauth-hash.err
+        echo "$run_out" | tail -n 3 | sed 's/^/'"${COLOR_RED}"'/' | sed 's/$/'"${COLOR_RESET}"'/'
         PANEL_AUTH_MODE=cookie
     fi
 }
