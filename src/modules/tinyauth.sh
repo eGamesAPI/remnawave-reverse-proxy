@@ -41,16 +41,20 @@ tinyauth_setup() {
     TINYAUTH_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
 
     # bcrypt hash straight from the upstream CLI. The CLI reports the
-    # result as a structured log line ("... User created ... user=NAME:$2a$.."),
-    # so the pair is pulled out of the combined output and the dollars are
-    # escaped for docker compose here.
+    # result as a colored structured log line ("... User created ...
+    # user=NAME:$2a$.."), so ANSI colors are stripped first, the pair is
+    # pulled out of the combined output and the dollars are escaped for
+    # docker compose here.
     local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:latest"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
-        --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1)
+        --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1 \
+        | sed $'s/\x1b\\[[0-9;]*m//g')
     hash_out=$(echo "$run_out" | grep -oE 'user=[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1 | sed 's/^user=//')
 
-    if [ -n "$hash_out" ]; then
+    # Only a printable username:hash pair may reach the compose file —
+    # a stray control character would break YAML parsing.
+    if [ -n "$hash_out" ] && echo "$hash_out" | grep -qE '^[^[:cntrl:][:space:]]+:\$2[aby]\$[^[:cntrl:][:space:]]+$'; then
         # plain bcrypt → docker compose escaped form
         TINYAUTH_USERS=$(echo "$hash_out" | sed 's/\$/\$\$/g')
     else
