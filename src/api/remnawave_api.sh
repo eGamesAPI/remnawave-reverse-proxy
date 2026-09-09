@@ -1,6 +1,10 @@
 #!/bin/bash
 # Module: Remnawave API Functions
 
+err_msg() {
+    echo -e "${COLOR_RED}$*${COLOR_RESET}" >&2
+}
+
 make_api_request() {
     local method=$1
     local url=$2
@@ -10,15 +14,15 @@ make_api_request() {
     local headers=(
         -H "Authorization: Bearer $token"
         -H "Content-Type: application/json"
-        -H "X-Forwarded-For: ${url#http://}"
+        -H "X-Forwarded-For: 127.0.0.1"
         -H "X-Forwarded-Proto: https"
         -H "X-Remnawave-Client-Type: browser"
     )
 
     if [ -n "$data" ]; then
-        curl -s -X "$method" "$url" "${headers[@]}" -d "$data"
+        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" "${headers[@]}" -d "$data"
     else
-        curl -s -X "$method" "$url" "${headers[@]}"
+        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" "${headers[@]}"
     fi
 }
 
@@ -29,15 +33,20 @@ register_remnawave() {
     local password=$3
     local token=$4
 
-    local register_data='{"username":"'"$username"'","password":"'"$password"'"}'
+    local register_data=$(jq -n --arg u "$username" --arg p "$password" '{username:$u,password:$p}')
+    step_do "${LANG[REGISTERING_REMNAWAVE]}" >&2
     local register_response=$(make_api_request "POST" "http://$domain_url/api/auth/register" "$token" "$register_data")
 
     if [ -z "$register_response" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_REGISTER]}${COLOR_RESET}"
+        err_msg "${LANG[ERROR_EMPTY_RESPONSE_REGISTER]}"
+        return 1
     elif [[ "$register_response" == *"accessToken"* ]]; then
+        step_ok "${LANG[REGISTRATION_SUCCESS]}" >&2
         echo "$register_response" | jq -r '.response.accessToken'
+        return 0
     else
-        echo -e "${COLOR_RED}${LANG[ERROR_REGISTER]}: $register_response${COLOR_RESET}"
+        err_msg "${LANG[ERROR_REGISTER]}: $register_response"
+        return 1
     fi
 }
 
@@ -63,7 +72,7 @@ get_panel_token() {
     if [ -f "$TOKEN_FILE" ]; then
         token=$(cat "$TOKEN_FILE")
         echo -e "${COLOR_YELLOW}${LANG[USING_SAVED_TOKEN]}${COLOR_RESET}"
-        local test_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
+        local test_response=$(make_api_request "GET" "http://${domain_url}/api/config-profiles" "$token")
 
         if [ -z "$test_response" ] || ! echo "$test_response" | jq -e '.response.configProfiles' > /dev/null 2>&1; then
             if echo "$test_response" | grep -q '"statusCode":401' || \
@@ -88,7 +97,7 @@ get_panel_token() {
                 return 1
             fi
 
-            local test_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
+            local test_response=$(make_api_request "GET" "http://${domain_url}/api/config-profiles" "$token")
             if [ -z "$test_response" ] || ! echo "$test_response" | jq -e '.response.configProfiles' > /dev/null 2>&1; then
                 echo -e "${COLOR_RED}${LANG[INVALID_SAVED_TOKEN]}: $test_response${COLOR_RESET}"
                 return 1
@@ -97,7 +106,8 @@ get_panel_token() {
             reading "${LANG[ENTER_PANEL_USERNAME]}" username
             reading "${LANG[ENTER_PANEL_PASSWORD]}" password
 
-            local login_response=$(make_api_request "POST" "${domain_url}/api/auth/login" "" "{\"username\":\"$username\",\"password\":\"$password\"}")
+            local login_data=$(jq -n --arg u "$username" --arg p "$password" '{username:$u,password:$p}')
+            local login_response=$(make_api_request "POST" "http://${domain_url}/api/auth/login" "" "$login_data")
             token=$(echo "$login_response" | jq -r '.response.accessToken // .accessToken // ""')
             if [ -z "$token" ] || [ "$token" == "null" ]; then
                 echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}: $login_response${COLOR_RESET}"
@@ -106,12 +116,13 @@ get_panel_token() {
         fi
 
         echo "$token" > "$TOKEN_FILE"
+        chmod 600 "$TOKEN_FILE" 2>/dev/null
         echo -e "${COLOR_GREEN}${LANG[TOKEN_RECEIVED_AND_SAVED]}${COLOR_RESET}"
     else
         echo -e "${COLOR_GREEN}${LANG[TOKEN_USED_SUCCESSFULLY]}${COLOR_RESET}"
     fi
 
-    local final_test_response=$(make_api_request "GET" "${domain_url}/api/config-profiles" "$token")
+    local final_test_response=$(make_api_request "GET" "http://${domain_url}/api/config-profiles" "$token")
     if [ -z "$final_test_response" ] || ! echo "$final_test_response" | jq -e '.response.configProfiles' > /dev/null 2>&1; then
         echo -e "${COLOR_RED}${LANG[INVALID_SAVED_TOKEN]}: $final_test_response${COLOR_RESET}"
         return 1
@@ -123,6 +134,7 @@ get_public_key() {
     local token=$2
     local target_dir=$3
 
+    step_do "${LANG[GET_PUBLIC_KEY]}"
     local api_response=$(make_api_request "GET" "http://$domain_url/api/keygen" "$token")
 
     if [ -z "$api_response" ]; then
@@ -138,32 +150,37 @@ get_public_key() {
 
     sed -i "s|SECRET_KEY=\"PUBLIC KEY FROM REMNAWAVE-PANEL\"|SECRET_KEY=\"$pubkey\"|g" "$target_dir/docker-compose.yml"
 
-    echo -e "${COLOR_GREEN}${LANG[PUBLIC_KEY_SUCCESS]}${COLOR_RESET}"
+    step_ok "${LANG[PUBLIC_KEY_SUCCESS]}"
 }
 
 generate_xray_keys() {
     local domain_url=$1
     local token=$2
 
+    step_do "${LANG[GENERATE_KEYS]}" >&2
     local api_response=$(make_api_request "GET" "http://$domain_url/api/system/tools/x25519/generate" "$token")
 
     if [ -z "$api_response" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_GENERATE_KEYS]}${COLOR_RESET}"
+        err_msg "${LANG[ERROR_GENERATE_KEYS]}"
         return 1
     fi
 
     if echo "$api_response" | jq -e '.errorCode' > /dev/null 2>&1; then
         local error_message=$(echo "$api_response" | jq -r '.message')
-        echo -e "${COLOR_RED}${LANG[ERROR_GENERATE_KEYS]}: $error_message${COLOR_RESET}"
+        err_msg "${LANG[ERROR_GENERATE_KEYS]}: $error_message"
+        return 1
     fi
 
     local private_key=$(echo "$api_response" | jq -r '.response.keypairs[0].privateKey')
 
     if [ -z "$private_key" ] || [ "$private_key" = "null" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_EXTRACT_PRIVATE_KEY]}${COLOR_RESET}"
+        err_msg "${LANG[ERROR_EXTRACT_PRIVATE_KEY]}"
+        return 1
     fi
 
+    step_ok "${LANG[GENERATE_KEYS_SUCCESS]}" >&2
     echo "$private_key"
+    return 0
 }
 
 check_node_domain() {
@@ -200,6 +217,7 @@ create_node() {
     local node_address="${5:-172.30.0.1}"
     local node_name="${6:-Steal}"
 
+    step_do "${LANG[CREATING_NODE]}"
     local node_data=$(cat <<EOF
 {
     "name": "$node_name",
@@ -226,7 +244,7 @@ EOF
     fi
 
     if echo "$node_response" | jq -e '.response.uuid' > /dev/null; then
-        printf "${COLOR_GREEN}${LANG[NODE_CREATED]}${COLOR_RESET}\n"
+        step_ok "${LANG[NODE_CREATED]}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
     fi
@@ -238,13 +256,13 @@ get_config_profiles() {
 
     local config_response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
     if [ -z "$config_response" ] || ! echo "$config_response" | jq -e '.' > /dev/null 2>&1; then
-        echo -e "${COLOR_RED}${LANG[ERROR_NO_CONFIGS]}${COLOR_RESET}"
+        err_msg "${LANG[ERROR_NO_CONFIGS]}"
         return 1
     fi
 
     local profile_uuid=$(echo "$config_response" | jq -r '.response.configProfiles[] | select(.name == "Default-Profile") | .uuid' 2>/dev/null)
     if [ -z "$profile_uuid" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[NO_DEFAULT_PROFILE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[NO_DEFAULT_PROFILE]}${COLOR_RESET}" >&2
         return 0
     fi
 
@@ -265,7 +283,10 @@ delete_config_profile() {
     fi
 
     local delete_response=$(make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token")
-    if [ -z "$delete_response" ] || ! echo "$delete_response" | jq -e '.' > /dev/null 2>&1; then
+    if [ -z "$delete_response" ]; then
+        return 0
+    fi
+    if ! echo "$delete_response" | jq -e '.' > /dev/null 2>&1; then
         echo -e "${COLOR_RED}${LANG[ERROR_DELETE_PROFILE]}${COLOR_RESET}"
         return 1
     fi
@@ -281,6 +302,7 @@ create_config_profile() {
     local private_key=$5
     local inbound_tag="${6:-Steal}"
 
+    step_do "${LANG[CREATING_CONFIG_PROFILE]}" >&2
     local short_id=$(openssl rand -hex 8)
 
     local request_body=$(jq -n --arg name "$name" --arg domain "$domain" --arg private_key "$private_key" --arg short_id "$short_id" --arg inbound_tag "$inbound_tag" '{
@@ -318,8 +340,8 @@ create_config_profile() {
             ],
             routing: {
                 rules: [
-                    { ip: ["geoip:private"], type: "field", outboundTag: "BLOCK" },
-                    { type: "field", protocol: ["bittorrent"], outboundTag: "BLOCK" }
+                    { ip: ["geoip:private"], outboundTag: "BLOCK" },
+                    { protocol: ["bittorrent"], outboundTag: "BLOCK" }
                 ]
             }
         }
@@ -327,16 +349,20 @@ create_config_profile() {
 
     local response=$(make_api_request "POST" "http://$domain_url/api/config-profiles" "$token" "$request_body")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_CONFIG_PROFILE]}: $response${COLOR_RESET}"
+        err_msg "${LANG[ERROR_CREATE_CONFIG_PROFILE]}: $response"
+        return 1
     fi
 
     local config_uuid=$(echo "$response" | jq -r '.response.uuid')
     local inbound_uuid=$(echo "$response" | jq -r '.response.inbounds[0].uuid')
     if [ -z "$config_uuid" ] || [ "$config_uuid" = "null" ] || [ -z "$inbound_uuid" ] || [ "$inbound_uuid" = "null" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_CONFIG_PROFILE]}: Invalid UUIDs in response: $response${COLOR_RESET}"
+        err_msg "${LANG[ERROR_CREATE_CONFIG_PROFILE]}: Invalid UUIDs in response: $response"
+        return 1
     fi
 
+    step_ok "${LANG[CONFIG_PROFILE_CREATED]}" >&2
     echo "$config_uuid $inbound_uuid"
+    return 0
 }
 
 create_host() {
@@ -347,6 +373,7 @@ create_host() {
     local config_uuid=$5
     local host_remark="${6:-Steal}"
 
+    step_do "${LANG[CREATE_HOST]}"
     local request_body=$(jq -n --arg config_uuid "$config_uuid" --arg inbound_uuid "$inbound_uuid" --arg remark "$host_remark" --arg address "$address" '{
         inbound: {
             configProfileUuid: $config_uuid,
@@ -371,7 +398,7 @@ create_host() {
     fi
 
     if echo "$response" | jq -e '.response.uuid' > /dev/null; then
-        echo -e "${COLOR_GREEN}${LANG[HOST_CREATED]}${COLOR_RESET}"
+        step_ok "${LANG[HOST_CREATED]}"
     else
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}${COLOR_RESET}"
     fi
@@ -381,15 +408,16 @@ get_default_squad() {
     local domain_url=$1
     local token=$2
 
+    step_do "${LANG[GET_DEFAULT_SQUAD]}" >&2
     local response=$(make_api_request "GET" "http://$domain_url/api/internal-squads" "$token")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.internalSquads' > /dev/null 2>&1; then
-        echo -e "${COLOR_RED}${LANG[ERROR_GET_SQUAD]}: $response${COLOR_RESET}"
+        err_msg "${LANG[ERROR_GET_SQUAD]}: $response"
         return 1
     fi
 
     local squad_uuids=$(echo "$response" | jq -r '.response.internalSquads[].uuid' 2>/dev/null)
     if [ -z "$squad_uuids" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_FOUND]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_FOUND]}${COLOR_RESET}" >&2
         return 0
     fi
 
@@ -401,12 +429,12 @@ get_default_squad() {
         if [[ $uuid =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
             valid_uuids+="$uuid\n"
         else
-            echo -e "${COLOR_RED}${LANG[INVALID_UUID_FORMAT]}: $uuid${COLOR_RESET}"
+            err_msg "${LANG[INVALID_UUID_FORMAT]}: $uuid"
         fi
     done <<< "$squad_uuids"
 
     if [ -z "$valid_uuids" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[NO_VALID_SQUADS_FOUND]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[NO_VALID_SQUADS_FOUND]}${COLOR_RESET}" >&2
         return 0
     fi
 
@@ -456,6 +484,7 @@ update_squad() {
         return 1
     fi
 
+    step_ok "${LANG[UPDATE_SQUAD]}"
     return 0
 }
 
@@ -465,6 +494,7 @@ create_api_token() {
     local target_dir=$3
     local token_name="${4:-subscription-page}"
 
+    step_do "${LANG[CREATING_API_TOKEN]}" >&2
     local token_data='{"name":"'"$token_name"'","expiresInDays":365,"scopes":["*"]}'
 
     local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
@@ -484,6 +514,6 @@ create_api_token() {
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
     sleep 1
 
-    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_ADDED]}${COLOR_RESET}" >&2
+    step_ok "${LANG[API_TOKEN_ADDED]}" >&2
     return 0
 }
