@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.2.6"
+SCRIPT_VERSION="Dev 3.2.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1957,7 +1957,7 @@ ensure_dns_record() {
         echo -e "${COLOR_YELLOW}2. ${LANG[DNS_RECORD_CREATE_GC]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[DNS_RECORD_MANUAL]}${COLOR_RESET}"
         echo -e ""
-        reading "${LANG[PANEL_AUTH_PROMPT_CHOOSE]}" choice
+        reading "${LANG[DNS_RECORD_CHOOSE]}" choice
         case "$choice" in
             1) ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip"; return $? ;;
             2) ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip"; return $? ;;
