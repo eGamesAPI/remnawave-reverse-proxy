@@ -157,6 +157,7 @@ LANG[ENTER_TINYAUTH_NAME]="Enter the portal name (a single label, e.g. auth — 
 LANG[DNS_RECORD_MISSING]="The A record for %s is missing or points to another server."
 LANG[DNS_RECORD_CREATE_CF]="Create automatically via the Cloudflare API"
 LANG[DNS_RECORD_CREATE_GC]="Create automatically via the Gcore DNS API"
+LANG[DNS_RECORD_CHOOSE]="Select action (1-3):"
 LANG[DNS_RECORD_MANUAL]="Continue without the record (will create manually)"
 LANG[DNS_RECORD_CREATED]="A record %s -> %s created"
 LANG[DNS_RECORD_FAILED]="Failed to create the A record"

@@ -153,6 +153,7 @@ LANG[ENTER_TINYAUTH_NAME]="Введите имя для портала (одна
 LANG[DNS_RECORD_MISSING]="A-запись для %s не найдена или указывает на другой сервер."
 LANG[DNS_RECORD_CREATE_CF]="Создать автоматически через Cloudflare API"
 LANG[DNS_RECORD_CREATE_GC]="Создать автоматически через Gcore DNS API"
+LANG[DNS_RECORD_CHOOSE]="Выберите действие (1-3):"
 LANG[DNS_RECORD_MANUAL]="Продолжить без записи (создам вручную)"
 LANG[DNS_RECORD_CREATED]="A-запись %s → %s создана"
 LANG[DNS_RECORD_FAILED]="Не удалось создать A-запись"
