@@ -19,8 +19,6 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 ## Установка панели и страницы подписки
 
-Этот вариант устанавливает на один сервер панель, базу данных и страницу подписки (`remnawave/subscription-page`) — конфигурация, рекомендуемая официальной документацией Remnawave.
-
 <Steps>
 
 1. Выберите пункт `Установка компонентов Remnawave`
@@ -38,7 +36,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Выберите веб-сервер](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/webserver_select.webp)
 
-4. Введите три домена по запросу скрипта — панели, страницы подписки и selfsteal (подключение нод). Все три должны быть **уникальными**.
+4. Введите три домена по запросу скрипта — панели, страницы подписки и ноды.
 
     :::tip
     Если A-запись домена ещё не указывает на сервер, скрипт предложит создать её автоматически через API **Cloudflare** или **Gcore** — либо вы создадите её вручную, и скрипт проверит запись ещё раз.
@@ -49,7 +47,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
     <Tabs>
       <TabItem label="Nginx" icon="seti:nginx">
         1. `Cookie-защита (по умолчанию)` — панель защищена секретной ссылкой, как в предыдущих версиях.
-        2. `Страница входа (TinyAuth)` — дополнительная страница входа перед панелью. Скрипт сам развернёт [TinyAuth](https://tinyauth.com) и создаст пользователя.
+        2. `Страница входа (TinyAuth)` — дополнительная страница входа перед панелью. Скрипт сам развернёт TinyAuth и создаст пользователя.
 
         ![Способ защиты панели (nginx)](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/panel_auth_nginx.webp)
       </TabItem>
