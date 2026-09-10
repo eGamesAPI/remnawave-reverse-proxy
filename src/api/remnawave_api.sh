@@ -386,7 +386,7 @@ create_host() {
         sni: $address,
         host: "",
         alpn: null,
-        fingerprint: "chrome",
+        fingerprint: "firefox",
         isDisabled: false,
         securityLayer: "DEFAULT"
     }')
