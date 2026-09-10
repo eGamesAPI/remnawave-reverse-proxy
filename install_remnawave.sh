@@ -1,12 +1,19 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.2.1"
+SCRIPT_VERSION="3.2.2"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
 
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh"
-LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/lang"
+# Where this script and its modules/languages are downloaded from.
+# Flip SOURCE_BRANCH to "dev" to point every download at the development
+# branch at once — no other URL in this file mentions the branch.
+SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
+SOURCE_BRANCH="main"
+SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
+
+SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
+LANG_BASE_URL="${SOURCE_BASE_URL}/src/lang"
 
 # The module and language cache under DIR_REMNAWAVE belongs to one version of
 # this script. Sourcing files an older release left behind would run code this
@@ -36,11 +43,12 @@ download_with_mirrors() {
     local dest_file="$2"
     local file_type="${3:-script}"  # script, lang, module
     
-    # Mirror URLs (GitHub raw content proxies)
+    # Mirror URLs (GitHub raw content proxies); the branch part is stripped
+    # from the original URL so every mirror follows SOURCE_BRANCH too.
     local mirrors=(
         "$file_url"
-        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/${file_url#*main/}"
-        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/main/${file_url#*main/}"
+        "https://cdn.jsdelivr.net/gh/${SOURCE_REPO}@${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
+        "https://raw.githack.com/${SOURCE_REPO}/${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
         "https://ghproxy.com/${file_url}"
     )
     
@@ -1684,7 +1692,7 @@ install_packages() {
     ensure_cron
 
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-        echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[DOCKER_INSTALLING]}${COLOR_RESET}"
 
         if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
@@ -1762,7 +1770,9 @@ check_domain() {
     local domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
     local server_ip=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || curl -s -4 ipinfo.io/ip)
 
-    if [ -z "$domain_ip" ] || [ -z "$server_ip" ]; then
+    # Without this server's IP nothing can be auto-created either — keep
+    # the original warning-and-confirm behaviour.
+    if [ -z "$server_ip" ]; then
         if [ "$show_warning" = true ]; then
             echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
             echo -e "${COLOR_RED}${LANG[CHECK_DOMAIN_IP_FAIL]}${COLOR_RESET}"
@@ -1809,39 +1819,36 @@ check_domain() {
 
     if [ "$domain_ip" = "$server_ip" ]; then
         return 0
-    elif [ "$ip_in_cloudflare" = true ]; then
-        if [ "$allow_cf_proxy" = true ]; then
-            return 0
-        else
-            if [ "$show_warning" = true ]; then
-                echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-                printf "${COLOR_RED}${LANG[CHECK_DOMAIN_CLOUDFLARE]}${COLOR_RESET}\n" "$domain" "$domain_ip"
-                echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]}${COLOR_RESET}"
-                reading "${LANG[CONFIRM_PROMPT]}" confirm
-                if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                    return 1
-                else
-                    return 2
-                fi
-            fi
-            return 1
-        fi
-    else
-        if [ "$show_warning" = true ]; then
-            echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_MISMATCH]}${COLOR_RESET}\n" "$domain" "$domain_ip" "$server_ip"
-            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
-            reading "${LANG[CONFIRM_PROMPT]}" confirm
-            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                return 1
-            else
-                return 2
-            fi
-        fi
-        return 1
+    fi
+    if [ "$ip_in_cloudflare" = true ] && [ "$allow_cf_proxy" = true ]; then
+        return 0
     fi
 
-    return 0
+    # Missing record, wrong target, or a proxied record where proxying is
+    # not allowed (Reality selfsteal): offer to create or fix it through
+    # the DNS API instead of showing a bare warning.
+    if [ "$show_warning" = true ]; then
+        if load_dns_records_module && ensure_dns_record "$domain" "$allow_cf_proxy"; then
+            return 0
+        fi
+
+        # The user skipped the fix — keep the original confirm choice.
+        echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+        if [ "$ip_in_cloudflare" = true ]; then
+            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_CLOUDFLARE]}${COLOR_RESET}\n" "$domain" "$domain_ip"
+            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]}${COLOR_RESET}"
+        else
+            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_MISMATCH]}${COLOR_RESET}\n" "$domain" "${domain_ip:-—}" "$server_ip"
+            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
+        fi
+        reading "${LANG[CONFIRM_PROMPT]}" confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            return 1
+        else
+            return 2
+        fi
+    fi
+    return 1
 }
 
 is_wildcard_cert() {
@@ -1937,11 +1944,21 @@ get_certificates() {
 
     printf "${COLOR_YELLOW}${LANG[GENERATING_CERTS]}${COLOR_RESET}\n" "$DOMAIN"
 
+    # Let's Encrypt accepts registrations without an email; an empty answer
+    # switches certbot to the no-email mode below.
+    local email_args=(--email "$LETSENCRYPT_EMAIL")
+    [ -z "$LETSENCRYPT_EMAIL" ] && email_args=(--register-unsafely-without-email)
+
     case $CERT_METHOD in
         1)
             # Cloudflare API (DNS-01 support wildcard)
-            reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
-            reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+            if [ -z "$CLOUDFLARE_API_KEY" ]; then
+                reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+            fi
+            # Legacy global keys sign with an email; API tokens don't need one
+            if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]] && [ -z "$CLOUDFLARE_EMAIL" ]; then
+                reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+            fi
 
             check_api
 
@@ -1964,7 +1981,7 @@ EOL
                 --dns-cloudflare-propagation-seconds 60 \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
-                --email "$CLOUDFLARE_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
@@ -1983,7 +2000,7 @@ EOL
             certbot certonly \
                 --standalone \
                 -d "$DOMAIN" \
-                --email "$LETSENCRYPT_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --http-01-port 80 \
@@ -2006,7 +2023,7 @@ EOL
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                echo -e "${COLOR_YELLOW}${LANG[GCORE_PLUGIN_INSTALLING]}${COLOR_RESET}"
                 
                 if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
                     python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
@@ -2015,16 +2032,20 @@ EOL
                 fi
                     
                 if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                    echo -e "${COLOR_GREEN}Plugin installed successfully.${COLOR_RESET}"
+                    echo -e "${COLOR_GREEN}${LANG[GCORE_PLUGIN_INSTALLED]}${COLOR_RESET}"
                 else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                     exit 1
                 fi
             else
-                echo -e "${COLOR_GREEN}Gcore plugin already available.${COLOR_RESET}"
+                echo -e "${COLOR_GREEN}${LANG[GCORE_PLUGIN_AVAILABLE]}${COLOR_RESET}"
             fi
 
-            reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+            # The token may already be set — ensure_dns_record_gcore asked
+            # for it when the DNS record was created automatically.
+            if [ -z "$GCORE_API_KEY" ]; then
+                reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+            fi
 
             mkdir -p ~/.secrets/certbot
             cat > ~/.secrets/certbot/gcore.ini <<EOL
@@ -2038,7 +2059,7 @@ EOL
                 --dns-gcore-propagation-seconds 80 \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
-                --email "$LETSENCRYPT_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
@@ -2184,7 +2205,9 @@ EOL
             gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GCORE_FILE_NOT_FOUND]}${COLOR_RESET}"
-                reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+                if [ -z "$GCORE_API_KEY" ]; then
+                    reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+                fi
 
                 mkdir -p "$(dirname "$gcore_credentials_file")"
                 cat > "$gcore_credentials_file" <<EOL
@@ -2467,8 +2490,27 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
 
+        # A token already entered for the DNS record means the zone lives
+        # at that provider, so its method is the sensible default: prefill
+        # it (Enter accepts, the choice stays editable for ACME fans).
+        local cert_default=""
+        if [ -n "$GCORE_API_KEY" ]; then
+            cert_default="3"
+        elif [ -n "$CLOUDFLARE_API_KEY" ]; then
+            cert_default="1"
+        fi
+        if [ -n "$cert_default" ]; then
+            echo -e "${COLOR_GREEN}${LANG[CERT_METHOD_SUGGESTED]}${COLOR_RESET}"
+            echo -e ""
+        fi
+
         while true; do
-            reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            if [ -n "$cert_default" ]; then
+                read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method
+                cert_default=""
+            else
+                reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            fi
             case "$cert_method" in
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -2581,10 +2623,15 @@ handle_certificates() {
     fi
 
     local cron_command
+    # The deploy hook restarts the web server container only when a cert
+    # was actually renewed: the certs are bind-mounted into the container
+    # by file, so without a restart it keeps serving the old inode until
+    # it eventually expires.
+    local renew_hook="docker restart remnawave-nginx remnawave-caddy 2>/dev/null || true"
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
+        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\"; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
     else
-        cron_command="/usr/bin/certbot renew --quiet"
+        cron_command="/usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\""
     fi
 
     if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
@@ -2619,7 +2666,7 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/src/${module_type}/${module_name}.sh"
+    local module_url="${SOURCE_BASE_URL}/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
 
     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
@@ -2671,7 +2718,7 @@ load_module() {
         source "$module_file"
         return 0
     else
-        echo -e "${COLOR_RED}Failed to load ${module_name} module${COLOR_RESET}"
+        printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" "$module_name"
         return 1
     fi
 }
@@ -2691,6 +2738,8 @@ load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
+load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
+load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 
 log_entry
 

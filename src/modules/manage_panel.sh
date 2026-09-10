@@ -144,7 +144,7 @@ start_panel_node() {
         if compose_stack_running; then
             echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]} ($dir)${COLOR_RESET}"
         else
-            echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]} ($dir)...${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[STACK_STARTING]} ($dir)...${COLOR_RESET}"
             sleep 1
             docker compose up -d > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
@@ -165,7 +165,7 @@ stop_panel_node() {
         if ! compose_stack_running; then
             echo -e "${COLOR_GREEN}${LANG[PANEL_STOPPED]} ($dir)${COLOR_RESET}"
         else
-            echo -e "${COLOR_YELLOW}${LANG[STOPPING_REMNAWAVE]} ($dir)...${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[STACK_STOPPING]} ($dir)...${COLOR_RESET}"
             sleep 1
             docker compose down > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
