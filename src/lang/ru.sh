@@ -163,6 +163,7 @@ LANG[DNS_RECORD_SKIP]="Продолжить без проверки (на сво
 LANG[DNS_RECORD_CHECK_PROMPT]="Выберите действие (1-2):"
 LANG[DNS_RECORD_CHOOSE]="Выберите действие (1-3):"
 LANG[DNS_RECORD_MANUAL]="Продолжить без записи (создам вручную)"
+LANG[DNS_RECORD_UPDATED]="A-запись %s обновлена → %s (прокси отключён)"
 LANG[DNS_RECORD_CREATED]="A-запись %s → %s создана"
 LANG[DNS_RECORD_FAILED]="Не удалось создать A-запись"
 LANG[DNS_RECORD_ZONE_NOT_FOUND]="Зона %s не найдена — проверьте, что домен делегирован на этот DNS-сервис"
