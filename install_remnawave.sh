@@ -2169,7 +2169,7 @@ EOL
                 --dns-gcore-propagation-seconds 80 \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
-                --email "$LETSENCRYPT_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
