@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.2.4"
+SCRIPT_VERSION="DEV 3.2.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2054,11 +2054,21 @@ get_certificates() {
 
     printf "${COLOR_YELLOW}${LANG[GENERATING_CERTS]}${COLOR_RESET}\n" "$DOMAIN"
 
+    # Let's Encrypt accepts registrations without an email; an empty answer
+    # switches certbot to the no-email mode below.
+    local email_args=(--email "$LETSENCRYPT_EMAIL")
+    [ -z "$LETSENCRYPT_EMAIL" ] && email_args=(--register-unsafely-without-email)
+
     case $CERT_METHOD in
         1)
             # Cloudflare API (DNS-01 support wildcard)
-            reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
-            reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+            if [ -z "$CLOUDFLARE_API_KEY" ]; then
+                reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+            fi
+            # Legacy global keys sign with an email; API tokens don't need one
+            if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]] && [ -z "$CLOUDFLARE_EMAIL" ]; then
+                reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+            fi
 
             check_api
 
@@ -2081,7 +2091,7 @@ EOL
                 --dns-cloudflare-propagation-seconds 60 \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
-                --email "$CLOUDFLARE_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
@@ -2100,7 +2110,7 @@ EOL
             certbot certonly \
                 --standalone \
                 -d "$DOMAIN" \
-                --email "$LETSENCRYPT_EMAIL" \
+                "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --http-01-port 80 \
@@ -2141,7 +2151,11 @@ EOL
                 echo -e "${COLOR_GREEN}Gcore plugin already available.${COLOR_RESET}"
             fi
 
-            reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+            # The token may already be set — ensure_dns_record_gcore asked
+            # for it when the DNS record was created automatically.
+            if [ -z "$GCORE_API_KEY" ]; then
+                reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+            fi
 
             mkdir -p ~/.secrets/certbot
             cat > ~/.secrets/certbot/gcore.ini <<EOL
@@ -2301,7 +2315,9 @@ EOL
             gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GCORE_FILE_NOT_FOUND]}${COLOR_RESET}"
-                reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+                if [ -z "$GCORE_API_KEY" ]; then
+                    reading "${COLOR_YELLOW}${LANG[ENTER_GCORE_TOKEN]}${COLOR_RESET}" GCORE_API_KEY
+                fi
 
                 mkdir -p "$(dirname "$gcore_credentials_file")"
                 cat > "$gcore_credentials_file" <<EOL
