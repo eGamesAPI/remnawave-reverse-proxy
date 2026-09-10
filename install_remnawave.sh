@@ -1,12 +1,19 @@
 #!/bin/bash
 
-SCRIPT_VERSION="Dev 3.2.8"
+SCRIPT_VERSION="3.2.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
 
-SCRIPT_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/install_remnawave.sh"
-LANG_BASE_URL="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/lang"
+# Where this script and its modules/languages are downloaded from.
+# Flip SOURCE_BRANCH to "dev" to point every download at the development
+# branch at once — no other URL in this file mentions the branch.
+SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
+SOURCE_BRANCH="dev"
+SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
+
+SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
+LANG_BASE_URL="${SOURCE_BASE_URL}/src/lang"
 
 # The module and language cache under DIR_REMNAWAVE belongs to one version of
 # this script. Sourcing files an older release left behind would run code this
@@ -36,11 +43,12 @@ download_with_mirrors() {
     local dest_file="$2"
     local file_type="${3:-script}"  # script, lang, module
     
-    # Mirror URLs (GitHub raw content proxies)
+    # Mirror URLs (GitHub raw content proxies); the branch part is stripped
+    # from the original URL so every mirror follows SOURCE_BRANCH too.
     local mirrors=(
         "$file_url"
-        "https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/${file_url#*main/}"
-        "https://raw.githack.com/eGamesAPI/remnawave-reverse-proxy/main/${file_url#*main/}"
+        "https://cdn.jsdelivr.net/gh/${SOURCE_REPO}@${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
+        "https://raw.githack.com/${SOURCE_REPO}/${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
         "https://ghproxy.com/${file_url}"
     )
     
@@ -2653,7 +2661,7 @@ load_module() {
     local module_name="$1"
     local module_type="${2:-modules}"
     local module_file="${DIR_REMNAWAVE}${module_type}/${module_name}.sh"
-    local module_url="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/dev/src/${module_type}/${module_name}.sh"
+    local module_url="${SOURCE_BASE_URL}/src/${module_type}/${module_name}.sh"
     local force_update="${3:-false}"
 
     if [ -n "$LOCAL_SRC_DIR" ] && [ -f "${LOCAL_SRC_DIR}/${module_type}/${module_name}.sh" ]; then
