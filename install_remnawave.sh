@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.2.3"
+SCRIPT_VERSION="DEV 3.2.4"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2006,19 +2006,42 @@ ensure_dns_record_gcore() {
 
     reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
 
-    local create_response http_code
-    create_response=$(curl -s --max-time 20 -X POST "https://api.gcore.com/dns/v2/zones/$base_domain/rrsets" \
-        -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
-        -w "\n%{http_code}" \
-        --data "{\"name\":\"$domain.\",\"type\":\"A\",\"ttl\":120,\"records\":[{\"content\":[\"$server_ip\"],\"enabled\":true}]}")
-    http_code=$(echo "$create_response" | tail -n 1)
+    # API shape mirrors the certbot-dns-gcore plugin: records live at
+    # /dns/v2/zones/{zone}/{record_name}/{type} and the record name carries
+    # a trailing dot. Some accounts are served by the RU endpoint, so the
+    # international host is tried first and the RU one as a fallback.
+    local body host http_code
+    body=$(printf '{"resource_records":[{"content":["%s"],"enabled":true}],"ttl":120}' "$server_ip")
 
-    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
-        printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
-        return 0
-    fi
+    for host in "https://api.gcore.com" "https://api.edgecenter.ru"; do
+        http_code=$(curl -s -o /tmp/gcore-dns.out -w "%{http_code}" --max-time 20 -X POST \
+            "${host}/dns/v2/zones/${base_domain}/${domain}./A" \
+            -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
+            --data "$body")
+
+        if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+            printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
+            rm -f /tmp/gcore-dns.out
+            return 0
+        fi
+
+        # 409 = the record already exists — overwrite it with our value.
+        if [ "$http_code" = "409" ]; then
+            http_code=$(curl -s -o /tmp/gcore-dns.out -w "%{http_code}" --max-time 20 -X PUT \
+                "${host}/dns/v2/zones/${base_domain}/${domain}./A" \
+                -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
+                --data "$body")
+            if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+                printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
+                rm -f /tmp/gcore-dns.out
+                return 0
+            fi
+        fi
+    done
 
     echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]} (HTTP $http_code)${COLOR_RESET}"
+    [ -s /tmp/gcore-dns.out ] && echo -e "${COLOR_RED}$(tail -c 200 /tmp/gcore-dns.out)${COLOR_RESET}"
+    rm -f /tmp/gcore-dns.out
     return 1
 }
 
