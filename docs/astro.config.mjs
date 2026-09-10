@@ -82,7 +82,9 @@ export default defineConfig({
 					items: [
 						{ label: 'Requirements', slug: 'installation/requirements', translations: { ru: 'Обязательные условия' } },
 						{ label: 'Panel and node', slug: 'installation/panel-and-node', translations: { ru: 'Панель и нода' } },
+						{ label: 'Panel and subscription page', slug: 'installation/panel-and-sub', translations: { ru: 'Панель и страница подписки' } },
 						{ label: 'Panel only', slug: 'installation/panel-only', translations: { ru: 'Только панель' } },
+						{ label: 'Subscription page only', slug: 'installation/sub-only', translations: { ru: 'Только страница подписки' } },
 						{ label: 'Node only', slug: 'installation/node-only', translations: { ru: 'Только нода' } },
 						{ label: 'Add node to panel', slug: 'installation/add-node', translations: { ru: 'Добавление ноды в панель' } },
 					],

@@ -30,7 +30,20 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Install panel RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/install_panel.webp)
 
-3. После завершения процесса скрипт предоставит все необходимые данные для входа в неё.
+3. Выберите веб-сервер для панели. Скрипт полностью поддерживает оба варианта:
+
+    - **Nginx** — классическая схема, которая использовалась во всех предыдущих версиях.
+    - **Caddy** — автоматические HTTPS-сертификаты из коробки.
+
+    ![Выберите веб-сервер](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/webserver_select.webp)
+
+4. Выберите способ защиты панели:
+
+    - `Cookie-защита (по умолчанию)` — панель защищена секретной ссылкой, как в предыдущих версиях.
+    - С **Nginx**: `Страница входа (TinyAuth)` — дополнительная страница входа перед панелью.
+    - С **Caddy**: `Страница входа с MFA` — портал входа с многофакторной аутентификацией.
+
+5. После завершения процесса скрипт предоставит все необходимые данные для входа в неё.
 
     ![Menu panel end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/menu_panel_end.webp)
 

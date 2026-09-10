@@ -1,0 +1,73 @@
+---
+title: Subscription page only
+description: Instructions for installing the RemnaWave subscription page on a separate server.
+---
+
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+
+## Running the script
+
+:::danger[Warning]
+Script must be run as **root**.
+:::
+
+Enter the command on your server:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
+## Install only the subscription page
+
+Use this option when your panel is already installed on another server and you want the subscription page (`remnawave/subscription-page`) on its own server — for example, to keep user traffic away from the panel.
+
+:::note
+Before starting, prepare an **API token** in the panel: `Settings` → `API tokens`. The token only needs the scopes used by the subscription page:
+
+```
+subscription-page-configs:list
+subscription-page-configs:get
+subscriptions:subpage-config
+system:metadata
+users:by-username
+```
+:::
+
+<Steps>
+
+1. Select `Install Remnawave Components`
+
+    ![Main menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+
+2. Then select `Install only the subscription page`
+
+    ![Install only the subscription page](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_sub.webp)
+
+3. Select the web server — **Nginx** or **Caddy**. Both options are fully supported by the script.
+
+    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+
+4. When prompted, enter:
+
+    - **Subscription domain** — e.g. `sub.example.com`. If its A-record does not point to the server yet, the script will offer to create it automatically through the Cloudflare or Gcore API.
+    - **Panel domain** — the domain of the existing panel, e.g. `panel.example.com`.
+    - **Panel API token** — the token created in the step above.
+    - **Panel cookie** — the `NAME=VALUE` pair from the panel login link, e.g. `zIdejKtN=MWbLrRzx` (the same pair as in `auth/login?NAME=VALUE`).
+
+5. After the process is complete, the subscription page is available on the subscription domain and connected to your panel.
+
+</Steps>
+
+## Updating the script
+
+Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"
+        icon="github"
+        iconPlacement="start"
+    >
+        View latest release
+    </LinkButton>
+</div>

@@ -1,0 +1,11 @@
+# Docs: menu preview generators and intermediate SVG sources (only the
+# generated .webp files are committed)
+docs/gen_previews.py
+docs/gen_previews_webp.mjs
+docs/src/assets/en/*.svg
+docs/src/assets/ru/*.svg
+
+# Node / Astro
+docs/node_modules/
+docs/dist/
+docs/.astro/

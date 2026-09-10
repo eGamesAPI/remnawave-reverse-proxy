@@ -30,11 +30,15 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Install node RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/install_node.webp)
 
-3. Зайдите в панель управления, перейдите в раздел `Ноды` → `Управление`, выберите нужную ноду и найдите поле `Secret Key` (SECRET_KEY). Скопируйте сертификат, используя иконку копирования.
+3. Выберите веб-сервер для ноды — **Nginx** или **Caddy**. Скрипт полностью поддерживает оба варианта.
+
+    ![Выберите веб-сервер](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/webserver_select.webp)
+
+4. Зайдите в панель управления, перейдите в раздел `Ноды` → `Управление`, выберите нужную ноду и найдите поле `Secret Key` (SECRET_KEY). Скопируйте сертификат, используя иконку копирования.
 
     ![SSL_CERT RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/ssl_cert.webp)
 
-4. Скрипт запросит домен `selfsteal`, который вы указали при первоначальной установке панели или через пункт [`Добавить ноду в панель`](https://wiki.egam.es/ru/installation/add-node/), ip-адрес и сертификат панели.
+5. Скрипт запросит домен `selfsteal`, который вы указали при первоначальной установке панели или через пункт [`Добавить ноду в панель`](https://wiki.egam.es/ru/installation/add-node/), ip-адрес и сертификат панели.
 
     :::danger[Важно]
     Не забудьте добавить DNS-запись для вашего домена.
@@ -42,7 +46,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Menu node end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/menu_node_end.webp)
 
-5. Затем скрипт запустит ноду и подключит её к панели.
+6. Затем скрипт запустит ноду и подключит её к панели.
 
     ![Menu node end2 RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/menu_node_end2.webp)
 

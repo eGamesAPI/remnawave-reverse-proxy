@@ -1,0 +1,95 @@
+---
+title: Panel and subscription page
+description: Instructions for installing the RemnaWave panel and the subscription page together on one server.
+---
+
+import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Running the script
+
+:::danger[Warning]
+Script must be run as **root**.
+:::
+
+Enter the command on your server:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
+```
+
+## Install panel and subscription page
+
+This option installs the panel, the database, and the subscription page (`remnawave/subscription-page`) on a single server — the setup recommended by the official Remnawave documentation.
+
+<Steps>
+
+1. Select `Install Remnawave Components`
+
+    ![Main menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+
+2. Then select `Install panel and subscription page`
+
+    ![Install panel and subscription page](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_panel_sub.webp)
+
+3. Select the web server for the panel. Both options are fully supported by the script:
+
+    - **Nginx** — the classic setup used in all previous versions.
+    - **Caddy** — automatic HTTPS certificates out of the box.
+
+    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+
+4. Enter the three domains when prompted — panel, subscription page, and selfsteal (node connection). All three must be **unique**.
+
+    :::tip
+    If an A-record for a domain does not point to the server yet, the script will offer to create it automatically through the **Cloudflare** or **Gcore** API, or you can create it manually and let the script re-check.
+    :::
+
+5. Choose the panel protection method:
+
+    <Tabs>
+      <TabItem label="Nginx" icon="seti:nginx">
+        1. `Cookie protection (default)` — the panel is protected by a secret link, as in previous versions.
+        2. `Login page (TinyAuth)` — an additional login page in front of the panel. The script deploys [TinyAuth](https://tinyauth.com) and creates the user for you.
+
+        ![Panel protection method (nginx)](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/panel_auth_nginx.webp)
+      </TabItem>
+      <TabItem label="Caddy" icon="seti:caddy">
+        1. `Cookie protection (default)` — the panel is protected by a secret link, as in previous versions.
+        2. `Login page with MFA` — a login portal with multi-factor authentication in front of the panel.
+
+        ![Panel protection method (caddy)](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/panel_auth_caddy.webp)
+
+        :::note
+        When the MFA portal is enabled, set up MFA for the admin user after the first login.
+        :::
+      </TabItem>
+    </Tabs>
+
+6. After the process is complete, the script will provide all the necessary login information for the panel.
+
+</Steps>
+
+:::danger[Warning]
+After the installation is complete, the script will display a unique URL for logging into the control panel.  
+**Be sure to save this URL.** It contains the secret key needed for access.
+
+Example login link:
+```
+https://p.example.com/auth/login?SECRET_KEY=SECRET_KEY
+```
+Without this URL, **you will not be able** to log into the panel (unless you enabled the login page option).
+:::
+
+## Updating the script
+
+Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+
+<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
+    <LinkButton
+        href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"
+        icon="github"
+        iconPlacement="start"
+    >
+        View latest release
+    </LinkButton>
+</div>

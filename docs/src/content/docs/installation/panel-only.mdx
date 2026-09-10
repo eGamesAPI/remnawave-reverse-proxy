@@ -30,7 +30,20 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Install panel RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_panel.webp)
 
-3. After the process is complete, the script will provide all the necessary login information.
+3. Select the web server for the panel. Both options are fully supported by the script:
+
+    - **Nginx** — the classic setup used in all previous versions.
+    - **Caddy** — automatic HTTPS certificates out of the box.
+
+    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+
+4. Choose the panel protection method:
+
+    - `Cookie protection (default)` — the panel is protected by a secret link, as in previous versions.
+    - With **Nginx**: `Login page (TinyAuth)` — an additional login page in front of the panel.
+    - With **Caddy**: `Login page with MFA` — a login portal with multi-factor authentication.
+
+5. After the process is complete, the script will provide all the necessary login information.
 
     ![Menu panel end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_panel_end.webp)
 

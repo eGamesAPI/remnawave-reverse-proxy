@@ -30,11 +30,15 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Install node RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_node.webp)
 
-3. Log in to the control panel, go to the `Nodes` → `Management` section, select the desired node, and find the `Secret Key` (SECRET_KEY) field. Copy the certificate using the copy icon.
+3. Select the web server for the node — **Nginx** or **Caddy**. Both options are fully supported by the script.
+
+    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+
+4. Log in to the control panel, go to the `Nodes` → `Management` section, select the desired node, and find the `Secret Key` (SECRET_KEY) field. Copy the certificate using the copy icon.
 
     ![SSL_CERT RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/ssl_cert.webp)
 
-4. Script will ask you for the selfsteal domain that you specified during the panel installation or through the [`Add node to panel`](https://wiki.egam.es/installation/add-node/) section, the panel's IP address, and the SSL certificate from the panel.
+5. Script will ask you for the selfsteal domain that you specified during the panel installation or through the [`Add node to panel`](https://wiki.egam.es/installation/add-node/) section, the panel's IP address, and the SSL certificate from the panel.
 
     :::danger[Warning]
     Don't forget to add a DNS record for your domain.
@@ -42,7 +46,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Menu node end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_node_end.webp)
 
-5. Then the script will start the node and connect it to the panel.
+6. Then the script will start the node and connect it to the panel.
 
     ![Menu node end2 RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_node_end2.webp)
 
