@@ -334,7 +334,7 @@ EOL
     fi
 
     if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-        tinyauth_compose_service /opt/remnawave
+        tinyauth_compose_service /opt/remnawave "$PANEL_DOMAIN"
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL
