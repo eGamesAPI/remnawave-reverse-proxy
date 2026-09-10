@@ -66,12 +66,13 @@ tinyauth_setup() {
 # Append the tinyauth service to the compose file in $1. $2 is the panel
 # domain: TINYAUTH_APPURL points at the PROTECTED application (that is
 # where tinyauth sends the user after login) — not at the portal itself.
+# Falls back to the global PANEL_DOMAIN when the caller passes no argument.
 # Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
 # TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
 # sessions live in SQLite under /data.
 tinyauth_compose_service() {
     local dir="$1"
-    local panel_domain="$2"
+    local panel_domain="${2:-$PANEL_DOMAIN}"
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
