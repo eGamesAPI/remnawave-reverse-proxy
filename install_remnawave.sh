@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="Dev 3.2.7"
+SCRIPT_VERSION="Dev 3.2.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1762,7 +1762,9 @@ check_domain() {
     local domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
     local server_ip=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || curl -s -4 ipinfo.io/ip)
 
-    if [ -z "$domain_ip" ] || [ -z "$server_ip" ]; then
+    # Without this server's IP nothing can be auto-created either — keep
+    # the original warning-and-confirm behaviour.
+    if [ -z "$server_ip" ]; then
         if [ "$show_warning" = true ]; then
             echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
             echo -e "${COLOR_RED}${LANG[CHECK_DOMAIN_IP_FAIL]}${COLOR_RESET}"
@@ -1809,39 +1811,36 @@ check_domain() {
 
     if [ "$domain_ip" = "$server_ip" ]; then
         return 0
-    elif [ "$ip_in_cloudflare" = true ]; then
-        if [ "$allow_cf_proxy" = true ]; then
-            return 0
-        else
-            if [ "$show_warning" = true ]; then
-                echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-                printf "${COLOR_RED}${LANG[CHECK_DOMAIN_CLOUDFLARE]}${COLOR_RESET}\n" "$domain" "$domain_ip"
-                echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]}${COLOR_RESET}"
-                reading "${LANG[CONFIRM_PROMPT]}" confirm
-                if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                    return 1
-                else
-                    return 2
-                fi
-            fi
-            return 1
-        fi
-    else
-        if [ "$show_warning" = true ]; then
-            echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_MISMATCH]}${COLOR_RESET}\n" "$domain" "$domain_ip" "$server_ip"
-            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
-            reading "${LANG[CONFIRM_PROMPT]}" confirm
-            if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-                return 1
-            else
-                return 2
-            fi
-        fi
-        return 1
+    fi
+    if [ "$ip_in_cloudflare" = true ] && [ "$allow_cf_proxy" = true ]; then
+        return 0
     fi
 
-    return 0
+    # Missing record, wrong target, or a proxied record where proxying is
+    # not allowed (Reality selfsteal): offer to create or fix it through
+    # the DNS API instead of showing a bare warning.
+    if [ "$show_warning" = true ]; then
+        if load_dns_records_module && ensure_dns_record "$domain" "$allow_cf_proxy"; then
+            return 0
+        fi
+
+        # The user skipped the fix — keep the original confirm choice.
+        echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
+        if [ "$ip_in_cloudflare" = true ]; then
+            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_CLOUDFLARE]}${COLOR_RESET}\n" "$domain" "$domain_ip"
+            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_CLOUDFLARE_INSTRUCTION]}${COLOR_RESET}"
+        else
+            printf "${COLOR_RED}${LANG[CHECK_DOMAIN_MISMATCH]}${COLOR_RESET}\n" "$domain" "${domain_ip:-—}" "$server_ip"
+            echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
+        fi
+        reading "${LANG[CONFIRM_PROMPT]}" confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            return 1
+        else
+            return 2
+        fi
+    fi
+    return 1
 }
 
 is_wildcard_cert() {
@@ -1926,166 +1925,6 @@ check_api() {
         fi
     done
     error "$(printf "${LANG[CF_INVALID]}" "$attempts")"
-}
-
-# True when $1 resolves to this server — directly or through the
-# Cloudflare proxy (a Cloudflare IP counts as a valid answer too).
-dns_record_points_here() {
-    local domain="$1" server_ip="$2"
-    local domain_ip
-    domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
-
-    [ -n "$domain_ip" ] && { [ "$domain_ip" = "$server_ip" ] || curl -s --max-time 10 https://www.cloudflare.com/ips-v4 | grep -qF "$domain_ip"; }
-}
-
-# The "I'll create it manually" path: show the exact record to create,
-# warn about the consequences, then wait for the user and re-check.
-# Returns 0 when the record is confirmed, 1 when the user skips the check.
-manual_dns_record_flow() {
-    local domain="$1" server_ip="$2"
-
-    echo -e ""
-    printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MANUAL_HINT]}${COLOR_RESET}\n" "$domain" "$server_ip"
-    echo -e "${COLOR_RED}${LANG[DNS_RECORD_MANUAL_WARN]}${COLOR_RESET}"
-
-    while true; do
-        echo -e ""
-        reading "${LANG[DNS_RECORD_MANUAL_WAIT]}" manual_wait_done
-        if dns_record_points_here "$domain" "$server_ip"; then
-            printf "${COLOR_GREEN}${LANG[DNS_RECORD_FOUND]}${COLOR_RESET}\n" "$domain"
-            return 0
-        fi
-
-        echo -e ""
-        echo -e "${COLOR_RED}${LANG[DNS_RECORD_STILL_MISSING]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}1. ${LANG[DNS_RECORD_RETRY]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[DNS_RECORD_SKIP]}${COLOR_RESET}"
-        echo -e ""
-        local again
-        while true; do
-            reading "${LANG[DNS_RECORD_CHECK_PROMPT]}" again
-            case "$again" in
-                1) break ;;
-                2) return 1 ;;
-                *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
-            esac
-        done
-    done
-}
-
-# Make sure $1 has an A record pointing at this server; offers to create
-# the record through the Cloudflare or Gcore API when it is missing.
-# Returns 0 when the record exists (or was created), 1 when the user chose
-# to create it manually — callers should only warn in that case.
-ensure_dns_record() {
-    local domain="$1"
-    local base_domain
-    base_domain=$(extract_domain "$domain")
-
-    local server_ip
-    server_ip=$(curl -s -4 --max-time 10 ifconfig.me || curl -s -4 --max-time 10 api.ipify.org || curl -s -4 --max-time 10 ipinfo.io/ip)
-
-    # A record pointing at this server, or at Cloudflare (proxied) — fine.
-    if dns_record_points_here "$domain" "$server_ip"; then
-        return 0
-    fi
-
-    printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MISSING]}${COLOR_RESET}\n" "$domain"
-
-    local choice
-    while true; do
-        echo -e ""
-        echo -e "${COLOR_YELLOW}1. ${LANG[DNS_RECORD_CREATE_CF]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[DNS_RECORD_CREATE_GC]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[DNS_RECORD_MANUAL]}${COLOR_RESET}"
-        echo -e ""
-        reading "${LANG[DNS_RECORD_CHOOSE]}" choice
-        case "$choice" in
-            1) ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip"; return $? ;;
-            2) ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip"; return $? ;;
-            3) manual_dns_record_flow "$domain" "$server_ip"; return $? ;;
-            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
-        esac
-    done
-}
-
-ensure_dns_record_cloudflare() {
-    local domain="$1" base_domain="$2" server_ip="$3"
-
-    reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
-    local auth_header="Authorization: Bearer ${CLOUDFLARE_API_KEY}"
-    if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
-        reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
-        auth_header="X-Auth-Key: ${CLOUDFLARE_API_KEY}"
-    fi
-
-    local zone_id
-    zone_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones?name=$base_domain" \
-        -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
-        | jq -r '.result[0].id // empty' 2>/dev/null)
-
-    if [ -z "$zone_id" ]; then
-        printf "${COLOR_RED}${LANG[DNS_RECORD_ZONE_NOT_FOUND]}${COLOR_RESET}\n" "$base_domain"
-        return 1
-    fi
-
-    local create_response
-    create_response=$(curl -s --max-time 20 -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
-        -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
-        --data "{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$server_ip\",\"ttl\":120,\"proxied\":false}")
-
-    if echo "$create_response" | jq -e '.success == true' > /dev/null 2>&1; then
-        printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
-        return 0
-    fi
-
-    echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]}: $(echo "$create_response" | jq -r '.errors[0].message // "unknown error"')${COLOR_RESET}"
-    return 1
-}
-
-ensure_dns_record_gcore() {
-    local domain="$1" base_domain="$2" server_ip="$3"
-
-    reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
-
-    # API shape mirrors the certbot-dns-gcore plugin: records live at
-    # /dns/v2/zones/{zone}/{record_name}/{type} and the record name carries
-    # a trailing dot. Some accounts are served by the RU endpoint, so the
-    # international host is tried first and the RU one as a fallback.
-    local body host http_code
-    body=$(printf '{"resource_records":[{"content":["%s"],"enabled":true}],"ttl":120}' "$server_ip")
-
-    for host in "https://api.gcore.com" "https://api.edgecenter.ru"; do
-        http_code=$(curl -s -o /tmp/gcore-dns.out -w "%{http_code}" --max-time 20 -X POST \
-            "${host}/dns/v2/zones/${base_domain}/${domain}./A" \
-            -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
-            --data "$body")
-
-        if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
-            printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
-            rm -f /tmp/gcore-dns.out
-            return 0
-        fi
-
-        # 409 = the record already exists — overwrite it with our value.
-        if [ "$http_code" = "409" ]; then
-            http_code=$(curl -s -o /tmp/gcore-dns.out -w "%{http_code}" --max-time 20 -X PUT \
-                "${host}/dns/v2/zones/${base_domain}/${domain}./A" \
-                -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
-                --data "$body")
-            if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
-                printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
-                rm -f /tmp/gcore-dns.out
-                return 0
-            fi
-        fi
-    done
-
-    echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]} (HTTP $http_code)${COLOR_RESET}"
-    [ -s /tmp/gcore-dns.out ] && echo -e "${COLOR_RED}$(tail -c 200 /tmp/gcore-dns.out)${COLOR_RESET}"
-    rm -f /tmp/gcore-dns.out
-    return 1
 }
 
 get_certificates() {
@@ -2887,6 +2726,7 @@ load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
+load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 
 log_entry
 
