@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="DEV 3.2.5"
+SCRIPT_VERSION="DEV 3.2.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1684,7 +1684,7 @@ install_packages() {
     ensure_cron
 
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-        echo -e "${COLOR_YELLOW}Installing Docker via get.docker.com...${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[DOCKER_INSTALLING]}${COLOR_RESET}"
 
         if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
@@ -2133,7 +2133,7 @@ EOL
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                echo -e "${COLOR_YELLOW}Installing certbot-dns-gcore plugin...${COLOR_RESET}"
+                echo -e "${COLOR_YELLOW}${LANG[GCORE_PLUGIN_INSTALLING]}${COLOR_RESET}"
                 
                 if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
                     python3 -m pip install --break-system-packages certbot-dns-gcore >/dev/null 2>&1
@@ -2142,13 +2142,13 @@ EOL
                 fi
                     
                 if certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
-                    echo -e "${COLOR_GREEN}Plugin installed successfully.${COLOR_RESET}"
+                    echo -e "${COLOR_GREEN}${LANG[GCORE_PLUGIN_INSTALLED]}${COLOR_RESET}"
                 else
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_GCORE_PLUGIN]}${COLOR_RESET}"
                     exit 1
                 fi
             else
-                echo -e "${COLOR_GREEN}Gcore plugin already available.${COLOR_RESET}"
+                echo -e "${COLOR_GREEN}${LANG[GCORE_PLUGIN_AVAILABLE]}${COLOR_RESET}"
             fi
 
             # The token may already be set — ensure_dns_record_gcore asked
@@ -2600,8 +2600,27 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
 
+        # A token already entered for the DNS record means the zone lives
+        # at that provider, so its method is the sensible default: prefill
+        # it (Enter accepts, the choice stays editable for ACME fans).
+        local cert_default=""
+        if [ -n "$GCORE_API_KEY" ]; then
+            cert_default="3"
+        elif [ -n "$CLOUDFLARE_API_KEY" ]; then
+            cert_default="1"
+        fi
+        if [ -n "$cert_default" ]; then
+            echo -e "${COLOR_GREEN}${LANG[CERT_METHOD_SUGGESTED]}${COLOR_RESET}"
+            echo -e ""
+        fi
+
         while true; do
-            reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            if [ -n "$cert_default" ]; then
+                read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method
+                cert_default=""
+            else
+                reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            fi
             case "$cert_method" in
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -2804,7 +2823,7 @@ load_module() {
         source "$module_file"
         return 0
     else
-        echo -e "${COLOR_RED}Failed to load ${module_name} module${COLOR_RESET}"
+        printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" "$module_name"
         return 1
     fi
 }
