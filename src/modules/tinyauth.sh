@@ -63,16 +63,18 @@ tinyauth_setup() {
     fi
 }
 
-# Append the tinyauth service to the compose file in $1. $2 is the panel
-# domain: TINYAUTH_APPURL points at the PROTECTED application (that is
-# where tinyauth sends the user after login) — not at the portal itself.
-# Falls back to the global PANEL_DOMAIN when the caller passes no argument.
+# Append the tinyauth service to the compose file in $1.
+# TINYAUTH_APPURL is the portal's OWN canonical URL — tinyauth checks
+# incoming requests against it (a mismatch shows the "wrong domain"
+# warning) and builds login links on it. The redirect target after login
+# comes from the X-Forwarded-Host of the nginx auth subrequest, i.e. the
+# panel domain — it must NOT go here, or the login link lands on the
+# protected site and loops.
 # Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
 # TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
 # sessions live in SQLite under /data.
 tinyauth_compose_service() {
     local dir="$1"
-    local panel_domain="${2:-$PANEL_DOMAIN}"
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
@@ -84,7 +86,7 @@ tinyauth_compose_service() {
       - '127.0.0.1:3002:3002'
     environment:
       - TINYAUTH_SERVER_PORT=3002
-      - TINYAUTH_APPURL=https://$panel_domain
+      - TINYAUTH_APPURL=https://$TINYAUTH_DOMAIN
       - TINYAUTH_AUTH_USERS=$TINYAUTH_USERS
       - TINYAUTH_AUTH_SECURECOOKIE=true
       - TINYAUTH_DATABASE_PATH=/data/tinyauth.db
@@ -214,9 +216,14 @@ server {
 EOL
 }
 
+# Portal credentials for the final banner. The link shown is the PANEL
+# domain, not the portal one: opening the panel is what triggers the auth
+# redirect with a proper return URL, while the bare portal URL logs in
+# with nowhere to return to.
 tinyauth_banner() {
+    local panel_domain="${1:-$PANEL_DOMAIN}"
     echo -e "${COLOR_YELLOW}${LANG[PORTAL_ACCESS]}${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}https://${TINYAUTH_DOMAIN}${COLOR_RESET}"
+    echo -e "${COLOR_WHITE}https://${panel_domain}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PORTAL_CREDS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$TINYAUTH_USER${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PASSWORD]} ${COLOR_WHITE}$TINYAUTH_PASSWORD${COLOR_RESET}"
