@@ -1928,6 +1928,52 @@ check_api() {
     error "$(printf "${LANG[CF_INVALID]}" "$attempts")"
 }
 
+# True when $1 resolves to this server — directly or through the
+# Cloudflare proxy (a Cloudflare IP counts as a valid answer too).
+dns_record_points_here() {
+    local domain="$1" server_ip="$2"
+    local domain_ip
+    domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
+
+    [ -n "$domain_ip" ] && { [ "$domain_ip" = "$server_ip" ] || curl -s --max-time 10 https://www.cloudflare.com/ips-v4 | grep -qF "$domain_ip"; }
+}
+
+# The "I'll create it manually" path: show the exact record to create,
+# warn about the consequences, then wait for the user and re-check.
+# Returns 0 when the record is confirmed, 1 when the user skips the check.
+manual_dns_record_flow() {
+    local domain="$1" server_ip="$2"
+
+    echo -e ""
+    printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MANUAL_HINT]}${COLOR_RESET}\n" "$domain" "$server_ip"
+    echo -e "${COLOR_RED}${LANG[DNS_RECORD_MANUAL_WARN]}${COLOR_RESET}"
+
+    while true; do
+        echo -e ""
+        reading "${LANG[DNS_RECORD_MANUAL_WAIT]}" manual_wait_done
+        if dns_record_points_here "$domain" "$server_ip"; then
+            printf "${COLOR_GREEN}${LANG[DNS_RECORD_FOUND]}${COLOR_RESET}\n" "$domain"
+            return 0
+        fi
+
+        echo -e ""
+        echo -e "${COLOR_RED}${LANG[DNS_RECORD_STILL_MISSING]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[DNS_RECORD_RETRY]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[DNS_RECORD_SKIP]}${COLOR_RESET}"
+        echo -e ""
+        local again
+        while true; do
+            reading "${LANG[DNS_RECORD_CHECK_PROMPT]}" again
+            case "$again" in
+                1) break ;;
+                2) return 1 ;;
+                *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+            esac
+        done
+    done
+}
+
 # Make sure $1 has an A record pointing at this server; offers to create
 # the record through the Cloudflare or Gcore API when it is missing.
 # Returns 0 when the record exists (or was created), 1 when the user chose
@@ -1940,11 +1986,8 @@ ensure_dns_record() {
     local server_ip
     server_ip=$(curl -s -4 --max-time 10 ifconfig.me || curl -s -4 --max-time 10 api.ipify.org || curl -s -4 --max-time 10 ipinfo.io/ip)
 
-    local domain_ip
-    domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
-
     # A record pointing at this server, or at Cloudflare (proxied) — fine.
-    if [ -n "$domain_ip" ] && { [ "$domain_ip" = "$server_ip" ] || curl -s --max-time 10 https://www.cloudflare.com/ips-v4 | grep -qF "$domain_ip"; }; then
+    if dns_record_points_here "$domain" "$server_ip"; then
         return 0
     fi
 
@@ -1961,7 +2004,7 @@ ensure_dns_record() {
         case "$choice" in
             1) ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip"; return $? ;;
             2) ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip"; return $? ;;
-            3) return 1 ;;
+            3) manual_dns_record_flow "$domain" "$server_ip"; return $? ;;
             *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
         esac
     done
