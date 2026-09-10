@@ -71,6 +71,15 @@ ensure_dns_record() {
         return 0
     fi
 
+    # A provider token already entered for a previous domain means the
+    # zone lives there — create this record with it, no menu and no
+    # second token question. Falls through to the menu if that fails.
+    if [ -n "$GCORE_API_KEY" ]; then
+        ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip" && return 0
+    elif [ -n "$CLOUDFLARE_API_KEY" ]; then
+        ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip" && return 0
+    fi
+
     printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MISSING]}${COLOR_RESET}\n" "$domain"
 
     local choice
@@ -93,7 +102,9 @@ ensure_dns_record() {
 ensure_dns_record_cloudflare() {
     local domain="$1" base_domain="$2" server_ip="$3"
 
-    reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+    if [ -z "$CLOUDFLARE_API_KEY" ]; then
+        reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+    fi
     local auth_header="Authorization: Bearer ${CLOUDFLARE_API_KEY}"
     if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
         reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
@@ -147,7 +158,9 @@ ensure_dns_record_cloudflare() {
 ensure_dns_record_gcore() {
     local domain="$1" base_domain="$2" server_ip="$3"
 
-    reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+    if [ -z "$GCORE_API_KEY" ]; then
+        reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
+    fi
 
     # API shape mirrors the certbot-dns-gcore plugin: records live at
     # /dns/v2/zones/{zone}/{record_name}/{type} and the record name carries
