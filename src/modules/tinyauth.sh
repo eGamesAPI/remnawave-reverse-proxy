@@ -39,17 +39,17 @@ tinyauth_setup() {
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
 
-    # bcrypt hash straight from the upstream CLI. Depending on the build the
-    # pair appears as a standalone "name:hash" line or inside a structured
-    # log line ("... user=NAME:$2a$.."), so both forms are accepted; ANSI
-    # colors are stripped and the dollars are escaped for docker compose.
+    # bcrypt hash straight from the upstream CLI. Builds print the pair in
+    # different shapes (bare "name:hash", inside a log line, or as a ready
+    # "--auth.users=name:hash" flag), so the extraction anchors on the known
+    # username instead of the line format; ANSI colors are stripped and the
+    # dollars are escaped for docker compose.
     local tinyauth_image="ghcr.io/tinyauthapp/tinyauth:latest"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
         --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1 \
         | sed $'s/\x1b\\[[0-9;]*m//g')
-    hash_out=$(echo "$run_out" | grep -oE 'user=[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1 | sed 's/^user=//')
-    [ -z "$hash_out" ] && hash_out=$(echo "$run_out" | grep -oE '^[^[:space:]]+:\$2[aby]\$[^[:space:]]*' | tail -n 1)
+    hash_out=$(echo "$run_out" | grep -oE "${TINYAUTH_USER}"':\$2[aby]\$[^[:space:]]+' | head -n 1)
 
     # Only a printable username:hash pair may reach the compose file —
     # a stray control character would break YAML parsing.
@@ -63,11 +63,15 @@ tinyauth_setup() {
     fi
 }
 
+# Append the tinyauth service to the compose file in $1. $2 is the panel
+# domain: TINYAUTH_APPURL points at the PROTECTED application (that is
+# where tinyauth sends the user after login) — not at the portal itself.
+# Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
+# TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
+# sessions live in SQLite under /data.
 tinyauth_compose_service() {
     local dir="$1"
-    # Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
-    # TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
-    # sessions live in SQLite under /data.
+    local panel_domain="$2"
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
@@ -79,7 +83,7 @@ tinyauth_compose_service() {
       - '127.0.0.1:3002:3002'
     environment:
       - TINYAUTH_SERVER_PORT=3002
-      - TINYAUTH_APPURL=https://$TINYAUTH_DOMAIN
+      - TINYAUTH_APPURL=https://$panel_domain
       - TINYAUTH_AUTH_USERS=$TINYAUTH_USERS
       - TINYAUTH_AUTH_SECURECOOKIE=true
       - TINYAUTH_DATABASE_PATH=/data/tinyauth.db
