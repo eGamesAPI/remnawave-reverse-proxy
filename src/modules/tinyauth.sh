@@ -34,6 +34,7 @@ tinyauth_setup() {
         fi
     done
 
+    load_dns_records_module
     ensure_dns_record "$TINYAUTH_DOMAIN" || true
 
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
