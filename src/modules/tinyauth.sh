@@ -30,7 +30,11 @@ tinyauth_setup() {
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
 
-    local tinyauth_image="ghcr.io/tinyauthapp/tinyauth:latest"
+    # The remnawave fork image per docs.rw, pinned to the v5 tag — its
+    # "latest" was a broken transitional build. The fork adds X-Api-Key
+    # auth (tinyauth creds in a separate header, Authorization passes
+    # through to the panel), which our nginx config already speaks.
+    local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:v5"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
         --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1 \
@@ -52,7 +56,7 @@ tinyauth_compose_service() {
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
-    image: ghcr.io/tinyauthapp/tinyauth:latest
+    image: ghcr.io/maposia/remnawave-tinyauth:v5
     container_name: tinyauth
     hostname: tinyauth
     restart: always
