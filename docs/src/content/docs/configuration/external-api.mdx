@@ -69,3 +69,54 @@ async def get_all_nodes():
 
     return response.json()
 ```
+
+## Accessing the API when a login page is enabled
+
+If the panel was installed with a login page instead of the cookie gate (TinyAuth for Nginx, or the caddy-with-auth portal for Caddy), the API is gated too. Login-page credentials go in the separate `X-Api-Key` header, while `Authorization` with your panel token passes through untouched — both headers travel in the same request.
+
+### Login page (TinyAuth, Nginx)
+
+The `X-Api-Key` carries the TinyAuth credentials as `Basic base64(username:password)`. Build the pair with:
+
+```bash
+printf '%s' 'username:password' | base64
+# dXNlcm5hbWU6cGFzc3dvcmQ=
+```
+
+:::caution
+Keep the `'%s'` format as the first argument. A bare `printf 'username:password'` treats the string as a format: any `%` in the password becomes a format specifier and the resulting base64 is garbage.
+:::
+
+Resulting request headers:
+
+```json
+{
+    "Authorization": "Bearer <panel token>",
+    "X-Api-Key": "Basic dXNlcm5hbWU6cGFzc3dvcmQ="
+}
+```
+
+### Caddy with MFA (caddy-with-auth)
+
+The key is issued by the portal itself at `https://<panel domain>/r/settings/apikeys` (the "API Keys" link). Send it as is, without the Basic wrapper:
+
+```json
+{
+    "Authorization": "Bearer <panel token>",
+    "X-Api-Key": "<portal-issued key>"
+}
+```
+
+### Standalone subscription page
+
+The "subscription page only" install asks how the panel is protected and fills everything in for you: with TinyAuth you just enter the login page username and password — the installer assembles the base64 pair itself.
+
+| Panel protection | What the installer asks | Variable in the sub page compose |
+|---|---|---|
+| Cookie gate | the `NAME=VALUE` cookie | `EGAMES_COOKIE=NAME=VALUE` |
+| Login page (TinyAuth) | username and password | `CADDY_AUTH_API_TOKEN=Basic base64(...)` |
+| Caddy with MFA | the login page API key | `CADDY_AUTH_API_TOKEN=<key>` |
+
+:::note
+Whatever goes into `X-Api-Key` is panel access: when the portal password changes or the panel is reinstalled, remember to update it everywhere it is used — including the subscription page compose.
+:::

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.2.4"
+SCRIPT_VERSION="3.2.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1125,15 +1125,14 @@ choose_reinstall_type() {
         esac
 }
 
-# Tear down the compose project living in $1 and delete the directory.
-# Only touches that project's containers, networks, volumes and images.
 wipe_compose_dir() {
     local dir="$1"
     [ -d "$dir" ] || return 0
-    cd "$dir" 2>/dev/null || return 1
-    docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+
+    (cd "$dir" 2>/dev/null && docker compose down -v --rmi all --remove-orphans) > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
-    rm -rf "$dir" 2>/dev/null
+
+    rm -rf "$dir"
 }
 
 reinstall_remnawave() {
@@ -1144,7 +1143,6 @@ reinstall_remnawave() {
     spinner $! "${LANG[WAITING]}"
 }
 
-# Wipe only the standalone subscription page, leaving panel/node untouched.
 reinstall_subscription() {
     wipe_compose_dir /opt/subscription
     docker image prune -f > /dev/null 2>&1 &

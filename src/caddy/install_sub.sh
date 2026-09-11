@@ -11,9 +11,7 @@ install_sub_caddy() {
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
         exit 1
     fi
-
-    # The panel lives on another server, so its domain cannot be
-    # validated against this server's IP — only checked for emptiness.
+    
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
     if [ -z "$PANEL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
@@ -26,13 +24,53 @@ install_sub_caddy() {
         exit 1
     fi
 
+    SUB_AUTH_ENV=""
     while true; do
-        reading "${LANG[ENTER_SUB_PANEL_COOKIE]}" SUB_EGAMES_COOKIE
-        if [[ "$SUB_EGAMES_COOKIE" =~ ^[A-Za-z0-9_]+=[A-Za-z0-9_]+$ ]]; then
-            break
-        else
-            echo -e "${COLOR_RED}${LANG[INVALID_COOKIE_FORMAT]}${COLOR_RESET}"
-        fi
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[PANEL_AUTH_OPT_COOKIE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_TINYAUTH]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}3. ${LANG[PANEL_AUTH_OPT_CADDY_MFA]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[SUB_PANEL_AUTH_CHOOSE]}" sub_auth_choice
+        case "$sub_auth_choice" in
+            1)
+                while true; do
+                    reading "${LANG[ENTER_SUB_PANEL_COOKIE]}" SUB_EGAMES_COOKIE
+                    if [[ "$SUB_EGAMES_COOKIE" =~ ^[A-Za-z0-9_]+=[A-Za-z0-9_]+$ ]]; then
+                        break
+                    fi
+                    echo -e "${COLOR_RED}${LANG[INVALID_COOKIE_FORMAT]}${COLOR_RESET}"
+                done
+                SUB_AUTH_ENV=$(printf '\n      - EGAMES_COOKIE=%s' "$SUB_EGAMES_COOKIE")
+                break
+                ;;
+            2)
+                while true; do
+                    reading "${LANG[ENTER_TINYAUTH_LOGIN]}" SUB_TINYAUTH_LOGIN
+                    reading "${LANG[ENTER_TINYAUTH_PASSWORD]}" SUB_TINYAUTH_PASSWORD
+                    if [ -n "$SUB_TINYAUTH_LOGIN" ] && [ -n "$SUB_TINYAUTH_PASSWORD" ]; then
+                        break
+                    fi
+                    echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                done
+                SUB_AUTH_ENV=$(printf '\n      - CADDY_AUTH_API_TOKEN=Basic %s' "$(printf '%s:%s' "$SUB_TINYAUTH_LOGIN" "$SUB_TINYAUTH_PASSWORD" | base64 | tr -d '\n')")
+                break
+                ;;
+            3)
+                while true; do
+                    reading "${LANG[ENTER_SUB_CADDY_KEY]}" SUB_CADDY_KEY
+                    if [[ -n "$SUB_CADDY_KEY" && ! "$SUB_CADDY_KEY" =~ [[:space:]] ]]; then
+                        break
+                    fi
+                    echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                done
+                SUB_AUTH_ENV=$(printf '\n      - CADDY_AUTH_API_TOKEN=%s' "$SUB_CADDY_KEY")
+                break
+                ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
     done
 
     cat > docker-compose.yml <<EOL
@@ -82,8 +120,7 @@ installation_sub_caddy() {
     environment:
       - REMNAWAVE_PANEL_URL=https://$PANEL_DOMAIN
       - APP_PORT=3010
-      - REMNAWAVE_API_TOKEN=$SUB_API_TOKEN
-      - EGAMES_COOKIE=$SUB_EGAMES_COOKIE
+      - REMNAWAVE_API_TOKEN=$SUB_API_TOKEN${SUB_AUTH_ENV}
     ports:
       - '127.0.0.1:3010:3010'
 
