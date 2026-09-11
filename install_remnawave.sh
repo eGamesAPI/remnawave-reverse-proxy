@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.2.9"
+SCRIPT_VERSION="Dev 3.2.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -273,6 +273,24 @@ check_node_not_running() {
 
 check_sub_not_running() {
     check_not_running 'remnawave-subscription-page' "${LANG[SUB_ALREADY_RUNNING]}"
+}
+
+allow_ssh_ports() {
+    local ssh_ports="" port ok=true
+
+    if command -v sshd >/dev/null 2>&1; then
+        ssh_ports=$(sshd -T 2>/dev/null | awk '/^port /{print $2}')
+    fi
+    if [ -z "$ssh_ports" ]; then
+        ssh_ports=$(awk '/^[[:space:]]*Port[[:space:]]+[0-9]+/{print $2; exit}' /etc/ssh/sshd_config 2>/dev/null)
+    fi
+    [ -z "$ssh_ports" ] && ssh_ports=22
+
+    for port in $ssh_ports; do
+        ufw allow "$port/tcp" comment 'SSH' >/dev/null 2>&1 || ok=false
+    done
+
+    [ "$ok" = true ]
 }
 
 check_os() {
@@ -1673,7 +1691,9 @@ ensure_cron() {
     local started=0
 
     if ! command -v crontab >/dev/null 2>&1; then
-        apt-get install -y cron >/dev/null 2>&1 || true
+        # Wait out the dpkg lock: unattended-upgrades is often mid-run on
+        # a freshly booted box
+        apt-get -o DPkg::Lock::Timeout=300 install -y cron >/dev/null 2>&1 || true
     fi
 
     if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
@@ -1697,12 +1717,12 @@ ensure_cron() {
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
 
-    if ! apt-get update -y; then
+    if ! apt-get -o DPkg::Lock::Timeout=300 update -y; then
         echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_LIST]}${COLOR_RESET}" >&2
         return 1
     fi
 
-    if ! apt-get install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk python3-pip; then
+    if ! apt-get -o DPkg::Lock::Timeout=300 install -y ca-certificates curl jq ufw wget gnupg unzip nano dialog git certbot python3-certbot-dns-cloudflare unattended-upgrades locales dnsutils coreutils grep gawk python3-pip; then
         echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_PACKAGES]}${COLOR_RESET}" >&2
         return 1
     fi
@@ -1757,17 +1777,18 @@ install_packages() {
     sysctl -p >/dev/null
 
     # UFW
-    if ! ufw allow 22/tcp comment 'SSH' || ! ufw allow 443/tcp comment 'HTTPS' || ! ufw --force enable; then
+    if ! allow_ssh_ports || ! ufw allow 443/tcp comment 'HTTPS' || ! ufw --force enable; then
         echo -e "${COLOR_RED}${LANG[ERROR_CONFIGURE_UFW]}${COLOR_RESET}" >&2
         return 1
     fi
 
     # Unattended-upgrades
-    echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+    if ! grep -q 'Unattended-Upgrade::Mail' /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null; then
+        echo 'Unattended-Upgrade::Mail "root";' >> /etc/apt/apt.conf.d/50unattended-upgrades
+    fi
     echo unattended-upgrades unattended-upgrades/enable_auto_updates boolean true | debconf-set-selections
     if ! dpkg-reconfigure -f noninteractive unattended-upgrades || ! systemctl restart unattended-upgrades; then
-        echo -e "${COLOR_RED}${LANG[ERROR_CONFIGURE_UPGRADES]}" "${COLOR_RESET}" >&2
-        return 1
+        echo -e "${COLOR_YELLOW}${LANG[UPGRADES_CONFIG_WARN]}${COLOR_RESET}" >&2
     fi
 
     touch ${DIR_REMNAWAVE}install_packages
