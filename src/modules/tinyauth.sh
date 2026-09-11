@@ -52,7 +52,7 @@ tinyauth_compose_service() {
     cat >> "$dir/docker-compose.yml" <<EOL
 
   tinyauth:
-    image: ghcr.io/tinyauthapp/tinyauth:latest
+    image: ghcr.io/maposia/remnawave-tinyauth:v5
     container_name: tinyauth
     hostname: tinyauth
     restart: always
