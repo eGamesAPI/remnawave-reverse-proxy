@@ -1,13 +1,6 @@
 #!/bin/bash
 # Module: DNS Records
-# Used by check_domain for every domain an install asks for, and by the
-# tinyauth portal setup. Offers to create the A record through the
-# Cloudflare or Gcore API (or wait for a manual record) so users never
-# have to touch their DNS dashboard mid-install.
 
-# True when $1 resolves to this server — directly, or through the
-# Cloudflare proxy when $3 allows it (a Reality selfsteal domain must not
-# be proxied, everything else tolerates it).
 dns_record_points_here() {
     local domain="$1" server_ip="$2" allow_cf="${3:-true}"
     local domain_ip
@@ -18,9 +11,6 @@ dns_record_points_here() {
     [ "$allow_cf" = true ] && curl -s --max-time 10 https://www.cloudflare.com/ips-v4 | grep -qF "$domain_ip"
 }
 
-# The "I'll create it manually" path: show the exact record to create,
-# warn about the consequences, then wait for the user and re-check.
-# Returns 0 when the record is confirmed, 1 when the user skips the check.
 manual_dns_record_flow() {
     local domain="$1" server_ip="$2" allow_cf="${3:-true}"
 
@@ -54,10 +44,6 @@ manual_dns_record_flow() {
     done
 }
 
-# Make sure $1 has an A record pointing at this server; offers to create
-# the record through the Cloudflare or Gcore API when it is missing (or
-# proxied, for domains that must not be). Returns 0 when the record is
-# confirmed, 1 when the user skipped the check.
 ensure_dns_record() {
     local domain="$1"
     local allow_cf="${2:-true}"
@@ -71,9 +57,6 @@ ensure_dns_record() {
         return 0
     fi
 
-    # A provider token already entered for a previous domain means the
-    # zone lives there — create this record with it, no menu and no
-    # second token question. Falls through to the menu if that fails.
     if [ -n "$GCORE_API_KEY" ]; then
         ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip" && return 0
     elif [ -n "$CLOUDFLARE_API_KEY" ]; then
@@ -121,8 +104,6 @@ ensure_dns_record_cloudflare() {
         return 1
     fi
 
-    # A record with this name may already exist (wrong IP or proxied) —
-    # patch it instead of failing with "record already exists".
     local record_id response
     record_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=A&name=$domain" \
         -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
@@ -162,10 +143,6 @@ ensure_dns_record_gcore() {
         reading "${LANG[ENTER_GCORE_TOKEN]}" GCORE_API_KEY
     fi
 
-    # API shape mirrors the certbot-dns-gcore plugin: records live at
-    # /dns/v2/zones/{zone}/{record_name}/{type} and the record name carries
-    # a trailing dot. Some accounts are served by the RU endpoint, so the
-    # international host is tried first and the RU one as a fallback.
     local body host http_code
     body=$(printf '{"resource_records":[{"content":["%s"],"enabled":true}],"ttl":120}' "$server_ip")
 
@@ -181,7 +158,6 @@ ensure_dns_record_gcore() {
             return 0
         fi
 
-        # 409 = the record already exists (wrong IP or proxied) — overwrite it.
         if [ "$http_code" = "409" ]; then
             http_code=$(curl -s -o /tmp/gcore-dns.out -w "%{http_code}" --max-time 20 -X PUT \
                 "${host}/dns/v2/zones/${base_domain}/${domain}./A" \

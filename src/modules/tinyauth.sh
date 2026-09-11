@@ -1,16 +1,6 @@
 #!/bin/bash
 # Module: TinyAuth login portal for the panel (nginx flows)
 # https://docs.rw/security/tinyauth-for-nginx
-#
-# Usage from an install flow:
-#   1. tinyauth_setup <base_domain> [forbidden domains...] — after the
-#      superadmin credentials exist; asks for the portal name, checks/creates
-#      the DNS record and sets TINYAUTH_* globals. Downgrades PANEL_AUTH_MODE
-#      to cookie when the user hash cannot be created.
-#   2. tinyauth_compose_service <dir> — append the service to a compose file.
-#   3. tinyauth_nginx_sites <listener> <panel_domain> <panel_cert> \
-#        <tinyauth_cert> <backend_upstream> >> nginx.conf
-#   4. tinyauth_banner — portal credentials for the final banner.
 
 tinyauth_setup() {
     local base_domain="$1"
@@ -40,11 +30,6 @@ tinyauth_setup() {
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
 
-    # bcrypt hash straight from the upstream CLI. Builds print the pair in
-    # different shapes (bare "name:hash", inside a log line, or as a ready
-    # "--auth.users=name:hash" flag), so the extraction anchors on the known
-    # username instead of the line format; ANSI colors are stripped and the
-    # dollars are escaped for docker compose.
     local tinyauth_image="ghcr.io/tinyauthapp/tinyauth:latest"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
@@ -52,10 +37,8 @@ tinyauth_setup() {
         | sed $'s/\x1b\\[[0-9;]*m//g')
     hash_out=$(echo "$run_out" | grep -oE "${TINYAUTH_USER}"':\$2[aby]\$[^[:space:]]+' | head -n 1)
 
-    # Only a printable username:hash pair may reach the compose file —
-    # a stray control character would break YAML parsing.
     if [ -n "$hash_out" ] && echo "$hash_out" | grep -qE '^[^[:cntrl:][:space:]]+:\$2[aby]\$[^[:cntrl:][:space:]]+$'; then
-        # plain bcrypt → docker compose escaped form
+
         TINYAUTH_USERS=$(echo "$hash_out" | sed 's/\$/\$\$/g')
     else
         echo -e "${COLOR_RED}${LANG[TINYAUTH_CREATE_FAIL]}${COLOR_RESET}"
@@ -64,16 +47,6 @@ tinyauth_setup() {
     fi
 }
 
-# Append the tinyauth service to the compose file in $1.
-# TINYAUTH_APPURL is the portal's OWN canonical URL — tinyauth checks
-# incoming requests against it (a mismatch shows the "wrong domain"
-# warning) and builds login links on it. The redirect target after login
-# comes from the X-Forwarded-Host of the nginx auth subrequest, i.e. the
-# panel domain — it must NOT go here, or the login link lands on the
-# protected site and loops.
-# Env names per the v5 guide (remnawave/panel#496): TINYAUTH_APPURL and
-# TINYAUTH_SERVER_PORT — no underscores inside APPURL; SECRET is gone,
-# sessions live in SQLite under /data.
 tinyauth_compose_service() {
     local dir="$1"
     cat >> "$dir/docker-compose.yml" <<EOL
@@ -96,9 +69,6 @@ tinyauth_compose_service() {
 EOL
 }
 
-# Emit the upstream, the portal site and the protected panel site.
-# The listener argument differs between flows: "443 ssl" for a plain TCP
-# install or "unix:/dev/shm/nginx.sock ssl proxy_protocol" behind Xray.
 tinyauth_nginx_sites() {
     local listener="$1"
     local panel_domain="$2"
@@ -217,10 +187,6 @@ server {
 EOL
 }
 
-# Portal credentials for the final banner. The link shown is the PANEL
-# domain, not the portal one: opening the panel is what triggers the auth
-# redirect with a proper return URL, while the bare portal URL logs in
-# with nowhere to return to.
 tinyauth_banner() {
     local panel_domain="${1:-$PANEL_DOMAIN}"
     echo -e "${COLOR_YELLOW}${LANG[PORTAL_ACCESS]}${COLOR_RESET}"
