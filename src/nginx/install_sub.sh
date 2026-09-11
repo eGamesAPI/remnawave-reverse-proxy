@@ -12,8 +12,6 @@ install_sub_nginx() {
         exit 1
     fi
 
-    # The panel lives on another server, so its domain cannot be
-    # validated against this server's IP — only checked for emptiness.
     reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
     if [ -z "$PANEL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
@@ -26,9 +24,6 @@ install_sub_nginx() {
         exit 1
     fi
 
-    # The panel is protected either by the cookie gate or by a TinyAuth
-    # login page — ask which one and collect the matching pass-through
-    # data the sub page will send with every panel request.
     SUB_AUTH_ENV=""
     while true; do
         echo -e ""
@@ -52,9 +47,6 @@ install_sub_nginx() {
                 break
                 ;;
             2)
-                # The base64 pair is assembled here from the login page
-                # credentials — the user never fights shell escaping
-                # (printf '%s:%s' keeps % and & in passwords safe).
                 while true; do
                     reading "${LANG[ENTER_TINYAUTH_LOGIN]}" SUB_TINYAUTH_LOGIN
                     reading "${LANG[ENTER_TINYAUTH_PASSWORD]}" SUB_TINYAUTH_PASSWORD
@@ -67,8 +59,6 @@ install_sub_nginx() {
                 break
                 ;;
             3)
-                # API key issued by the caddy-security portal itself — a
-                # single opaque token, so only "non-empty, no spaces" here.
                 while true; do
                     reading "${LANG[ENTER_SUB_CADDY_KEY]}" SUB_CADDY_KEY
                     if [[ -n "$SUB_CADDY_KEY" && ! "$SUB_CADDY_KEY" =~ [[:space:]] ]]; then
