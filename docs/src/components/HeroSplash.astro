@@ -1,0 +1,635 @@
+---
+// Full-viewport splash hero for the wiki home page.
+// Replaces the default Starlight Hero (see `components: { Hero }` in astro.config.mjs).
+// Actions come from the page frontmatter (hero.actions); everything else is localised here.
+const entry = Astro.locals.starlightRoute?.entry;
+const data = entry?.data ?? {};
+const { actions = [], tagline } = data.hero ?? {};
+const primary = actions[0];
+const secondary = actions[1];
+const isRu = String(Astro.locals.starlightRoute?.lang ?? 'en').startsWith('ru');
+
+const copy = isRu
+  ? {
+      title1: 'Установка Remnawave',
+      title2: 'одной',
+      titleAccent: 'командой.',
+      lead: 'Интерактивный bash-скрипт: панель Remnawave, Xray-нода, страница подписки и защищённый reverse proxy на Nginx или Caddy — со скрытой панелью управления, SelfSteal и SSL на автомате.',
+      copyBtn: 'копировать',
+      copied: 'скопировано',
+    }
+  : {
+      title1: 'Deploy Remnawave',
+      title2: 'in',
+      titleAccent: 'one command.',
+      lead: 'An interactive bash script: the Remnawave panel, Xray node, subscription page and a hardened Nginx or Caddy reverse proxy — with a hidden control panel, SelfSteal and SSL on autopilot.',
+      copyBtn: 'copy',
+      copied: 'copied',
+    };
+
+const INSTALL_CMD =
+  'bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)';
+---
+
+<div class="splash" data-install-cmd={INSTALL_CMD}>
+  {data.hero && <canvas class="orb" aria-hidden="true"></canvas>}
+
+  <div class="grid">
+    <div class="copy-col">
+      {data.hero ? (
+        <h1 class="title" id="_top" data-page-title>
+          {copy.title1}<br />
+          <span class="title-line2">{copy.title2} <span class="grad">{copy.titleAccent}</span></span>
+        </h1>
+      ) : (
+        <h1 class="title" id="_top" data-page-title>{data.title}</h1>
+      )}
+      {tagline && <p class="tagline">{tagline}</p>}
+      {data.hero && <p class="lead">{copy.lead}</p>}
+
+      {data.hero && (
+        <div class="cta">
+          {primary && (
+            <a class="btn btn-primary" href={primary.link}>
+              {primary.text}
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m0 0-6-6m6 6-6 6"/></svg>
+            </a>
+          )}
+          {secondary && (
+            <a class="btn btn-ghost" href={secondary.link} target="_blank" rel="noopener">
+              {secondary.text}
+              <span class="stars" data-stars>★</span>
+            </a>
+          )}
+        </div>
+      )}
+
+      {data.hero && (
+        <div class="cmd-row" title={INSTALL_CMD}>
+          <span class="dollar" aria-hidden="true">$</span>
+          <code class="cmd-text">{INSTALL_CMD}</code>
+          <button class="cmd-copy" type="button" data-copy-cmd>
+            <span data-copy-label>{copy.copyBtn}</span>
+          </button>
+        </div>
+      )}
+    </div>
+
+    {data.hero && (
+      <div class="term-col">
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="term-title">root@vps — bash</span>
+        </div>
+        <pre class="term-body" data-term></pre>
+      </div>
+    </div>
+    )}
+  </div>
+</div>
+
+<style>
+  .splash {
+    --mint: #50ccab;
+    --mint-hi: #78fecb;
+    --sand: #d8cf7a;
+    --term-bg: #01201e;
+
+    position: relative;
+    min-height: calc(100dvh - var(--sl-nav-height, 3.5rem));
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .orb {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+    gap: clamp(1.5rem, 5vw, 4.5rem);
+    align-items: center;
+    width: 100%;
+    max-width: 75rem;
+    margin-inline: auto;
+    padding-inline: clamp(1.25rem, 4vw, 2rem);
+  }
+
+  .copy-col { min-width: 0; }
+
+  .title {
+    margin: 0 0 0.9rem;
+    font-size: clamp(2rem, 4.6vw, 4.25rem);
+    font-weight: 500;
+    line-height: 1.06;
+    letter-spacing: -0.04em;
+    color: var(--sl-color-white);
+  }
+
+  /* second line never breaks mid-phrase — "одной командой." / "in one command."
+     always stays together and scales with the viewport to fit */
+  .title-line2 {
+    white-space: nowrap;
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  .grad {
+    background: linear-gradient(96deg, var(--mint) 10%, var(--mint-hi) 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    padding-inline-end: 0.06em; /* keep the final period inside the gradient box */
+  }
+
+  .lead {
+    margin: 0 0 1.5rem;
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    line-height: 1.6;
+    color: var(--sl-color-gray-2);
+    max-width: 34em;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.875rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.6rem;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: linear-gradient(96deg, var(--mint) 10%, var(--mint-hi) 90%);
+    color: #012624;
+  }
+  .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.06); }
+
+  .btn-ghost {
+    background: color-mix(in srgb, var(--mint) 7%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mint) 20%, transparent);
+    color: var(--sl-color-white);
+  }
+  .btn-ghost:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--mint) 40%, transparent);
+  }
+
+  .stars { font-size: 0.8rem; opacity: 0.9; }
+
+  /* permanent install-command row — always visible, copy on click */
+  .cmd-row {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+    max-width: 34em;
+    padding: 0.6rem 0.55rem 0.6rem 0.95rem;
+    border-radius: 12px;
+    background: rgba(1, 21, 20, 0.75);
+    border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
+  }
+  :global([data-theme='light']) .cmd-row { background: rgba(255, 255, 255, 0.72); }
+
+  .dollar {
+    font-family: 'SplashMono', ui-monospace, monospace;
+    font-weight: 700;
+    color: var(--mint);
+    flex-shrink: 0;
+  }
+
+  .cmd-text {
+    flex: 1;
+    min-width: 0;
+    font-family: 'SplashMono', ui-monospace, monospace;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--mint-hi);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :global([data-theme='light']) .cmd-text { color: #00845f; }
+
+  .cmd-copy {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-3, #8aa39c);
+    padding: 0.4rem 0.7rem;
+    border-radius: 7px;
+    border: 1px solid color-mix(in srgb, var(--mint) 20%, transparent);
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+  .cmd-copy:hover {
+    color: var(--mint-hi);
+    border-color: color-mix(in srgb, var(--mint) 45%, transparent);
+    background: color-mix(in srgb, var(--mint) 8%, transparent);
+  }
+  :global([data-theme='light']) .cmd-copy:hover { color: #00845f; }
+
+  /* terminal */
+  .term {
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--mint) 16%, transparent);
+    background: linear-gradient(180deg, rgba(0, 46, 43, 0.88), rgba(1, 21, 20, 0.95));
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+  }
+
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--mint) 14%, transparent);
+    background: rgba(1, 21, 20, 0.5);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #00514b; }
+  .dot:nth-child(1) { background: #00645c; }
+  .dot:nth-child(2) { background: #007d6f; }
+  .dot:nth-child(3) { background: var(--mint); }
+
+  .term-title {
+    margin-inline: auto;
+    font-size: 11px;
+    color: #70807d;
+  }
+
+  .term-body {
+    margin: 0;
+    padding: 18px 20px;
+    min-height: 300px;
+    max-height: calc(100dvh - 15rem);
+    overflow: hidden;
+    font-family: 'SplashMono', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.68;
+    color: #bbc7c6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* terminal token colors (scoped deep via :global on generated spans) */
+  .term-body :global(.t-prompt) { color: var(--mint); }
+  .term-body :global(.t-cmd) { color: var(--mint-hi); }
+  .term-body :global(.t-title) { color: var(--mint); font-weight: 700; }
+  .term-body :global(.t-meta) { color: #70807d; }
+  .term-body :global(.t-opt) { color: var(--sand); }
+  .term-body :global(.t-sel) { color: var(--mint-hi); }
+  .term-body :global(.t-cur) {
+    display: inline-block;
+    width: 0.62em;
+    height: 1.05em;
+    vertical-align: text-bottom;
+    background: var(--mint-hi);
+    animation: splash-blink 1.1s steps(1) infinite;
+  }
+  @keyframes splash-blink { 50% { opacity: 0; } }
+
+  @media (max-width: 56.25rem) {
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .copy-col { text-align: center; }
+    .lead { margin-inline: auto; }
+    .cta { justify-content: center; }
+    .cmd-row { max-width: 100%; }
+    .term-col { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .term-body :global(.t-cur) { animation: none; }
+  }
+</style>
+
+<script>
+  // Splash behavior: terminal playback, particle orb, GitHub live data, copy buttons.
+  const root = document.querySelector('.splash') as HTMLElement | null;
+  if (root) {
+    const isRu = document.documentElement.lang.toLowerCase().startsWith('ru');
+    const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const INSTALL_CMD = root.dataset.installCmd || '';
+    const GH_REPO = 'eGamesAPI/remnawave-reverse-proxy';
+    let appVersion = '3.2.2';
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const T = isRu
+      ? {
+          version: 'Версия',
+          menu: ['Установка компонентов Remnawave', 'Переустановить панель/ноду', 'Управление панелью и компонентами',
+            'Установить случайный шаблон для selfsteal ноды', 'Кастомные расширения от legiz', 'WARP Native',
+            'Backup and Restore', 'Управление IPv6', 'Управление сертификатами домена',
+            'Проверить обновления скрипта', 'Удалить скрипт'],
+          exit: 'Выход',
+          fast: 'Быстрый запуск: remnawave_reverse',
+          prompt: 'Ваш выбор:',
+          installTitle: 'Установка компонентов Remnawave',
+          install: ['Установить панель и ноду на один сервер', 'Установить панель и страницу подписки',
+            'Добавить ноду в панель', 'Установить только ноду', 'Установить только панель',
+            'Установить только страницу подписки'],
+          webserver: 'Выбор веб-сервера:',
+          web: ['Nginx', 'Caddy'],
+          prog: ['[*] Обновление системных пакетов…', '[*] Установка Docker и compose plugin…',
+            '[*] Получение SSL-сертификата…', '[*] Запуск панели Remnawave…',
+            '[✓] Готово — данные для входа выше'],
+        }
+      : {
+          version: 'Version',
+          menu: ['Install Remnawave Components', 'Reinstall panel/node', 'Manage Panel and Components',
+            'Install random template for selfsteal node', 'Custom extensions by legiz', 'WARP Native',
+            'Backup and Restore', 'Manage IPv6', 'Manage certificates domain',
+            'Check for updates script', 'Remove script'],
+          exit: 'Exit',
+          fast: 'Quick start: remnawave_reverse',
+          prompt: 'Enter your choice:',
+          installTitle: 'Install Remnawave Components',
+          install: ['Install panel and node on one server', 'Install panel and subscription page',
+            'Add node to panel', 'Install only the node', 'Install only the panel',
+            'Install only the subscription page'],
+          webserver: 'Select web server:',
+          web: ['Nginx', 'Caddy'],
+          prog: ['[*] Updating system packages…', '[*] Installing Docker & compose plugin…',
+            '[*] Requesting SSL certificate…', '[*] Starting Remnawave panel…',
+            '[✓] Done — login details printed above'],
+        };
+
+    /* ---------- GitHub live data ---------- */
+    (async () => {
+      try {
+        const repo = await fetch(`https://api.github.com/repos/${GH_REPO}`, {
+          headers: { Accept: 'application/vnd.github+json' },
+        }).then((r) => r.json());
+        if (typeof repo.stargazers_count === 'number') {
+          const el = root.querySelector<HTMLElement>('[data-stars]');
+          if (el) el.textContent = '★ ' + repo.stargazers_count.toLocaleString(isRu ? 'ru-RU' : 'en-US');
+        }
+      } catch { /* offline — keep plain star */ }
+      try {
+        const latest = await fetch(`https://api.github.com/repos/${GH_REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github+json' },
+        }).then((r) => r.json());
+        if (latest?.tag_name) appVersion = String(latest.tag_name).replace(/^v/, '');
+      } catch { /* keep fallback */ }
+    })();
+
+    /* ---------- copy buttons ---------- */
+    root.querySelectorAll<HTMLElement>('[data-copy-cmd]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(INSTALL_CMD);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = INSTALL_CMD;
+          ta.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch { /* noop */ }
+          ta.remove();
+        }
+        const label = btn.querySelector('[data-copy-label]');
+        if (label) {
+          const old = label.textContent;
+          label.textContent = isRu ? 'скопировано' : 'copied';
+          setTimeout(() => { label.textContent = old; }, 1600);
+        }
+      });
+    });
+
+    /* ---------- terminal playback ---------- */
+    const termBody = root.querySelector<HTMLElement>('[data-term]');
+    const termBox = root.querySelector<HTMLElement>('.term');
+    let termVisible = true;
+    if (termBox) {
+      new IntersectionObserver((entries) => { termVisible = entries[0].isIntersecting; }, { threshold: 0.1 }).observe(termBox);
+    }
+
+    async function gate() {
+      while (!termVisible || document.hidden) await sleep(300);
+    }
+
+    function line(cls?: string) {
+      const div = document.createElement('div');
+      if (cls) div.className = cls;
+      termBody!.appendChild(div);
+      termBody!.scrollTop = termBody!.scrollHeight;
+      return div;
+    }
+
+    async function printLines(defs: Array<[string, string]>, stepMs = 36) {
+      for (const [cls, text] of defs) {
+        await gate();
+        line(cls).textContent = text;
+        if (!REDUCED) await sleep(stepMs);
+      }
+    }
+
+    async function typeInto(el: HTMLElement, text: string, cls: string, speed = 26) {
+      const span = document.createElement('span');
+      span.className = cls;
+      el.appendChild(span);
+      const cur = document.createElement('span');
+      cur.className = 't-cur';
+      el.appendChild(cur);
+      for (const ch of text) {
+        await gate();
+        span.textContent += ch;
+        termBody!.scrollTop = termBody!.scrollHeight;
+        if (!REDUCED) await sleep(speed + (ch === ' ' ? 6 : 0));
+      }
+      cur.remove();
+    }
+
+    const mainMenuDefs = (): Array<[string, string]> => {
+      const defs: Array<[string, string]> = [
+        ['t-title', 'REMNAWAVE REVERSE-PROXY by eGames'],
+        ['t-meta', `${T.version}: ${appVersion}`],
+        ['t-meta', 'Wiki: https://wiki.egam.es/'],
+        ['', ''],
+      ];
+      T.menu.forEach((m, i) => {
+        defs.push(['t-opt', `${i + 1}. ${m}`]);
+        if (i === 2 || i === 6 || i === 8 || i === 10) defs.push(['', '']);
+      });
+      defs.push(['t-opt', `0. ${T.exit}`], ['t-meta', `- ${T.fast}`], ['', '']);
+      return defs;
+    };
+
+    const installMenuDefs = (): Array<[string, string]> => [
+      ['t-title', T.installTitle],
+      ['', ''],
+      ...T.install.map((m, i) => ['t-opt', `${i + 1}. ${m}`] as [string, string]),
+      ['', ''],
+      ['t-opt', `0. ${T.exit}`],
+      ['', ''],
+    ];
+
+    const webMenuDefs = (): Array<[string, string]> => [
+      ['t-title', T.webserver],
+      ['', ''],
+      ['t-opt', `1. ${T.web[0]}`],
+      ['t-opt', `2. ${T.web[1]}`],
+      ['', ''],
+    ];
+
+    const progressDefs = (): Array<[string, string]> =>
+      T.prog.map((p, i) => [i === T.prog.length - 1 ? 't-meta' : 't-prompt', p] as [string, string]);
+
+    async function askChoice() {
+      const choice = line('t-prompt');
+      const lbl = document.createElement('span');
+      lbl.className = 't-meta';
+      lbl.textContent = `${T.prompt} `;
+      choice.appendChild(lbl);
+      await typeInto(choice, '1', 't-sel', 220);
+    }
+
+    if (termBody) {
+      if (REDUCED) {
+        const cmdLine = line('');
+        const p = document.createElement('span');
+        p.className = 't-prompt';
+        p.textContent = 'root@vps:~# ';
+        cmdLine.appendChild(p);
+        const c = document.createElement('span');
+        c.className = 't-cmd';
+        c.textContent = INSTALL_CMD;
+        cmdLine.appendChild(c);
+        line('');
+        for (const [cls, text] of mainMenuDefs()) line(cls).textContent = text;
+      } else {
+        (async () => {
+          await gate();
+          const cmdLine = line('');
+          const p = document.createElement('span');
+          p.className = 't-prompt';
+          p.textContent = 'root@vps:~# ';
+          cmdLine.appendChild(p);
+          await typeInto(cmdLine, INSTALL_CMD, 't-cmd', 16);
+          await sleep(650);
+          termBody.innerHTML = '';
+          for (;;) {
+            await printLines(mainMenuDefs());
+            await sleep(500);
+            await askChoice();
+            await sleep(600);
+            termBody.innerHTML = '';
+            await printLines(installMenuDefs());
+            await sleep(400);
+            await askChoice();
+            await sleep(600);
+            termBody.innerHTML = '';
+            await printLines(webMenuDefs());
+            await askChoice();
+            await sleep(500);
+            termBody.innerHTML = '';
+            await printLines(progressDefs(), 550);
+            await sleep(3600);
+            termBody.innerHTML = '';
+          }
+        })();
+      }
+    }
+
+    /* ---------- particle orb ---------- */
+    const canvas = root.querySelector<HTMLCanvasElement>('.orb');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const N = 240;
+        const pts: Array<{ x: number; y: number; z: number; white: boolean }> = [];
+        const GA = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < N; i++) {
+          const y = 1 - (i / (N - 1)) * 2;
+          const r = Math.sqrt(1 - y * y);
+          const a = GA * i;
+          pts.push({ x: Math.cos(a) * r, y, z: Math.sin(a) * r, white: Math.random() < 0.18 });
+        }
+        let rotY = 0.6, rotX = 0.22, tRotY = 0.6, tRotX = 0.22;
+        let w = 0, h = 0;
+
+        const resize = () => {
+          const dpr = Math.min(devicePixelRatio || 1, 2);
+          w = canvas!.clientWidth;
+          h = canvas!.clientHeight;
+          canvas!.width = Math.round(w * dpr);
+          canvas!.height = Math.round(h * dpr);
+          ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+        };
+        resize();
+        addEventListener('resize', resize);
+
+        const draw = () => {
+          const narrow = w < 900;
+          const cx = narrow ? w * 0.5 : w * 0.72;
+          const cy = narrow ? h * 0.2 : h * 0.48;
+          const R = Math.min(w, h) * 0.33;
+          rotY += (tRotY - rotY) * 0.03;
+          rotX += (tRotX - rotX) * 0.03;
+          const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+          const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+          ctx!.clearRect(0, 0, w, h);
+          for (const p of pts) {
+            const x = p.x * cosY - p.z * sinY;
+            let z = p.x * sinY + p.z * cosY;
+            const y = p.y * cosX - z * sinX;
+            z = p.y * sinX + z * cosX;
+            const persp = 1 / (2.6 - z);
+            const sx = cx + x * R * persp * 2.2;
+            const sy = cy + y * R * persp * 2.2;
+            const size = Math.max(0.5, 1.9 * persp);
+            const alpha = (0.16 + 0.5 * Math.max(0, (z + 1) / 2)) * (narrow ? 0.5 : 1);
+            ctx!.beginPath();
+            ctx!.arc(sx, sy, size, 0, Math.PI * 2);
+            ctx!.fillStyle = p.white ? `rgba(237, 255, 254, ${alpha})` : `rgba(80, 204, 171, ${alpha})`;
+            ctx!.fill();
+          }
+        };
+
+        if (REDUCED) {
+          draw();
+        } else {
+          root.addEventListener('pointermove', (e) => {
+            const nx = e.clientX / innerWidth - 0.5;
+            const ny = e.clientY / innerHeight - 0.5;
+            tRotY = 0.6 + nx * 0.5;
+            tRotX = 0.22 + ny * 0.25;
+          }, { passive: true });
+          const frame = () => {
+            if (!document.hidden) {
+              tRotY += 0.0016;
+              tRotX = 0.22 + Math.sin(tRotY * 0.7) * 0.08;
+              draw();
+            }
+            requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }
+      }
+    }
+  }
+</script>

@@ -27,6 +27,7 @@ export default defineConfig({
 		starlight({
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
+				Hero: './src/components/HeroSplash.astro',
 			},
 			plugins: [
 				starlightThemeGalaxy(),
