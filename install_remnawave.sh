@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="Dev 3.2.5"
+SCRIPT_VERSION="Dev 3.2.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -9,7 +9,7 @@ LANG_FILE="${DIR_REMNAWAVE}selected_language"
 # Flip SOURCE_BRANCH to "dev" to point every download at the development
 # branch at once — no other URL in this file mentions the branch.
 SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
-SOURCE_BRANCH="dev"
+SOURCE_BRANCH="main"
 SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
 
 SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
@@ -1130,10 +1130,14 @@ choose_reinstall_type() {
 wipe_compose_dir() {
     local dir="$1"
     [ -d "$dir" ] || return 0
-    cd "$dir" 2>/dev/null || return 1
-    docker compose down -v --rmi all --remove-orphans > /dev/null 2>&1 &
+
+    # compose down runs in a subshell: the parent shell must never cd into
+    # the directory it is about to delete — standing inside it makes the
+    # final rmdir unreliable and leaves a ghost cwd behind.
+    (cd "$dir" 2>/dev/null && docker compose down -v --rmi all --remove-orphans) > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
-    rm -rf "$dir" 2>/dev/null
+
+    rm -rf "$dir"
 }
 
 reinstall_remnawave() {
