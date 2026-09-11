@@ -576,6 +576,8 @@ EOL
 }
 
 installation_panel_node_caddy() {
+    check_panel_not_running
+    check_node_not_running
     install_panel_node_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL_NODE]}${COLOR_RESET}"
