@@ -237,17 +237,20 @@ create_node() {
 EOF
 )
 
-    local node_response=$(make_api_request "POST" "http://$domain_url/api/nodes" "$token" "$node_data")
+    local node_response
+    node_response=$(make_api_request "POST" "http://$domain_url/api/nodes" "$token" "$node_data")
+
+    if echo "$node_response" | jq -e '.response.uuid' > /dev/null 2>&1; then
+        step_ok "${LANG[NODE_CREATED]}"
+        return 0
+    fi
 
     if [ -z "$node_response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_NODE]}${COLOR_RESET}"
-    fi
-
-    if echo "$node_response" | jq -e '.response.uuid' > /dev/null; then
-        step_ok "${LANG[NODE_CREATED]}"
     else
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}: $node_response${COLOR_RESET}"
     fi
+    return 1
 }
 
 get_config_profiles() {
@@ -391,17 +394,20 @@ create_host() {
         securityLayer: "DEFAULT"
     }')
 
-    local response=$(make_api_request "POST" "http://$domain_url/api/hosts" "$token" "$request_body")
+    local response
+    response=$(make_api_request "POST" "http://$domain_url/api/hosts" "$token" "$request_body")
+
+    if echo "$response" | jq -e '.response.uuid' > /dev/null 2>&1; then
+        step_ok "${LANG[HOST_CREATED]}"
+        return 0
+    fi
 
     if [ -z "$response" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_HOST]}${COLOR_RESET}"
-    fi
-
-    if echo "$response" | jq -e '.response.uuid' > /dev/null; then
-        step_ok "${LANG[HOST_CREATED]}"
     else
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_HOST]}: $response${COLOR_RESET}"
     fi
+    return 1
 }
 
 get_default_squad() {

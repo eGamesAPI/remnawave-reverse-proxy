@@ -140,6 +140,7 @@ EOL
 }
 
 installation_node_caddy() {
+    check_node_not_running
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     install_node_caddy
 
@@ -154,7 +155,7 @@ installation_node_caddy() {
 
     spinner $! "${LANG[WAITING]}"
 
-    randomhtml
+    randomhtml || exit 1
 
     printf "${COLOR_YELLOW}${LANG[NODE_CHECK]}${COLOR_RESET}\n" "$SELFSTEAL_DOMAIN"
     local max_attempts=5

@@ -175,6 +175,11 @@ Execute the following command to begin installation:
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+If GitHub is unreachable, use the jsDelivr mirror:
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+
 <p align="center">
   <img src="./media/remnawave-reverse-proxy_en.png" alt="Installation Interface" />
 </p>

@@ -13,23 +13,61 @@ show_template_source_options() {
     echo -e ""
 }
 
-randomhtml() {
-    local template_source="$1"
-
-    cd /opt/ || { echo "${LANG[UNPACK_ERROR]}"; exit 1; }
-
-    rm -f main.zip 2>/dev/null
-    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/ 2>/dev/null
-
+randomhtml_start_spinner() {
     echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
     sleep 1
     spinner $$ "${LANG[WAITING]}" &
     spinner_pid=$!
+}
 
-    template_urls=(
-        "https://github.com/eGamesAPI/simple-web-templates/archive/refs/heads/main.zip"
-        "https://github.com/distillium/sni-templates/archive/refs/heads/main.zip"
-        "https://github.com/prettyleaf/nothing-sni/archive/refs/heads/main.zip"
+randomhtml_stop_spinner() {
+    if [ -n "${spinner_pid:-}" ]; then
+        kill "${spinner_pid}" 2>/dev/null
+        wait "${spinner_pid}" 2>/dev/null
+    fi
+    printf "\r\033[K" 2>/dev/null > /dev/tty || printf "\r\033[K"
+}
+
+randomhtml_fail() {
+    local message="$1"
+
+    randomhtml_stop_spinner
+
+    echo "${message}"
+
+    cd /opt/ 2>/dev/null || true
+    rm -rf /opt/simple-web-templates-*/ /opt/sni-templates-*/ /opt/nothing-sni-*/ 2>/dev/null
+
+    return 1
+}
+
+randomhtml_download() {
+    local url="$1"
+
+    rm -f main.zip
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 60 -o main.zip "$url" 2>/dev/null || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=60 --tries=1 -O main.zip "$url" 2>/dev/null || return 1
+    else
+        return 1
+    fi
+
+    [ -s main.zip ] && [ "$(head -c 2 main.zip)" = "PK" ]
+}
+
+randomhtml_fetch() {
+    local template_source="$1"
+
+    cd /opt/ || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
+
+    rm -f main.zip 2>/dev/null
+    rm -rf simple-web-templates-*/ sni-templates-*/ nothing-sni-*/ 2>/dev/null
+
+    local template_urls=(
+        "https://github.com/eGamesAPI/simple-web-templates/archive/6b7690b37af85c35117b6da65a36b1b3e0503477.zip"
+        "https://github.com/distillium/sni-templates/archive/99fafe48b41060f1225592b472994af6c21b057d.zip"
+        "https://github.com/prettyleaf/nothing-sni/archive/58a6d1b012ad87d6194c64feb81c0a8801db3f93.zip"
     )
 
     if [ -z "$template_source" ]; then
@@ -46,51 +84,135 @@ randomhtml() {
         fi
     fi
 
-    while ! wget -q --timeout=30 --tries=10 --retry-connrefused "$selected_url"; do
+    local download_prefixes=(
+        ""
+        "https://gh-proxy.com/"
+        "https://ghfast.top/"
+        "https://ghproxy.net/"
+    )
+    local download_ok=false
+    local mirror_prefix dl_round
+
+    for dl_round in 1 2; do
+        for mirror_prefix in "${download_prefixes[@]}"; do
+            if randomhtml_download "${mirror_prefix}${selected_url}"; then
+                download_ok=true
+                break
+            fi
+        done
+        [ "$download_ok" = "true" ] && break
         echo "${LANG[DOWNLOAD_FAIL]}"
         sleep 3
     done
 
-    unzip -o main.zip &>/dev/null || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+    if [ "$download_ok" != "true" ]; then
+        randomhtml_fail "${LANG[DOWNLOAD_FAIL]}"
+        return 1
+    fi
+
+    unzip -o main.zip &>/dev/null || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
     rm -f main.zip
 
+    local archive_ref
+    archive_ref="${selected_url##*/}"
+    archive_ref="${archive_ref%.zip}"
+
     if [[ "$selected_url" == *"eGamesAPI"* ]]; then
-        cd simple-web-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        cd "simple-web-templates-${archive_ref}" 2>/dev/null || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         rm -rf assets ".gitattributes" "README.md" "_config.yml" 2>/dev/null
     elif [[ "$selected_url" == *"nothing-sni"* ]]; then
-        cd nothing-sni-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        cd "nothing-sni-${archive_ref}" 2>/dev/null || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         rm -rf .github README.md 2>/dev/null
     else
-        cd sni-templates-main/ || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        cd "sni-templates-${archive_ref}" 2>/dev/null || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         rm -rf assets "README.md" "index.html" 2>/dev/null
     fi
+}
 
-    # Special handling for nothing-sni - select random HTML file
+randomhtml_template_list() {
     if [[ "$selected_url" == *"nothing-sni"* ]]; then
-        # Randomly select one HTML file from 1-8.html
-        selected_number=$((RANDOM % 8 + 1))
-        RandomHTML="${selected_number}.html"
+        find . -maxdepth 1 -type f -name "*.html" | sed 's|^\./||' | sort -V
     else
-        mapfile -t templates < <(find . -maxdepth 1 -type d -not -path . | sed 's|./||')
+        local template_dir
+        for template_dir in */; do
+            template_dir="${template_dir%/}"
+            if [ -n "$(find "$template_dir" -type f -name "*.html" -print -quit)" ]; then
+                printf '%s\n' "$template_dir"
+            fi
+        done | sort
+    fi
+}
 
-        RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+randomhtml_pick_random() {
+    mapfile -t templates < <(randomhtml_template_list)
+    if (( ${#templates[@]} == 0 )); then
+        randomhtml_fail "${LANG[UNPACK_ERROR]}"
+        return 1
     fi
 
+    RandomHTML="${templates[$RANDOM % ${#templates[@]}]}"
+
     if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
-        cd "$RandomHTML" || { echo "${LANG[UNPACK_ERROR]}"; exit 0; }
+        cd "$RandomHTML" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         versions=("v1" "v2")
         RandomVersion="${versions[$RANDOM % ${#versions[@]}]}"
         RandomHTML="$RandomHTML/$RandomVersion"
         cd ..
     fi
+}
 
-    local random_meta_id=$(openssl rand -hex 16)
-    local random_comment=$(openssl rand -hex 8)
-    local random_class_suffix=$(openssl rand -hex 4)
+randomhtml_pick_specific() {
+    mapfile -t templates < <(randomhtml_template_list)
+    if (( ${#templates[@]} == 0 )); then
+        randomhtml_fail "${LANG[UNPACK_ERROR]}"
+        return 1
+    fi
+
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[AVAILABLE_TEMPLATES]}${COLOR_RESET}"
+    echo -e ""
+    local idx
+    for idx in "${!templates[@]}"; do
+        echo -e "${COLOR_YELLOW}$((idx + 1)). ${COLOR_RESET}${templates[$idx]}"
+    done
+    echo -e ""
+
+    local template_pick
+    while true; do
+        reading "${LANG[ENTER_TEMPLATE_NUMBER]}" template_pick
+        if [ "$template_pick" = "0" ]; then
+            randomhtml_fail "${LANG[EXIT]}"
+            return 1
+        fi
+        if [[ "$template_pick" =~ ^[0-9]+$ ]]; then
+            template_pick=$((10#$template_pick))
+            if (( template_pick >= 1 && template_pick <= ${#templates[@]} )); then
+                break
+            fi
+        fi
+        echo -e "${COLOR_RED}${LANG[INVALID_TEMPLATE_NUMBER]}${COLOR_RESET}"
+    done
+
+    RandomHTML="${templates[$((template_pick - 1))]}"
+
+    if [[ "$selected_url" == *"distillium"* && "$RandomHTML" == "503 error pages" ]]; then
+        cd "$RandomHTML" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
+        versions=("v1" "v2")
+        RandomVersion="${versions[$RANDOM % ${#versions[@]}]}"
+        RandomHTML="$RandomHTML/$RandomVersion"
+        cd ..
+    fi
+}
+
+randomhtml_apply() {
+    local random_meta_id random_comment random_class_suffix random_title_suffix random_id_suffix
+    random_meta_id=$(openssl rand -hex 16)
+    random_comment=$(openssl rand -hex 8)
+    random_class_suffix=$(openssl rand -hex 4)
+    random_title_suffix=$(openssl rand -hex 4)
+    random_id_suffix=$(openssl rand -hex 4)
     local random_title_prefix="Page_"
-    local random_title_suffix=$(openssl rand -hex 4)
     local random_footer_text="Designed by RandomSite_${random_title_suffix}"
-    local random_id_suffix=$(openssl rand -hex 4)
 
     local meta_names=("viewport-id" "session-id" "track-id" "render-id" "page-id" "config-id")
     local meta_usernames=("Payee6296" "UserX1234" "AlphaBeta" "GammaRay" "DeltaForce" "EchoZulu" "Foxtrot99" "HotelCalifornia" "IndiaInk" "JulietBravo")
@@ -111,40 +233,59 @@ randomhtml() {
         -e "s|id=\"subscribe\"|id=\"sub_${random_id_suffix}\"|" \
         -e "s|<title>.*</title>|<title>${random_title}</title>|" \
         -e "s/<\/head>/<meta name=\"$random_meta_name\" content=\"$random_meta_id\">\n<!-- $random_comment -->\n<\/head>/" \
-        -e "s/<body/<body class=\"$random_class\"/" \
+        -e "s|\(<body[^>]*[[:space:]]\)class=\"|\1class=\"${random_class} |" \
+        -e "/<body[^>]*[[:space:]]class=/!s|<body\([^>]*\)>|<body\1 class=\"${random_class}\">|" \
         -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
-    find "./$RandomHTML" -type f -name "*.css" -exec sed -i \
-        -e "1i\/* $random_comment */" \
-        -e "1i.$random_class { display: block; }" \
-        {} \;
+    while IFS= read -r -d '' css_file; do
+        printf '/* %s */\n.%s { display: block; }\n' "$random_comment" "$random_class" >> "$css_file"
+    done < <(find "./$RandomHTML" -type f -name "*.css" -print0)
 
-    kill "$spinner_pid" 2>/dev/null
-    wait "$spinner_pid" 2>/dev/null
-    printf "\r\033[K" > /dev/tty
+    if ! grep -Rqs --include='*.html' "$random_meta_id" "./$RandomHTML" 2>/dev/null; then
+        randomhtml_fail "${LANG[FAILED_TO_MODIFY_HTML_FILES]}"
+        return 1
+    fi
+
+    randomhtml_stop_spinner
 
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
+    mkdir -p /var/www/html/ || { echo "Failed to create /var/www/html/"; return 1; }
+    rm -rf /var/www/html/* /var/www/html/.[!.]* /var/www/html/..?* 2>/dev/null
+
     if [[ -d "${RandomHTML}" ]]; then
-        if [[ ! -d "/var/www/html/" ]]; then
-            mkdir -p "/var/www/html/" || { echo "Failed to create /var/www/html/"; exit 1; }
-        fi
-        rm -rf /var/www/html/*
-        cp -a "${RandomHTML}"/. "/var/www/html/"
+        cp -a "${RandomHTML}"/. "/var/www/html/" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         echo "${LANG[TEMPLATE_COPY]}"
     elif [[ -f "${RandomHTML}" ]]; then
-        cp "${RandomHTML}" "/var/www/html/index.html"
+        cp "${RandomHTML}" "/var/www/html/index.html" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
         echo "${LANG[TEMPLATE_COPY]}"
     else
-        echo "${LANG[UNPACK_ERROR]}" && exit 1
-    fi
-
-    if ! find "/var/www/html" -type f -name "*.html" -exec grep -q "$random_meta_name" {} \; 2>/dev/null; then
-        echo -e "${COLOR_RED}${LANG[FAILED_TO_MODIFY_HTML_FILES]}${COLOR_RESET}"
+        randomhtml_fail "${LANG[UNPACK_ERROR]}"
         return 1
     fi
 
     cd /opt/
-    rm -rf simple-web-templates-main/ sni-templates-main/ nothing-sni-main/
+    rm -rf simple-web-templates-*/ sni-templates-*/ nothing-sni-*/ 2>/dev/null
+
+    return 0
+}
+
+randomhtml() {
+    local template_source="$1"
+
+    randomhtml_start_spinner
+    randomhtml_fetch "$template_source" || return 1
+    randomhtml_pick_random || return 1
+    randomhtml_apply
+}
+
+randomhtml_choose() {
+    local source_set="$1"
+
+    randomhtml_start_spinner
+    randomhtml_fetch "$source_set" || return 1
+    randomhtml_stop_spinner
+    randomhtml_pick_specific || return 1
+    randomhtml_apply
 }

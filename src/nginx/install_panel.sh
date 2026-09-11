@@ -269,6 +269,8 @@ EOL
 }
 
 installation_panel() {
+    check_panel_not_running
+    load_certificates_module
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_PANEL]}${COLOR_RESET}"
     sleep 1
 
@@ -584,19 +586,22 @@ EOL
 
     # Generate Xray keys
     sleep 1
-    local private_key=$(generate_xray_keys "$domain_url" "$token")
+    local private_key
+    private_key=$(generate_xray_keys "$domain_url" "$token") || abort_with_credentials "${LANG[ERROR_GENERATE_KEYS]}"
 
     # Delete default config profile
     delete_config_profile "$domain_url" "$token"
 
     # Create config profile
-    read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key")
+    local profile_output
+    profile_output=$(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key") || abort_with_credentials "${LANG[ERROR_CREATE_CONFIG_PROFILE]}"
+    read -r config_profile_uuid inbound_uuid <<< "$profile_output"
 
     # Create node with config profile binding
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" || abort_with_credentials "${LANG[ERROR_CREATE_NODE]}"
 
     # Create host
-    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid"
+    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" || abort_with_credentials "${LANG[ERROR_CREATE_HOST]}"
 
     # Get UUID default squad
     local squad_uuid=$(get_default_squad "$domain_url" "$token")

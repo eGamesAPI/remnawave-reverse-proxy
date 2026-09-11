@@ -175,6 +175,11 @@ https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+Если GitHub недоступен, используйте зеркало на jsDelivr:
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+
 <p align="center">
   <img src="./media/remnawave-reverse-proxy.png" alt="Интерфейс установки" />
 </p>
