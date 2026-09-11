@@ -269,6 +269,7 @@ EOL
 }
 
 installation_panel() {
+    check_panel_not_running
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_PANEL]}${COLOR_RESET}"
     sleep 1
 

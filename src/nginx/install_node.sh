@@ -81,6 +81,7 @@ EOL
 }
 
 installation_node() {
+    check_node_not_running
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     sleep 1
 

@@ -272,6 +272,8 @@ EOL
 }
 
 installation() {
+    check_panel_not_running
+    check_node_not_running
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"
     sleep 1
 

@@ -101,6 +101,7 @@ EOL
 }
 
 installation_sub() {
+    check_sub_not_running
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_SUB]}${COLOR_RESET}"
     sleep 1
 
