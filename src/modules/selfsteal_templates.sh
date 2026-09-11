@@ -8,7 +8,6 @@ show_template_source_options() {
     echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[SPECIFIC_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -29,8 +28,6 @@ randomhtml_stop_spinner() {
     printf "\r\033[K" 2>/dev/null > /dev/tty || printf "\r\033[K"
 }
 
-# Failure path helper: stop the spinner, clear its line, report the
-# message, remove downloaded artifacts. Always returns 1.
 randomhtml_fail() {
     local message="$1"
 
@@ -44,9 +41,6 @@ randomhtml_fail() {
     return 1
 }
 
-# Download the template archive from a single URL into ./main.zip,
-# validating the response is actually a zip: proxies in the fallback
-# chain may answer with rate-limit or error pages instead.
 randomhtml_download() {
     local url="$1"
 
@@ -62,8 +56,6 @@ randomhtml_download() {
     [ -s main.zip ] && [ "$(head -c 2 main.zip)" = "PK" ]
 }
 
-# Phase 1: download the chosen template set into /opt and enter its
-# directory. Sets the selected_url and archive_ref globals.
 randomhtml_fetch() {
     local template_source="$1"
 
@@ -72,8 +64,6 @@ randomhtml_fetch() {
     rm -f main.zip 2>/dev/null
     rm -rf simple-web-templates-*/ sni-templates-*/ nothing-sni-*/ 2>/dev/null
 
-    # Pinned commits: the parsing below depends on the repository layout,
-    # bump the hashes when the template sets need updating.
     local template_urls=(
         "https://github.com/eGamesAPI/simple-web-templates/archive/6b7690b37af85c35117b6da65a36b1b3e0503477.zip"
         "https://github.com/distillium/sni-templates/archive/99fafe48b41060f1225592b472994af6c21b057d.zip"
@@ -94,10 +84,6 @@ randomhtml_fetch() {
         fi
     fi
 
-    # Direct GitHub first, then public prefix proxies so the install keeps
-    # working on networks where github.com is unreachable. The pinned SHA
-    # still guarantees the payload: the archive must extract into the
-    # exact repo-<sha> directory enforced below.
     local download_prefixes=(
         ""
         "https://gh-proxy.com/"
@@ -143,8 +129,6 @@ randomhtml_fetch() {
     fi
 }
 
-# Valid template names for the fetched set, one per line: html pages
-# for nothing-sni, folders that actually contain html pages otherwise.
 randomhtml_template_list() {
     if [[ "$selected_url" == *"nothing-sni"* ]]; then
         find . -maxdepth 1 -type f -name "*.html" | sed 's|^\./||' | sort -V
@@ -159,7 +143,6 @@ randomhtml_template_list() {
     fi
 }
 
-# Phase 2 (random): set RandomHTML to a random template of the set.
 randomhtml_pick_random() {
     mapfile -t templates < <(randomhtml_template_list)
     if (( ${#templates[@]} == 0 )); then
@@ -178,8 +161,6 @@ randomhtml_pick_random() {
     fi
 }
 
-# Phase 2 (interactive): list the templates of the set and let the
-# user pick one by number.
 randomhtml_pick_specific() {
     mapfile -t templates < <(randomhtml_template_list)
     if (( ${#templates[@]} == 0 )); then
@@ -223,8 +204,6 @@ randomhtml_pick_specific() {
     fi
 }
 
-# Phase 3: randomize the chosen template, verify the markers and
-# install it into /var/www/html.
 randomhtml_apply() {
     local random_meta_id random_comment random_class_suffix random_title_suffix random_id_suffix
     random_meta_id=$(openssl rand -hex 16)
@@ -259,13 +238,10 @@ randomhtml_apply() {
         -e "s/CHANGEMEPLS/$random_username/g" \
         {} \;
 
-    # Append the marker rule at the end of each stylesheet: prepending it
-    # would break files that start with @charset or @import.
     while IFS= read -r -d '' css_file; do
         printf '/* %s */\n.%s { display: block; }\n' "$random_comment" "$random_class" >> "$css_file"
     done < <(find "./$RandomHTML" -type f -name "*.css" -print0)
 
-    # Make sure the markers were injected before replacing the live stub
     if ! grep -Rqs --include='*.html' "$random_meta_id" "./$RandomHTML" 2>/dev/null; then
         randomhtml_fail "${LANG[FAILED_TO_MODIFY_HTML_FILES]}"
         return 1
@@ -276,7 +252,6 @@ randomhtml_apply() {
     echo "${LANG[SELECT_TEMPLATE]}" "${RandomHTML}"
 
     mkdir -p /var/www/html/ || { echo "Failed to create /var/www/html/"; return 1; }
-    # Include dotfiles: cp -a copies them in from the template
     rm -rf /var/www/html/* /var/www/html/.[!.]* /var/www/html/..?* 2>/dev/null
 
     if [[ -d "${RandomHTML}" ]]; then
@@ -296,8 +271,6 @@ randomhtml_apply() {
     return 0
 }
 
-# Install a random template from the given set ("simple", "sni",
-# "nothing" or empty for a fully random set).
 randomhtml() {
     local template_source="$1"
 
@@ -307,29 +280,8 @@ randomhtml() {
     randomhtml_apply
 }
 
-# Interactive entry for the menu: choose a set, then a specific
-# template from it (simple is excluded: too many entries to list).
-randomhtml_specific() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[CHOOSE_TEMPLATE_SET]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-    reading "${LANG[CHOOSE_TEMPLATE_SET]}" TEMPLATE_SET
-
-    local source_set
-    case $TEMPLATE_SET in
-        1) source_set="sni" ;;
-        2) source_set="nothing" ;;
-        0) return 0 ;;
-        *)
-            echo -e "${COLOR_RED}${LANG[INVALID_CHOICE]}${COLOR_RESET}"
-            return 1
-            ;;
-    esac
+randomhtml_choose() {
+    local source_set="$1"
 
     randomhtml_start_spinner
     randomhtml_fetch "$source_set" || return 1
