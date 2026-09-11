@@ -30,7 +30,11 @@ tinyauth_setup() {
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
 
-    local tinyauth_image="ghcr.io/tinyauthapp/tinyauth:latest"
+    # The remnawave fork image per docs.rw, pinned to the v5 tag — its
+    # "latest" was a broken transitional build. The fork adds X-Api-Key
+    # auth (tinyauth creds in a separate header, Authorization passes
+    # through to the panel), which our nginx config already speaks.
+    local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:v5"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
         --username "$TINYAUTH_USER" --password "$TINYAUTH_PASSWORD" 2>&1 \
@@ -116,34 +120,10 @@ server {
     ssl_certificate_key "/etc/nginx/ssl/$panel_cert/privkey.pem";
     ssl_trusted_certificate "/etc/nginx/ssl/$panel_cert/fullchain.pem";
 
-    # The panel API carries its own Bearer-token auth and Telegram OAuth
-    # callbacks must reach the backend untouched — both stay open.
-    location /api/ {
-        proxy_http_version 1.1;
-        proxy_pass http://$backend;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Host \$host;
-        proxy_set_header X-Forwarded-Port \$server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    location /oauth2/ {
-        proxy_http_version 1.1;
-        proxy_pass http://$backend;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header X-Forwarded-Host \$host;
-        proxy_set_header X-Forwarded-Port \$server_port;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
+    # Everything sits behind TinyAuth: browsers log in through the portal,
+    # API clients send their TinyAuth credentials in X-Api-Key while the
+    # panel's own Authorization Bearer token passes through untouched
+    # (fork feature, see the /tinyauth_check block below).
     location = /tinyauth_check {
         internal;
         proxy_pass http://tinyauth/api/auth/nginx;
