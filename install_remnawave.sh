@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SCRIPT_VERSION="3.2.8"
+SCRIPT_VERSION="3.2.4"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2623,10 +2623,15 @@ handle_certificates() {
     fi
 
     local cron_command
+    # The deploy hook restarts the web server container only when a cert
+    # was actually renewed: the certs are bind-mounted into the container
+    # by file, so without a restart it keeps serving the old inode until
+    # it eventually expires.
+    local renew_hook="docker restart remnawave-nginx remnawave-caddy 2>/dev/null || true"
     if [ "$cert_method" == "2" ]; then
-        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
+        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\"; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
     else
-        cron_command="/usr/bin/certbot renew --quiet"
+        cron_command="/usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\""
     fi
 
     if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
