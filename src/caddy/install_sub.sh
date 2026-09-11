@@ -52,14 +52,18 @@ install_sub_caddy() {
                 break
                 ;;
             2)
+                # The base64 pair is assembled here from the login page
+                # credentials — the user never fights shell escaping
+                # (printf '%s:%s' keeps % and & in passwords safe).
                 while true; do
-                    reading "${LANG[ENTER_SUB_TINYAUTH_KEY]}" SUB_TINYAUTH_KEY
-                    if [[ "$SUB_TINYAUTH_KEY" =~ ^Basic\ [A-Za-z0-9+/=]+$ ]]; then
+                    reading "${LANG[ENTER_TINYAUTH_LOGIN]}" SUB_TINYAUTH_LOGIN
+                    reading "${LANG[ENTER_TINYAUTH_PASSWORD]}" SUB_TINYAUTH_PASSWORD
+                    if [ -n "$SUB_TINYAUTH_LOGIN" ] && [ -n "$SUB_TINYAUTH_PASSWORD" ]; then
                         break
                     fi
-                    echo -e "${COLOR_RED}${LANG[INVALID_TINYAUTH_KEY]}${COLOR_RESET}"
+                    echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
                 done
-                SUB_AUTH_ENV=$(printf '\n      - CADDY_AUTH_API_TOKEN=%s' "$SUB_TINYAUTH_KEY")
+                SUB_AUTH_ENV=$(printf '\n      - CADDY_AUTH_API_TOKEN=Basic %s' "$(printf '%s:%s' "$SUB_TINYAUTH_LOGIN" "$SUB_TINYAUTH_PASSWORD" | base64 | tr -d '\n')")
                 break
                 ;;
             3)
