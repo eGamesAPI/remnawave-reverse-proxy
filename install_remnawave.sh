@@ -1,5 +1,4 @@
 #!/bin/bash
-
 SCRIPT_VERSION="3.2.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
