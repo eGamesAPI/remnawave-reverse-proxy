@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="DEv 3.2.7"
+SCRIPT_VERSION="Dev 3.2.9"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -252,6 +252,27 @@ abort_with_credentials() {
         echo -e ""
     fi
     error "$*"
+}
+
+check_not_running() {
+    local container_pattern="$1"
+    local message="$2"
+
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qxE "$container_pattern"; then
+        error "$message"
+    fi
+}
+
+check_panel_not_running() {
+    check_not_running 'remnawave|remnawave-db' "${LANG[PANEL_ALREADY_RUNNING]}"
+}
+
+check_node_not_running() {
+    check_not_running 'remnanode' "${LANG[NODE_ALREADY_RUNNING]}"
+}
+
+check_sub_not_running() {
+    check_not_running 'remnawave-subscription-page' "${LANG[SUB_ALREADY_RUNNING]}"
 }
 
 check_os() {
