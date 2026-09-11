@@ -334,7 +334,7 @@ EOL
     fi
 
     if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-        tinyauth_compose_service /opt/remnawave "$PANEL_DOMAIN"
+        tinyauth_compose_service /opt/remnawave
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL
@@ -626,7 +626,7 @@ EOL
     echo -e "${COLOR_GREEN}${LANG[INSTALL_COMPLETE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
     if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-        tinyauth_banner
+        tinyauth_banner "$PANEL_DOMAIN"
         echo -e "${COLOR_YELLOW}-------------------------------------------------${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}${LANG[ADMIN_CREDS]}${COLOR_RESET}"
     else
