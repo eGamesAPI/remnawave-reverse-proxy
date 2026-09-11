@@ -270,6 +270,7 @@ EOL
 
 installation_panel() {
     check_panel_not_running
+    load_certificates_module
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_PANEL]}${COLOR_RESET}"
     sleep 1
 

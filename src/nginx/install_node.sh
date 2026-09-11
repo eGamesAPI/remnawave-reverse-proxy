@@ -82,6 +82,7 @@ EOL
 
 installation_node() {
     check_node_not_running
+    load_certificates_module
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     sleep 1
 
