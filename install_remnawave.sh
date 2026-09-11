@@ -1,6 +1,5 @@
 #!/bin/bash
-
-SCRIPT_VERSION="Dev 3.2.7"
+SCRIPT_VERSION="DEV 3.2.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -9,7 +8,7 @@ LANG_FILE="${DIR_REMNAWAVE}selected_language"
 # Flip SOURCE_BRANCH to "dev" to point every download at the development
 # branch at once — no other URL in this file mentions the branch.
 SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
-SOURCE_BRANCH="dev"
+SOURCE_BRANCH="main"
 SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
 
 SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
@@ -49,7 +48,7 @@ download_with_mirrors() {
         "$file_url"
         "https://cdn.jsdelivr.net/gh/${SOURCE_REPO}@${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
         "https://raw.githack.com/${SOURCE_REPO}/${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
-        "https://ghproxy.com/${file_url}"
+        "https://gh-proxy.com/${file_url}"
     )
     
     local temp_file="${dest_file}.tmp"
@@ -1125,15 +1124,10 @@ choose_reinstall_type() {
         esac
 }
 
-# Tear down the compose project living in $1 and delete the directory.
-# Only touches that project's containers, networks, volumes and images.
 wipe_compose_dir() {
     local dir="$1"
     [ -d "$dir" ] || return 0
 
-    # compose down runs in a subshell: the parent shell must never cd into
-    # the directory it is about to delete — standing inside it makes the
-    # final rmdir unreliable and leaves a ghost cwd behind.
     (cd "$dir" 2>/dev/null && docker compose down -v --rmi all --remove-orphans) > /dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
@@ -1148,7 +1142,6 @@ reinstall_remnawave() {
     spinner $! "${LANG[WAITING]}"
 }
 
-# Wipe only the standalone subscription page, leaving panel/node untouched.
 reinstall_subscription() {
     wipe_compose_dir /opt/subscription
     docker image prune -f > /dev/null 2>&1 &
@@ -2781,7 +2774,9 @@ case $OPTION in
         load_selfsteal_templates_module
         if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
             echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
-            exit 1
+            sleep 2
+            log_clear
+            remnawave_reverse
         else
             show_template_source_options
             reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
@@ -2804,13 +2799,21 @@ case $OPTION in
                     log_clear
                     remnawave_reverse
                     ;;
+                4)
+                    randomhtml_specific
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
+                    ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                     remnawave_reverse
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
-                    exit 1
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
                     ;;
             esac
         fi
