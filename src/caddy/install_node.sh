@@ -154,7 +154,7 @@ installation_node_caddy() {
 
     spinner $! "${LANG[WAITING]}"
 
-    randomhtml
+    randomhtml || exit 1
 
     printf "${COLOR_YELLOW}${LANG[NODE_CHECK]}${COLOR_RESET}\n" "$SELFSTEAL_DOMAIN"
     local max_attempts=5
