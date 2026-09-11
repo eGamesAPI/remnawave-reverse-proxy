@@ -1,5 +1,5 @@
 #!/bin/bash
-# Module: TinyAuth login portal for the panel (nginx flows)
+# Module: TinyAuth login portal for the panel
 # https://docs.rw/security/tinyauth-for-nginx
 
 tinyauth_setup() {
@@ -30,10 +30,6 @@ tinyauth_setup() {
     TINYAUTH_USER="$SUPERADMIN_USERNAME"
     TINYAUTH_PASSWORD=$(generate_password)
 
-    # The remnawave fork image per docs.rw, pinned to the v5 tag — its
-    # "latest" was a broken transitional build. The fork adds X-Api-Key
-    # auth (tinyauth creds in a separate header, Authorization passes
-    # through to the panel), which our nginx config already speaks.
     local tinyauth_image="ghcr.io/maposia/remnawave-tinyauth:v5"
     local run_out hash_out
     run_out=$(docker run --rm "$tinyauth_image" user create \
