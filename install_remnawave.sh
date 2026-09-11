@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="DEV 3.2.6"
+SCRIPT_VERSION="Dev 3.2.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -719,7 +719,7 @@ show_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
     echo -e ""
-    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Install random template
+    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Templates for the selfsteal node
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
     echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
     echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
@@ -2788,19 +2788,13 @@ case $OPTION in
                     remnawave_reverse
                     ;;
                 2)
-                    randomhtml "sni"
+                    randomhtml_choose "sni"
                     sleep 2
                     log_clear
                     remnawave_reverse
                     ;;
                 3)
-                    randomhtml "nothing"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                4)
-                    randomhtml_specific
+                    randomhtml_choose "nothing"
                     sleep 2
                     log_clear
                     remnawave_reverse
