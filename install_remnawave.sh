@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.2.7"
+SCRIPT_VERSION="Dev 3.2.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -127,6 +127,53 @@ validate_downloaded_file() {
     fi
     
     return 0
+}
+
+download_script_file() {
+    local url="$1"
+    local dest_file="$2"
+
+    rm -f "$dest_file"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 60 -o "$dest_file" "$url" 2>/dev/null || return 1
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q --timeout=60 --tries=1 -O "$dest_file" "$url" 2>/dev/null || return 1
+    else
+        return 1
+    fi
+
+    [ -s "$dest_file" ]
+}
+
+run_backup_restore() {
+    local script_url="https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh"
+    local script_file="${HOME}/backup-restore.sh"
+
+    local download_prefixes=(
+        ""
+        "https://gh-proxy.com/"
+        "https://ghfast.top/"
+        "https://ghproxy.net/"
+    )
+    local mirror_prefix script_ok=false
+
+    for mirror_prefix in "${download_prefixes[@]}"; do
+        if download_script_file "${mirror_prefix}${script_url}" "$script_file"; then
+            if head -1 "$script_file" | grep -q "^#!/bin/bash"; then
+                script_ok=true
+                break
+            fi
+        fi
+    done
+
+    if [ "$script_ok" != "true" ]; then
+        rm -f "$script_file"
+        echo -e "${COLOR_RED}${LANG[BACKUP_SCRIPT_FAIL]}${COLOR_RESET}"
+        return 1
+    fi
+
+    chmod +x "$script_file"
+    bash "$script_file"
 }
 
 load_language() {
@@ -2061,7 +2108,7 @@ case $OPTION in
         if [ -f ~/backup-restore.sh ]; then
             rw-backup
         else
-            curl -o ~/backup-restore.sh https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh && chmod +x ~/backup-restore.sh && ~/backup-restore.sh
+            run_backup_restore
         fi
         sleep 2
         log_clear
