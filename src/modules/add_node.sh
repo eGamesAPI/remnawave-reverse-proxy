@@ -11,28 +11,23 @@ add_node_to_panel() {
     echo -e "${COLOR_YELLOW}${LANG[CONFIRM_SERVER_PANEL]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_GREEN}[?]${COLOR_RESET} ${COLOR_YELLOW}${LANG[CONFIRM_PROMPT]}${COLOR_RESET}"
-    read confirm
-    echo
-
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-        exit 0
-    fi
+    local confirmed
+    read_yn confirmed || { echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"; return 0; }
 
     echo -e "${COLOR_YELLOW}${LANG[ADD_NODE_TO_PANEL]}${COLOR_RESET}"
     sleep 1
 
-    get_panel_token
+    get_panel_token || { echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"; return 1; }
+    local token
     token=$(cat "$TOKEN_FILE")
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"
-        return 1
-    fi
 
     while true; do
         reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
-        check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"
-        if [ $? -eq 0 ]; then
+        if [ "$SELFSTEAL_DOMAIN" = "0" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+        fi
+        if check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
             break
         fi
         echo -e "${COLOR_YELLOW}${LANG[TRY_ANOTHER_DOMAIN]}${COLOR_RESET}"
@@ -40,33 +35,42 @@ add_node_to_panel() {
 
     while true; do
         reading "${LANG[ENTER_NODE_NAME]}" entity_name
-        if [[ "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
-            if [ ${#entity_name} -ge 3 ] && [ ${#entity_name} -le 20 ]; then
-                local response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
-
-                if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null; then
-                    echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_NAME]}" "$entity_name")${COLOR_RESET}"
-                else
-                    break
-                fi
-            else
-                echo -e "${COLOR_RED}${LANG[CF_INVALID_LENGTH]}${COLOR_RESET}"
-            fi
-        else
+        if [[ ! "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             echo -e "${COLOR_RED}${LANG[CF_INVALID_CHARS]}${COLOR_RESET}"
+            continue
+        fi
+        if [ ${#entity_name} -lt 3 ] || [ ${#entity_name} -gt 20 ]; then
+            echo -e "${COLOR_RED}${LANG[CF_INVALID_LENGTH]}${COLOR_RESET}"
+            continue
+        fi
+
+        local response
+        response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
+        if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null 2>&1; then
+            echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_NAME]}" "$entity_name")${COLOR_RESET}"
+        else
+            break
         fi
     done
 
-    local private_key=$(generate_xray_keys "$domain_url" "$token")
+    local private_key
+    private_key=$(generate_xray_keys "$domain_url" "$token") || return 1
 
-    read config_profile_uuid inbound_uuid <<< $(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name")
+    local profile_output
+    profile_output=$(create_config_profile "$domain_url" "$token" "$entity_name" "$SELFSTEAL_DOMAIN" "$private_key" "$entity_name") || return 1
+    local config_profile_uuid inbound_uuid
+    read -r config_profile_uuid inbound_uuid <<< "$profile_output"
+    if [ -z "$config_profile_uuid" ] || [ -z "$inbound_uuid" ]; then
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_CONFIG_PROFILE]}${COLOR_RESET}"
+        return 1
+    fi
 
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name"
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" || return 1
 
-    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name"
+    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
 
-    local squad_uuids=$(get_default_squad "$domain_url" "$token")
-    if [ $? -ne 0 ]; then
+    local squad_uuids
+    if ! squad_uuids=$(get_default_squad "$domain_url" "$token"); then
         echo -e "${COLOR_RED}${LANG[ERROR_GET_SQUAD_LIST]}${COLOR_RESET}"
     elif [ -z "$squad_uuids" ]; then
         echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_TO_UPDATE]}${COLOR_RESET}"
