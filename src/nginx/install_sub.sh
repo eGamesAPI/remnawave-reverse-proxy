@@ -29,7 +29,7 @@ install_sub_nginx() {
     # The panel is protected either by the cookie gate or by a TinyAuth
     # login page — ask which one and collect the matching pass-through
     # data the sub page will send with every panel request.
-    local SUB_AUTH_ENV=""
+    SUB_AUTH_ENV=""
     while true; do
         echo -e ""
         echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
