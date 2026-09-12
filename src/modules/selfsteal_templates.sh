@@ -387,14 +387,24 @@ randomhtml_clone() {
     )
 
     if ! curl -fsSL "${curl_headers[@]}" --connect-timeout 10 --max-time 60 -o page.html "$site_url" 2>/dev/null; then
-        local http_code
+        local http_code probe_rc net_reason
         http_code=$(curl -s -o /dev/null -w "%{http_code}" "${curl_headers[@]}" --connect-timeout 10 --max-time 30 "$site_url" 2>/dev/null)
+        probe_rc=$?
         case "$http_code" in
             403|503|429)
                 randomhtml_fail "$(printf "${LANG[SITE_ANTIBOT]}" "$http_code")"
                 ;;
             000|"")
-                randomhtml_fail "${LANG[SITE_UNREACHABLE]}"
+                # Distinguish the network failure: DNS, refused, timeout
+                # (often a geo-block on foreign IPs), SSL, other
+                case "$probe_rc" in
+                    6) net_reason="${LANG[SITE_NET_DNS]}" ;;
+                    7) net_reason="${LANG[SITE_NET_REFUSED]}" ;;
+                    28) net_reason="${LANG[SITE_NET_TIMEOUT]}" ;;
+                    35|53|54|56|60) net_reason="${LANG[SITE_NET_SSL]}" ;;
+                    *) net_reason="$(printf "${LANG[SITE_NET_UNKNOWN]}" "$probe_rc")" ;;
+                esac
+                randomhtml_fail "${LANG[SITE_UNREACHABLE]}: $net_reason"
                 ;;
             *)
                 randomhtml_fail "$(printf "${LANG[SITE_HTTP_STATUS]}" "$http_code")"
