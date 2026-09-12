@@ -477,16 +477,13 @@ randomhtml_clone() {
         wget_args+=(--recursive --level=2 "-Q${SITE_CLONE_QUOTA_MB:-100}m")
     fi
     randomhtml_start_spinner "${LANG[SITE_CLONE_DOWNLOADING_FULL]}"
-    if ! wget "${wget_args[@]}" "$site_url"; then
-        randomhtml_fail "${LANG[SITE_CLONE_EMPTY]}"
-        return 1
-    fi
+    wget "${wget_args[@]}" "$site_url"
+    local wget_rc=$?
     randomhtml_stop_spinner
 
-    local downloaded_mb
-    downloaded_mb=$(du -sk . 2>/dev/null | cut -f1 | awk '{printf "%.1f", $1/1024}')
-    printf "${COLOR_GREEN}${LANG[SITE_CLONE_ACTUAL]}${COLOR_RESET}\n" "${downloaded_mb}M"
-
+    # In recursive mode individual resources routinely fail (404/429, the
+    # quota cutting the run short) — that must not discard the main page,
+    # so judge by the downloaded files, not by the exit code
     if [ ! -f index.html ]; then
         main_html=$(find . -type f -name "*.html" | sort | head -n 1)
         if [ -n "$main_html" ] && [ "$main_html" != "./index.html" ]; then
@@ -497,6 +494,13 @@ randomhtml_clone() {
         randomhtml_fail "${LANG[SITE_CLONE_EMPTY]}"
         return 1
     fi
+    if [ "$wget_rc" -ne 0 ]; then
+        printf "${COLOR_YELLOW}${LANG[SITE_CLONE_PARTIAL]}${COLOR_RESET}\n" "$wget_rc"
+    fi
+
+    local downloaded_mb
+    downloaded_mb=$(du -sk . 2>/dev/null | cut -f1 | awk '{printf "%.1f", $1/1024}')
+    printf "${COLOR_GREEN}${LANG[SITE_CLONE_ACTUAL]}${COLOR_RESET}\n" "${downloaded_mb}M"
 
     TEMPLATE_DISPLAY_NAME="$site_url"
     RandomHTML="."

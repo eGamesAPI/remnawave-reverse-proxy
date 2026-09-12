@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.2.7"
+SCRIPT_VERSION="3.2.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -296,6 +296,7 @@ read_yn() {
     local __var="$1" __ans
     while true; do
         read -r __ans || { printf -v "$__var" 'n'; echo; return 1; }
+        __ans="${__ans//[[:space:]]/}"
         case "${__ans,,}" in
             y|yes|д|да) printf -v "$__var" 'y'; return 0 ;;
             n|no|н|нет) printf -v "$__var" 'n'; return 1 ;;
