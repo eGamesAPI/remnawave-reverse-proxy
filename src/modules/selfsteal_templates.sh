@@ -16,6 +16,54 @@ show_template_source_options() {
     echo -e ""
 }
 
+manage_selfsteal_templates() {
+    if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
+        echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
+        sleep 2
+        log_clear
+        remnawave_reverse
+        return
+    fi
+
+    show_template_source_options
+    reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
+    case $TEMPLATE_OPTION in
+        1)
+            randomhtml "simple"
+            sleep 2
+            log_clear
+            manage_selfsteal_templates
+            ;;
+        2)
+            randomhtml_choose "sni"
+            sleep 2
+            log_clear
+            manage_selfsteal_templates
+            ;;
+        3)
+            randomhtml_choose "nothing"
+            sleep 2
+            log_clear
+            manage_selfsteal_templates
+            ;;
+        4)
+            randomhtml_clone
+            sleep 2
+            log_clear
+            manage_selfsteal_templates
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
+            sleep 2
+            log_clear
+            manage_selfsteal_templates
+            ;;
+    esac
+}
+
 randomhtml_start_spinner() {
     echo -e "${COLOR_YELLOW}${1:-${LANG[RANDOM_TEMPLATE]}}${COLOR_RESET}"
     sleep 1
