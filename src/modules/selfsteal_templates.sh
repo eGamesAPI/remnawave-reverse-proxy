@@ -1,6 +1,8 @@
 #!/bin/bash
 # Module: SelfSteal Templates
 
+SITE_CLONE_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
 show_template_source_options() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[CHOOSE_TEMPLATE_SOURCE]}${COLOR_RESET}"
@@ -8,6 +10,7 @@ show_template_source_options() {
     echo -e "${COLOR_YELLOW}1. ${LANG[SIMPLE_WEB_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[SNI_TEMPLATES]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[NOTHING_TEMPLATES]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[SITE_CLONE_TEMPLATES]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -36,7 +39,7 @@ randomhtml_fail() {
     echo "${message}"
 
     cd /opt/ 2>/dev/null || true
-    rm -rf /opt/simple-web-templates-*/ /opt/sni-templates-*/ /opt/nothing-sni-*/ 2>/dev/null
+    rm -rf /opt/simple-web-templates-*/ /opt/sni-templates-*/ /opt/nothing-sni-*/ /opt/site-clone-*/ 2>/dev/null
 
     return 1
 }
@@ -288,4 +291,96 @@ randomhtml_choose() {
     randomhtml_stop_spinner
     randomhtml_pick_specific || return 1
     randomhtml_apply
+}
+
+randomhtml_clone() {
+    local max_bytes=$(( ${SITE_CLONE_MAX_MB:-20} * 1024 * 1024 ))
+    local site_url clone_root host_root base_dir
+    local asset_url len total_bytes total_mb html_size main_html
+    local confirmed asset_count=0
+
+    reading "${LANG[ENTER_SITE_URL]}" site_url
+    [[ "$site_url" =~ ^https?:// ]] || site_url="https://$site_url"
+
+    clone_root="/opt/site-clone-$(openssl rand -hex 4)"
+    rm -rf /opt/site-clone-*/ 2>/dev/null
+    mkdir -p "$clone_root" || { echo "${LANG[UNPACK_ERROR]}"; return 1; }
+    cd "$clone_root" || { echo "${LANG[UNPACK_ERROR]}"; return 1; }
+
+    echo -e "${COLOR_YELLOW}${LANG[SITE_CLONE_DOWNLOADING]}${COLOR_RESET}"
+
+    if ! curl -fsSL -A "$SITE_CLONE_UA" --connect-timeout 10 --max-time 60 -o page.html "$site_url" 2>/dev/null; then
+        randomhtml_fail "${LANG[SITE_UNREACHABLE]}"
+        return 1
+    fi
+    html_size=$(stat -c %s page.html 2>/dev/null || echo 0)
+    if [ "$html_size" -eq 0 ]; then
+        randomhtml_fail "${LANG[SITE_UNREACHABLE]}"
+        return 1
+    fi
+
+    host_root=$(printf '%s' "$site_url" | sed -E 's#^(https?://[^/]+).*#\1#')
+    case "$site_url" in
+        */) base_dir="$site_url" ;;
+        *) base_dir="${site_url%/*}/" ;;
+    esac
+
+    total_bytes=$html_size
+    while IFS= read -r asset_url; do
+        [ -z "$asset_url" ] && continue
+        len=$(curl -sIL -A "$SITE_CLONE_UA" --connect-timeout 8 --max-time 15 "$asset_url" 2>/dev/null \
+            | tr -d '\r' | grep -i '^content-length:' | tail -n 1 | awk '{print $2}')
+        if [ -n "$len" ]; then
+            total_bytes=$((total_bytes + len))
+            asset_count=$((asset_count + 1))
+        fi
+    done < <(grep -oE '(src|href|data-src|srcset)="[^"]+"' page.html \
+        | sed -E 's/^[a-z-]+="([^"]+)"$/\1/' \
+        | grep -Ei '\.(css|js|mjs|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|eot|mp4|webm)([?#]|$)' \
+        | grep -vE '^(#|javascript:|mailto:|tel:|data:)' \
+        | sort -u \
+        | while IFS= read -r u; do
+            case "$u" in
+                http://*|https://*) printf '%s\n' "$u" ;;
+                //*) printf '%s\n' "${site_url%%://*}:$u" ;;
+                /*) printf '%s\n' "$host_root$u" ;;
+                *) printf '%s\n' "$base_dir$u" ;;
+            esac
+        done)
+
+    total_mb=$(awk -v b="$total_bytes" 'BEGIN{printf "%.1f", b/1048576}')
+    printf "${COLOR_YELLOW}${LANG[SITE_SIZE_ESTIMATE]}${COLOR_RESET}\n" "$asset_count" "${total_mb}M"
+
+    if [ "$total_bytes" -gt "$max_bytes" ]; then
+        printf "${COLOR_YELLOW}${LANG[SITE_TOO_LARGE]}${COLOR_RESET}\n" "${total_mb}M"
+        read_yn confirmed || { randomhtml_fail "${LANG[EXIT]}"; return 1; }
+    fi
+
+    rm -f page.html
+    if ! wget --page-requisites --convert-links --adjust-extension \
+            --no-host-directories --directory-prefix="$clone_root" \
+            -e robots=off -U "$SITE_CLONE_UA" \
+            --connect-timeout=15 --timeout=60 --tries=2 -q "$site_url"; then
+        randomhtml_fail "${LANG[SITE_CLONE_EMPTY]}"
+        return 1
+    fi
+
+    if [ ! -f index.html ]; then
+        main_html=$(find . -type f -name "*.html" | sort | head -n 1)
+        if [ -n "$main_html" ] && [ "$main_html" != "./index.html" ]; then
+            cp "$main_html" index.html
+        fi
+    fi
+    if [ ! -s index.html ]; then
+        randomhtml_fail "${LANG[SITE_CLONE_EMPTY]}"
+        return 1
+    fi
+
+    RandomHTML="."
+    randomhtml_apply
+    local apply_rc=$?
+
+    cd /opt/ 2>/dev/null || true
+    rm -rf "$clone_root" 2>/dev/null
+    return "$apply_rc"
 }
