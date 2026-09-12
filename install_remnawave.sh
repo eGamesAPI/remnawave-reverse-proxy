@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev"
+SCRIPT_VERSION="Dev 3.2.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2104,51 +2104,10 @@ case $OPTION in
         ;;
     4)
         load_selfsteal_templates_module
-        if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
-            echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
-            sleep 2
-            log_clear
-            remnawave_reverse
-        else
-            show_template_source_options
-            reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
-            case $TEMPLATE_OPTION in
-                1)
-                    randomhtml "simple"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                2)
-                    randomhtml_choose "sni"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                3)
-                    randomhtml_choose "nothing"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                4)
-                    randomhtml_clone
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                0)
-                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    remnawave_reverse
-                    ;;
-                *)
-                    echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-            esac
-        fi
+        manage_selfsteal_templates
+        sleep 2
+        log_clear
+        remnawave_reverse
         ;;
     5)
         manage_custom_legiz
