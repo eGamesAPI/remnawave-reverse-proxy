@@ -17,7 +17,7 @@ show_template_source_options() {
 }
 
 randomhtml_start_spinner() {
-    echo -e "${COLOR_YELLOW}${LANG[RANDOM_TEMPLATE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${1:-${LANG[RANDOM_TEMPLATE]}}${COLOR_RESET}"
     sleep 1
     spinner $$ "${LANG[WAITING]}" &
     spinner_pid=$!
@@ -324,7 +324,7 @@ randomhtml_clone() {
     mkdir -p "$clone_root" || { echo "${LANG[UNPACK_ERROR]}"; return 1; }
     cd "$clone_root" || { echo "${LANG[UNPACK_ERROR]}"; return 1; }
 
-    echo -e "${COLOR_YELLOW}${LANG[SITE_CLONE_DOWNLOADING]}${COLOR_RESET}"
+    randomhtml_start_spinner "${LANG[SITE_CLONE_DOWNLOADING]}"
 
     # Browser-like headers: bare curl/wget get rejected outright by
     # some anti-bot setups
@@ -394,6 +394,7 @@ randomhtml_clone() {
         done)
 
     total_mb=$(awk -v b="$total_bytes" 'BEGIN{printf "%.1f", b/1048576}')
+    randomhtml_stop_spinner
     printf "${COLOR_YELLOW}${LANG[SITE_SIZE_ESTIMATE]}${COLOR_RESET}\n" "$asset_count" "${total_mb}M"
 
     if [ "$total_bytes" -gt "$max_bytes" ]; then
@@ -427,10 +428,12 @@ randomhtml_clone() {
     if [ "$clone_sections" = "y" ]; then
         wget_args+=(--recursive --level=2 "-Q${SITE_CLONE_QUOTA_MB:-100}m")
     fi
+    randomhtml_start_spinner "${LANG[SITE_CLONE_DOWNLOADING_FULL]}"
     if ! wget "${wget_args[@]}" "$site_url"; then
         randomhtml_fail "${LANG[SITE_CLONE_EMPTY]}"
         return 1
     fi
+    randomhtml_stop_spinner
 
     local downloaded_mb
     downloaded_mb=$(du -sk . 2>/dev/null | cut -f1 | awk '{printf "%.1f", $1/1024}')
