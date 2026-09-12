@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.2.6"
+SCRIPT_VERSION="3.2.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -174,6 +174,35 @@ run_backup_restore() {
 
     chmod +x "$script_file"
     bash "$script_file"
+}
+
+configure_docker_registry_mirrors() {
+    local daemon_json="/etc/docker/daemon.json"
+    local mirrors='["https://mirror.gcr.io/", "https://dockerhub.timeweb.cloud"]'
+
+    mkdir -p /etc/docker
+
+    if [ ! -s "$daemon_json" ]; then
+        printf '{\n  "log-driver": "local",\n  "registry-mirrors": %s\n}\n' "$mirrors" > "$daemon_json"
+    elif jq -e 'has("registry-mirrors")' "$daemon_json" >/dev/null 2>&1; then
+        return 0
+    elif jq empty "$daemon_json" 2>/dev/null; then
+        jq --argjson m "$mirrors" '.["registry-mirrors"] = $m |
+            if has("log-driver") then . else .["log-driver"] = "local" end' \
+            "$daemon_json" > "${daemon_json}.tmp" 2>/dev/null \
+            && mv "${daemon_json}.tmp" "$daemon_json" \
+            || {
+                rm -f "${daemon_json}.tmp"
+                echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRRORS_SKIP]}${COLOR_RESET}" >&2
+                return 0
+            }
+    else
+        echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRRORS_SKIP]}${COLOR_RESET}" >&2
+        return 0
+    fi
+
+    echo -e "${COLOR_GREEN}${LANG[DOCKER_MIRRORS_APPLIED]}${COLOR_RESET}"
+    systemctl restart docker >/dev/null 2>&1
 }
 
 load_language() {
@@ -1779,15 +1808,37 @@ install_packages() {
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}${LANG[DOCKER_INSTALLING]}${COLOR_RESET}"
 
-        if ! curl -fsSL https://get.docker.com -o /tmp/get-docker.sh; then
+        local docker_script="/tmp/get-docker.sh"
+        local docker_script_urls=(
+            "https://get.docker.com"
+            "https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
+            "https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
+            "https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
+        )
+        local docker_url docker_script_ok=false
+
+        for docker_url in "${docker_script_urls[@]}"; do
+            if download_script_file "$docker_url" "$docker_script" && head -1 "$docker_script" | grep -q "^#!/bin/sh"; then
+                docker_script_ok=true
+                break
+            fi
+        done
+
+        if [ "$docker_script_ok" != "true" ]; then
+            rm -f "$docker_script"
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
             return 1
         fi
 
-        if ! sh /tmp/get-docker.sh; then
-            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
-            return 1
+        if ! sh "$docker_script"; then
+            echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRROR_RETRY]}${COLOR_RESET}"
+            if ! sh "$docker_script" --mirror Aliyun; then
+                rm -f "$docker_script"
+                echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
+                return 1
+            fi
         fi
+        rm -f "$docker_script"
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -1808,6 +1859,8 @@ install_packages() {
             return 1
         fi
     fi
+
+    configure_docker_registry_mirrors
 
     if ! docker info >/dev/null 2>&1; then
         echo -e "${COLOR_RED}${LANG[ERROR_DOCKER_NOT_WORKING]}${COLOR_RESET}" >&2
@@ -2051,45 +2104,10 @@ case $OPTION in
         ;;
     4)
         load_selfsteal_templates_module
-        if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
-            echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
-            sleep 2
-            log_clear
-            remnawave_reverse
-        else
-            show_template_source_options
-            reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
-            case $TEMPLATE_OPTION in
-                1)
-                    randomhtml "simple"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                2)
-                    randomhtml_choose "sni"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                3)
-                    randomhtml_choose "nothing"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-                0)
-                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    remnawave_reverse
-                    ;;
-                *)
-                    echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
-                    sleep 2
-                    log_clear
-                    remnawave_reverse
-                    ;;
-            esac
-        fi
+        manage_selfsteal_templates
+        sleep 2
+        log_clear
+        remnawave_reverse
         ;;
     5)
         manage_custom_legiz
