@@ -242,6 +242,7 @@ show_manage_certificates() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_UPDATE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_GENERATE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -271,6 +272,10 @@ manage_certificates() {
                 }
             fi
             generate_new_certificates
+            log_clear
+            ;;
+        3)
+            manage_manual_certificate
             log_clear
             ;;
         0)
@@ -838,4 +843,210 @@ handle_certificates() {
             configure_certbot_renewal_hooks "$renewal_conf"
         fi
     done
+}
+
+# Days remaining until the given openssl end date ("notAfter" value)
+cert_days_left() {
+    local end_date="$1"
+    local end_epoch
+    end_epoch=$(TZ=UTC date -d "$end_date" +%s 2>/dev/null) || return 1
+    echo $(( (end_epoch - $(date +%s)) / 86400 ))
+}
+
+# Whether a SAN/CN list covers the domain (exact or wildcard match)
+cert_covers_domain() {
+    local domain="$1" list="$2" entry base
+    while IFS= read -r entry; do
+        entry="${entry//[[:space:]]/}"
+        [ -z "$entry" ] && continue
+        [ "$entry" = "$domain" ] && return 0
+        case "$entry" in
+            \*.*)
+                base="${entry#\*.}"
+                case "$domain" in
+                    *."$base") return 0 ;;
+                esac
+                ;;
+        esac
+    done <<< "$list"
+    return 1
+}
+
+# Full check of a manually uploaded certificate pair
+verify_manual_certificate() {
+    local domain="$1"
+    local cert_dir="$2"
+    local fullchain="$cert_dir/fullchain.pem"
+    local privkey="$cert_dir/privkey.pem"
+
+    if [ ! -s "$fullchain" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_MANUAL_MISSING]}" "$fullchain")${COLOR_RESET}"
+        return 1
+    fi
+    if [ ! -s "$privkey" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_MANUAL_MISSING]}" "$privkey")${COLOR_RESET}"
+        return 1
+    fi
+
+    if ! openssl x509 -in "$fullchain" -noout >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_INVALID_CERT]}${COLOR_RESET}"
+        return 1
+    fi
+    if ! openssl pkey -in "$privkey" -noout >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_INVALID_KEY]}${COLOR_RESET}"
+        return 1
+    fi
+
+    local cert_pub key_pub
+    cert_pub=$(openssl x509 -in "$fullchain" -pubkey -noout 2>/dev/null | md5sum | cut -d' ' -f1)
+    key_pub=$(openssl pkey -in "$privkey" -pubout 2>/dev/null | md5sum | cut -d' ' -f1)
+    if [ -z "$cert_pub" ] || [ "$cert_pub" != "$key_pub" ]; then
+        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_MISMATCH]}${COLOR_RESET}"
+        return 1
+    fi
+
+    local sans cn sans_display
+    sans=$(openssl x509 -in "$fullchain" -noout -ext subjectAltName 2>/dev/null | grep -o 'DNS:[^ ,]*' | sed 's/^DNS://')
+    cn=$(openssl x509 -in "$fullchain" -noout -subject 2>/dev/null | sed -n 's/.*CN[[:space:]]*=[[:space:]]*//p')
+    if ! cert_covers_domain "$domain" "$sans"$'\n'"$cn"; then
+        sans_display=$(printf '%s' "$sans" | tr '\n' ' ')
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_MANUAL_DOMAIN_MISMATCH]}" "$domain" "${sans_display:-$cn}")${COLOR_RESET}"
+        return 1
+    fi
+
+    local end_date days_left
+    end_date=$(openssl x509 -in "$fullchain" -noout -enddate 2>/dev/null | cut -d= -f2-)
+    days_left=$(cert_days_left "$end_date") || {
+        echo -e "${COLOR_RED}${LANG[ERROR_PARSING_CERT]}${COLOR_RESET}"
+        return 1
+    }
+    if [ "$days_left" -lt 0 ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_MANUAL_EXPIRED]}" "$(( -days_left ))")${COLOR_RESET}"
+        return 1
+    fi
+
+    printf "${COLOR_GREEN}${LANG[CERT_MANUAL_EXPIRES]}${COLOR_RESET}\n" "$days_left" "$end_date"
+    if [ "$days_left" -le 30 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[CERT_MANUAL_SOON]}${COLOR_RESET}"
+    fi
+    return 0
+}
+
+# Interactive: the user uploads their own certificate (bought etc.);
+# the script shows where to put it and verifies the pair
+manage_manual_certificate() {
+    local cert_domain cert_dir server_ip ready_answer
+
+    reading "${LANG[CERT_MANUAL_DOMAIN]}" cert_domain
+    if ! [[ "$cert_domain" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_BAD_DOMAIN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    cert_dir="/etc/letsencrypt/live/$cert_domain"
+    mkdir -p "$cert_dir"
+
+    server_ip=$(curl -s -4 --max-time 10 ifconfig.me 2>/dev/null)
+    [ -z "$server_ip" ] && server_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+    printf "${COLOR_YELLOW}${LANG[CERT_MANUAL_UPLOAD]}${COLOR_RESET}\n" "$cert_dir" "$cert_dir" "${server_ip:-<server-ip>}" "$cert_dir"
+
+    while true; do
+        reading "${LANG[CERT_MANUAL_READY]}" ready_answer
+        if [ "$ready_answer" = "0" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            return 0
+        fi
+        if verify_manual_certificate "$cert_domain" "$cert_dir"; then
+            chmod 600 "$cert_dir/privkey.pem"
+            printf "${COLOR_GREEN}${LANG[CERT_MANUAL_OK]}${COLOR_RESET}\n" "$cert_dir"
+            setup_cert_telegram_notifications
+            return 0
+        fi
+        echo -e "${COLOR_YELLOW}${LANG[CERT_MANUAL_RETRY]}${COLOR_RESET}"
+    done
+}
+
+# Optional daily Telegram reminders about expiring certificates
+setup_cert_telegram_notifications() {
+    local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
+    local notify_script="${DIR_REMNAWAVE}cert-notify.sh"
+
+    [ -f "$notify_conf" ] && return 0
+
+    printf "${COLOR_YELLOW}${LANG[CERT_TG_ASK]}${COLOR_RESET}\n"
+    local enabled
+    read_yn enabled || return 0
+
+    local tg_token tg_chat response
+    while true; do
+        reading "${LANG[CERT_TG_TOKEN]}" tg_token || return 0
+        [ "$tg_token" = "0" ] && return 0
+        reading "${LANG[CERT_TG_CHAT]}" tg_chat || return 0
+        [ "$tg_chat" = "0" ] && return 0
+        # Both go into a sourced config — allow only safe characters
+        if ! [[ "$tg_token" =~ ^[0-9A-Za-z:_-]+$ ]] || ! [[ "$tg_chat" =~ ^-?[0-9]+$ ]]; then
+            echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+            continue
+        fi
+
+        echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+        response=$(curl -s -m 20 "https://api.telegram.org/bot${tg_token}/sendMessage" \
+            --data-urlencode "chat_id=${tg_chat}" \
+            --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
+        if printf '%s' "$response" | grep -q '"ok":true'; then
+            break
+        fi
+        echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+    done
+
+    cat > "$notify_conf" <<EOL
+TG_TOKEN='$tg_token'
+TG_CHAT='$tg_chat'
+DAYS=14
+LANG_SEL='ru'
+EOL
+    chmod 600 "$notify_conf"
+
+    cat > "$notify_script" <<'EOL'
+#!/bin/bash
+# Daily certificate expiry check with Telegram reminders.
+CONF="__NOTIFY_CONF__"
+[ -r "$CONF" ] || exit 0
+. "$CONF"
+: "${TG_TOKEN:?}" "${TG_CHAT:?}"
+DAYS="${DAYS:-14}"
+
+send_tg() {
+    curl -s -m 20 --get "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${TG_CHAT}" \
+        --data-urlencode "text=$1" >/dev/null 2>&1
+}
+
+report=""
+now_epoch=$(date +%s)
+for dir in /etc/letsencrypt/live/*/; do
+    fc="${dir}fullchain.pem"
+    [ -r "$fc" ] || continue
+    end_date=$(openssl x509 -in "$fc" -enddate -noout 2>/dev/null | cut -d= -f2-)
+    [ -n "$end_date" ] || continue
+    end_epoch=$(TZ=UTC date -d "$end_date" +%s 2>/dev/null) || continue
+    days=$(( (end_epoch - now_epoch) / 86400 ))
+    if [ "$days" -le "$DAYS" ]; then
+        report="${report}$(basename "$dir"): ${days} дн. (${end_date})"$'\n'
+    fi
+done
+
+if [ -n "$report" ]; then
+    send_tg "$(printf "⚠️ Сертификаты истекают:\n%s" "$report")"
+fi
+EOL
+    sed -i "s|__NOTIFY_CONF__|$notify_conf|" "$notify_script"
+    chmod 700 "$notify_script"
+
+    if ! crontab -u root -l 2>/dev/null | grep -q "cert-notify.sh"; then
+        add_cron_rule "0 9 * * * $notify_script"
+    fi
+
+    echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
 }
