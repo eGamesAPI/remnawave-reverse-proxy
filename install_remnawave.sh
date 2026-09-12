@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.2.9"
+SCRIPT_VERSION="dev"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -2127,6 +2127,12 @@ case $OPTION in
                     ;;
                 3)
                     randomhtml_choose "nothing"
+                    sleep 2
+                    log_clear
+                    remnawave_reverse
+                    ;;
+                4)
+                    randomhtml_clone
                     sleep 2
                     log_clear
                     remnawave_reverse
