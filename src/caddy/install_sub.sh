@@ -106,6 +106,7 @@ EOL
 
 installation_sub_caddy() {
     check_sub_not_running
+    check_port_443_free
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_SUB]}${COLOR_RESET}"
     sleep 1
 

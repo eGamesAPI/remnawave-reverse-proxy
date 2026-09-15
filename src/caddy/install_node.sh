@@ -141,6 +141,7 @@ EOL
 
 installation_node_caddy() {
     check_node_not_running
+    check_port_443_free
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     install_node_caddy
 

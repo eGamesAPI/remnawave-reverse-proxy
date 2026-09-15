@@ -273,6 +273,7 @@ EOL
 
 installation() {
     check_panel_not_running
+    check_port_443_free
     check_node_not_running
     load_certificates_module
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING]}${COLOR_RESET}"

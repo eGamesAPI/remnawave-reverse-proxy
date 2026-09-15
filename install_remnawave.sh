@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.2.9"
+SCRIPT_VERSION="3.3.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -350,6 +350,22 @@ check_node_not_running() {
 
 check_sub_not_running() {
     check_not_running 'remnawave-subscription-page' "${LANG[SUB_ALREADY_RUNNING]}"
+}
+
+check_port_443_free() {
+    local listeners
+    listeners=$(ss -tlnp 2>/dev/null | awk '$4 ~ /:443$/')
+    [ -z "$listeners" ] && return 0
+
+    # A listener owned by our own reverse-proxy container is handled by the
+    # install flow itself; only foreign services block the installation.
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qxE 'remnawave-nginx|remnawave-caddy'; then
+        return 0
+    fi
+
+    local offenders
+    offenders=$(echo "$listeners" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | sort -u | paste -sd, -)
+    error "$(printf "${LANG[PORT_443_BUSY]}" "${offenders:-unknown}")"
 }
 
 allow_ssh_ports() {

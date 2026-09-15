@@ -513,6 +513,7 @@ EOL
 
 installation_panel_caddy() {
     check_panel_not_running
+    check_port_443_free
     install_panel_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"
