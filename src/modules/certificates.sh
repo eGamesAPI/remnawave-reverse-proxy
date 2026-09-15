@@ -1011,6 +1011,58 @@ manage_manual_certificate() {
     setup_cert_telegram_notifications
 }
 
+# Percent-encode the user:password part of a proxy URL so special
+# characters (@, :, /) in the credentials survive curl's URL parser;
+# the user can type the password as is
+percent_encode_proxy_auth() {
+    local url="$1"
+    local scheme rest hostpart userinfo user pass
+    local c octet out_user="" out_pass=""
+
+    case "$url" in
+        *://*) scheme="${url%%://*}"; rest="${url#*://}" ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    case "$rest" in
+        *@*)
+            hostpart="${rest##*@}"
+            userinfo="${rest%@${hostpart}}"
+            ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    user="${userinfo%%:*}"
+    if [[ "$userinfo" == *:* ]]; then
+        pass="${userinfo#*:}"
+    else
+        pass=""
+    fi
+
+    while IFS= read -r -n 1 c; do
+        [ -z "$c" ] && continue
+        case "$c" in
+            [A-Za-z0-9._-]) out_user+="$c" ;;
+            *) printf -v octet '%%%02X' "'$c"; out_user+="$octet" ;;
+        esac
+    done <<< "$user"
+    while IFS= read -r -n 1 c; do
+        [ -z "$c" ] && continue
+        case "$c" in
+            [A-Za-z0-9._-]) out_pass+="$c" ;;
+            *) printf -v octet '%%%02X' "'$c"; out_pass+="$octet" ;;
+        esac
+    done <<< "$pass"
+
+    if [ -n "$out_pass" ]; then
+        printf '%s://%s:%s@%s\n' "$scheme" "$out_user" "$out_pass" "$hostpart"
+    elif [ -n "$out_user" ]; then
+        printf '%s://%s@%s\n' "$scheme" "$out_user" "$hostpart"
+    else
+        printf '%s://%s\n' "$scheme" "$hostpart"
+    fi
+}
+
 # Optional daily Telegram reminders about expiring certificates
 setup_cert_telegram_notifications() {
     local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
@@ -1022,7 +1074,19 @@ setup_cert_telegram_notifications() {
     local enabled
     read_yn enabled || return 0
 
-    local tg_token tg_chat response
+    local tg_token tg_chat response tg_curl_rc
+    local tg_proxy=""
+
+    tg_test_send() {
+        local curl_proxy=()
+        [ -n "$tg_proxy" ] && curl_proxy=(--proxy "$tg_proxy")
+        response=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${tg_token}/sendMessage" \
+            --data-urlencode "chat_id=${tg_chat}" \
+            --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
+        tg_curl_rc=$?
+        printf '%s' "$response" | grep -q '"ok":true'
+    }
+
     while true; do
         reading "${LANG[CERT_TG_TOKEN]}" tg_token || return 0
         [ "$tg_token" = "0" ] && return 0
@@ -1035,11 +1099,24 @@ setup_cert_telegram_notifications() {
         fi
 
         echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
-        response=$(curl -s -m 20 "https://api.telegram.org/bot${tg_token}/sendMessage" \
-            --data-urlencode "chat_id=${tg_chat}" \
-            --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
-        if printf '%s' "$response" | grep -q '"ok":true'; then
-            break
+        tg_test_send && break
+
+        # An empty response with a curl error is a network-level failure:
+        # api.telegram.org is unreachable (e.g. blocked in Russia)
+        if [ -z "$response" ] && [ "$tg_curl_rc" -ne 0 ]; then
+            echo -e "${COLOR_YELLOW}${LANG[CERT_TG_BLOCKED]}${COLOR_RESET}"
+            local use_proxy proxy_url
+            printf "${COLOR_YELLOW}${LANG[CERT_TG_PROXY]}${COLOR_RESET}\n"
+            read_yn use_proxy || { echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"; continue; }
+            reading "${LANG[CERT_TG_PROXY_URL]}" proxy_url || proxy_url=""
+            # Special characters in the credentials are encoded by the
+            # script itself — the user types the password as is
+            proxy_url=$(percent_encode_proxy_auth "$proxy_url")
+            if [ -n "$proxy_url" ] && [[ "$proxy_url" =~ ^(https?|socks5h?)://[A-Za-z0-9.:_%@/?=-]+$ ]]; then
+                tg_proxy="$proxy_url"
+                echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+                tg_test_send && break
+            fi
         fi
         echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
     done
@@ -1047,6 +1124,7 @@ setup_cert_telegram_notifications() {
     cat > "$notify_conf" <<EOL
 TG_TOKEN='$tg_token'
 TG_CHAT='$tg_chat'
+TG_PROXY='$tg_proxy'
 DAYS=14
 LANG_SEL='ru'
 EOL
@@ -1059,10 +1137,13 @@ CONF="__NOTIFY_CONF__"
 [ -r "$CONF" ] || exit 0
 . "$CONF"
 : "${TG_TOKEN:?}" "${TG_CHAT:?}"
+TG_PROXY="${TG_PROXY:-}"
 DAYS="${DAYS:-14}"
 
 send_tg() {
-    curl -s -m 20 --get "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    local curl_proxy=()
+    [ -n "$TG_PROXY" ] && curl_proxy=(--proxy "$TG_PROXY")
+    curl -s -m 30 "${curl_proxy[@]}" --get "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=${TG_CHAT}" \
         --data-urlencode "text=$1" >/dev/null 2>&1
 }
