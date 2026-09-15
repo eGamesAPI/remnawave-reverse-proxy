@@ -341,6 +341,17 @@ update_current_certificates() {
             elif grep -q "dns-gcore" "$renewal_conf"; then
                 cert_method="3" # Gcore DNS-01
             fi
+        else
+            # No renewal conf = a manually uploaded certificate: certbot
+            # cannot renew it, just report its remaining days and move on
+            local manual_days
+            manual_days=$(check_cert_expiry "$domain")
+            if [ $? -eq 0 ]; then
+                cert_status["$cert_domain"]="${LANG[REMAINING]} $manual_days ${LANG[DAYS]} — ${LANG[CERT_MANUAL_NO_RENEW]}"
+            else
+                cert_status["$cert_domain"]="${LANG[CERT_MANUAL_NO_RENEW]}"
+            fi
+            continue
         fi
 
         local cert_file="$domain_dir/fullchain.pem"
@@ -760,7 +771,9 @@ handle_certificates() {
             if check_certificates "$domain" > /dev/null 2>&1; then
                 continue
             fi
-            manual_certificate_flow "$domain" || return 1
+            # Fresh install: mounts are added automatically below — the
+            # apply-manually notice would only confuse here
+            manual_certificate_flow "$domain" quiet || return 1
         done
         setup_cert_telegram_notifications
     fi
@@ -963,9 +976,12 @@ verify_manual_certificate() {
 }
 
 # The upload-and-verify loop for one domain: shows where to put the
-# files and waits until the pair passes verification
+# files and waits until the pair passes verification. Pass "quiet" as
+# the second argument to skip the apply-manually notice — the install
+# flow wires the mounts itself right after the upload.
 manual_certificate_flow() {
     local cert_domain="$1"
+    local show_notice="${2:-yes}"
     local cert_dir="/etc/letsencrypt/live/$cert_domain"
     local server_ip ready_answer
 
@@ -1003,6 +1019,16 @@ manual_certificate_flow() {
             fi
 
             printf "${COLOR_GREEN}${LANG[CERT_MANUAL_OK]}${COLOR_RESET}\n" "$final_dir"
+
+            # The install flow wires certs into compose/web-server configs
+            # itself, but this menu cannot know which stack to patch — tell
+            # the user to apply the mounts manually if anything runs already.
+            if [ "$show_notice" != "quiet" ]; then
+                local final_name stack_hint="/opt/remnawave|/opt/subscription"
+                final_name=$(basename "$final_dir")
+                printf "${COLOR_YELLOW}${LANG[CERT_MANUAL_APPLY_NOTICE]}${COLOR_RESET}\n" \
+                    "$stack_hint" "$final_name" "$final_name" "$final_name" "$final_name" "$stack_hint"
+            fi
             return 0
         fi
         echo -e "${COLOR_YELLOW}${LANG[CERT_MANUAL_RETRY]}${COLOR_RESET}"
