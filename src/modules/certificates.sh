@@ -972,7 +972,25 @@ manual_certificate_flow() {
         fi
         if verify_manual_certificate "$cert_domain" "$cert_dir"; then
             chmod 600 "$cert_dir/privkey.pem"
-            printf "${COLOR_GREEN}${LANG[CERT_MANUAL_OK]}${COLOR_RESET}\n" "$cert_dir"
+
+            # A wildcard pair belongs in the base-domain folder: move it
+            # there so the standard wildcard detection covers every
+            # subdomain and no duplicate copy lingers
+            local base_domain base_dir final_dir="$cert_dir"
+            base_domain=$(extract_domain "$cert_domain")
+            if [ "$base_domain" != "$cert_domain" ] \
+                && openssl x509 -in "$cert_dir/fullchain.pem" -noout -ext subjectAltName 2>/dev/null \
+                    | grep -q "DNS:\*\.$base_domain"; then
+                base_dir="/etc/letsencrypt/live/$base_domain"
+                mkdir -p "$base_dir"
+                mv "$cert_dir/fullchain.pem" "$cert_dir/privkey.pem" "$base_dir/"
+                chmod 600 "$base_dir/privkey.pem"
+                rm -rf "$cert_dir"
+                final_dir="$base_dir"
+                printf "${COLOR_GREEN}${LANG[CERT_MANUAL_WILDCARD_MOVED]}${COLOR_RESET}\n" "$base_dir"
+            fi
+
+            printf "${COLOR_GREEN}${LANG[CERT_MANUAL_OK]}${COLOR_RESET}\n" "$final_dir"
             return 0
         fi
         echo -e "${COLOR_YELLOW}${LANG[CERT_MANUAL_RETRY]}${COLOR_RESET}"
