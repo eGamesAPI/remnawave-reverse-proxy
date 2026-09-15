@@ -27,6 +27,18 @@ check_certificates() {
 
     local live_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "${DOMAIN}*" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "$live_dir" ] && [ -d "$live_dir" ]; then
+        # Manually uploaded pairs (fullchain + privkey only) are not managed
+        # by certbot: no renewal conf, no archive symlinks. Requiring the
+        # full certbot layout here would reject a valid own certificate.
+        if [ ! -f "/etc/letsencrypt/renewal/$(basename "$live_dir").conf" ]; then
+            if [ -s "$live_dir/fullchain.pem" ] && [ -s "$live_dir/privkey.pem" ]; then
+                echo -e "${COLOR_GREEN}${LANG[CERT_FOUND]}$(basename "$live_dir")${COLOR_RESET}"
+                return 0
+            fi
+            echo -e "${COLOR_RED}${LANG[CERT_NOT_FOUND]} $DOMAIN (missing fullchain.pem or privkey.pem)${COLOR_RESET}"
+            return 1
+        fi
+
         local files=("cert.pem" "chain.pem" "fullchain.pem" "privkey.pem")
         for file in "${files[@]}"; do
             local file_path="$live_dir/$file"
