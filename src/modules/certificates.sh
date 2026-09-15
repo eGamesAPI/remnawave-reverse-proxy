@@ -250,11 +250,12 @@ EOL
 #Manage Certificates
 show_manage_certificates() {
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[MENU_8]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[MENU_9]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_UPDATE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_GENERATE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_TG_SETUP]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -288,6 +289,10 @@ manage_certificates() {
             ;;
         3)
             manage_manual_certificate
+            log_clear
+            ;;
+        4)
+            manage_cert_notifications
             log_clear
             ;;
         0)
@@ -1024,7 +1029,7 @@ manual_certificate_flow() {
             # itself, but this menu cannot know which stack to patch — tell
             # the user to apply the mounts manually if anything runs already.
             if [ "$show_notice" != "quiet" ]; then
-                local final_name stack_hint="/opt/remnawave|/opt/subscription"
+                local final_name stack_hint="/opt/remnawave|/opt/remnanode|/opt/subscription"
                 final_name=$(basename "$final_dir")
                 printf "${COLOR_YELLOW}${LANG[CERT_MANUAL_APPLY_NOTICE]}${COLOR_RESET}\n" \
                     "$stack_hint" "$final_name" "$final_name" "$final_name" "$final_name" "$stack_hint"
@@ -1101,6 +1106,27 @@ percent_encode_proxy_auth() {
     fi
 }
 
+# Split "chat_id[:thread_id]" into TG_CHAT_ID / TG_THREAD_ID — the thread
+# part targets a forum topic in the user's group
+tg_parse_chat() {
+    local input="$1"
+    TG_THREAD_ID=""
+    case "$input" in
+        *:*)
+            TG_CHAT_ID="${input%%:*}"
+            TG_THREAD_ID="${input##*:}"
+            ;;
+        *)
+            TG_CHAT_ID="$input"
+            ;;
+    esac
+    [[ "$TG_CHAT_ID" =~ ^-?[0-9]+$ ]] || return 1
+    if [ -n "$TG_THREAD_ID" ] && ! [[ "$TG_THREAD_ID" =~ ^-?[0-9]+$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
 # Optional daily Telegram reminders about expiring certificates
 setup_cert_telegram_notifications() {
     local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
@@ -1108,6 +1134,7 @@ setup_cert_telegram_notifications() {
 
     [ -f "$notify_conf" ] && return 0
 
+    echo ""
     printf "${COLOR_YELLOW}${LANG[CERT_TG_ASK]}${COLOR_RESET}\n"
     local enabled
     read_yn enabled || return 0
@@ -1116,10 +1143,12 @@ setup_cert_telegram_notifications() {
     local tg_proxy=""
 
     tg_test_send() {
-        local curl_proxy=()
+        local curl_proxy=() thread_args=()
         [ -n "$tg_proxy" ] && curl_proxy=(--proxy "$tg_proxy")
+        [ -n "$TG_THREAD_ID" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD_ID}")
         response=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${tg_token}/sendMessage" \
-            --data-urlencode "chat_id=${tg_chat}" \
+            --data-urlencode "chat_id=${TG_CHAT_ID}" \
+            "${thread_args[@]}" \
             --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
         tg_curl_rc=$?
         printf '%s' "$response" | grep -q '"ok":true'
@@ -1130,8 +1159,9 @@ setup_cert_telegram_notifications() {
         [ "$tg_token" = "0" ] && return 0
         reading "${LANG[CERT_TG_CHAT]}" tg_chat || return 0
         [ "$tg_chat" = "0" ] && return 0
-        # Both go into a sourced config — allow only safe characters
-        if ! [[ "$tg_token" =~ ^[0-9A-Za-z:_-]+$ ]] || ! [[ "$tg_chat" =~ ^-?[0-9]+$ ]]; then
+        # Both go into a sourced config — allow only safe characters;
+        # the chat may carry a topic: -1001234567890:42
+        if ! [[ "$tg_token" =~ ^[0-9A-Za-z:_-]+$ ]] || ! tg_parse_chat "$tg_chat"; then
             echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
             continue
         fi
@@ -1161,7 +1191,8 @@ setup_cert_telegram_notifications() {
 
     cat > "$notify_conf" <<EOL
 TG_TOKEN='$tg_token'
-TG_CHAT='$tg_chat'
+TG_CHAT='${TG_CHAT_ID}'
+TG_THREAD='${TG_THREAD_ID}'
 TG_PROXY='$tg_proxy'
 DAYS=14
 LANG_SEL='ru'
@@ -1176,13 +1207,16 @@ CONF="__NOTIFY_CONF__"
 . "$CONF"
 : "${TG_TOKEN:?}" "${TG_CHAT:?}"
 TG_PROXY="${TG_PROXY:-}"
+TG_THREAD="${TG_THREAD:-}"
 DAYS="${DAYS:-14}"
 
 send_tg() {
-    local curl_proxy=()
+    local curl_proxy=() thread_args=()
     [ -n "$TG_PROXY" ] && curl_proxy=(--proxy "$TG_PROXY")
+    [ -n "$TG_THREAD" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD}")
     curl -s -m 30 "${curl_proxy[@]}" --get "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
         --data-urlencode "chat_id=${TG_CHAT}" \
+        "${thread_args[@]}" \
         --data-urlencode "text=$1" >/dev/null 2>&1
 }
 
@@ -1212,4 +1246,120 @@ EOL
     fi
 
     echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
+}
+
+# Read one value from cert-notify.conf (VAR='value' lines)
+cert_notify_get() {
+    local var="$1"
+    [ -r "${DIR_REMNAWAVE}cert-notify.conf" ] || return 1
+    sed -n "s|^${var}='\\(.*\\)'$|\\1|p" "${DIR_REMNAWAVE}cert-notify.conf"
+}
+
+# Write one value into cert-notify.conf, keeping the quoted format
+cert_notify_set() {
+    local var="$1" val="$2" conf="${DIR_REMNAWAVE}cert-notify.conf"
+    if grep -q "^${var}=" "$conf"; then
+        sed -i "s|^${var}=.*|${var}='${val}'|" "$conf"
+    else
+        echo "${var}='${val}'" >> "$conf"
+    fi
+}
+
+# Edit an already configured cert-notify.conf value by value. The saved
+# settings survive: nothing is deleted, only the edited field changes.
+manage_cert_notifications() {
+    local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
+
+    if [ ! -f "$notify_conf" ]; then
+        setup_cert_telegram_notifications
+        return
+    fi
+
+    . "$notify_conf"
+    TG_THREAD="${TG_THREAD:-}"
+
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[CERT_TG_SETUP]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[CERT_TG_TOKEN_SHORT]} (${TG_TOKEN:0:8}...)${COLOR_RESET}" >&2
+        echo -e "${COLOR_YELLOW}2. ${LANG[CERT_TG_CHAT_SHORT]} (${TG_CHAT}${TG_THREAD:+:$TG_THREAD})${COLOR_RESET}" >&2
+        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_TG_PROXY_SHORT]} (${TG_PROXY:-—})${COLOR_RESET}" >&2
+        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_TG_DAYS_SHORT]} ($DAYS)${COLOR_RESET}" >&2
+        echo -e "${COLOR_YELLOW}5. ${LANG[CERT_TG_TEST_SEND]}${COLOR_RESET}" >&2
+        echo -e ""
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}" >&2
+        echo -e ""
+
+        local choice value
+        reading "${LANG[CERT_PROMPT1]}" choice || return 0
+        case "$choice" in
+            1)
+                reading "${LANG[CERT_TG_TOKEN]}" value || continue
+                [ "$value" = "0" ] && continue
+                if ! [[ "$value" =~ ^[0-9A-Za-z:_-]+$ ]]; then
+                    echo -e "${COLOR_RED}${LANG[CERT_TG_BAD_INPUT]}${COLOR_RESET}"
+                    continue
+                fi
+                cert_notify_set TG_TOKEN "$value" && TG_TOKEN="$value"
+                ;;
+            2)
+                reading "${LANG[CERT_TG_CHAT]}" value || continue
+                [ "$value" = "0" ] && continue
+                if ! tg_parse_chat "$value"; then
+                    echo -e "${COLOR_RED}${LANG[CERT_TG_BAD_INPUT]}${COLOR_RESET}"
+                    continue
+                fi
+                cert_notify_set TG_CHAT "$TG_CHAT_ID"
+                cert_notify_set TG_THREAD "$TG_THREAD_ID"
+                TG_CHAT="$TG_CHAT_ID" TG_THREAD="$TG_THREAD_ID"
+                ;;
+            3)
+                reading "${LANG[CERT_TG_PROXY_URL]}" value || continue
+                if [ -z "$value" ]; then
+                    cert_notify_set TG_PROXY "" && TG_PROXY=""
+                else
+                    # Credentials may contain special characters — the user
+                    # types the password as is, it is encoded here
+                    value=$(percent_encode_proxy_auth "$value")
+                    if ! [[ "$value" =~ ^(https?|socks5h?)://[A-Za-z0-9.:_%@/?=-]+$ ]]; then
+                        echo -e "${COLOR_RED}${LANG[CERT_TG_BAD_INPUT]}${COLOR_RESET}"
+                        continue
+                    fi
+                    cert_notify_set TG_PROXY "$value" && TG_PROXY="$value"
+                fi
+                ;;
+            4)
+                reading "${LANG[CERT_TG_DAYS_PROMPT]} ($DAYS)" value || continue
+                if ! [[ "$value" =~ ^[0-9]+$ ]] || [ "$value" -lt 1 ] || [ "$value" -gt 90 ]; then
+                    echo -e "${COLOR_RED}${LANG[CERT_TG_BAD_INPUT]}${COLOR_RESET}"
+                    continue
+                fi
+                cert_notify_set DAYS "$value" && DAYS="$value"
+                ;;
+            5)
+                local curl_proxy=() thread_args=() response
+                [ -n "$TG_PROXY" ] && curl_proxy=(--proxy "$TG_PROXY")
+                [ -n "$TG_THREAD" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD}")
+                echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+                response=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                    --data-urlencode "chat_id=${TG_CHAT}" \
+                    "${thread_args[@]}" \
+                    --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
+                if printf '%s' "$response" | grep -q '"ok":true'; then
+                    echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
+                else
+                    echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+                fi
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                continue
+                ;;
+        esac
+        echo -e "${COLOR_GREEN}${LANG[CERT_TG_SAVED]}${COLOR_RESET}"
+    done
 }
