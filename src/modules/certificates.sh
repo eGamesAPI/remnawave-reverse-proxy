@@ -1106,6 +1106,18 @@ percent_encode_proxy_auth() {
     fi
 }
 
+# Print the Telegram API error description when present — "chat not found",
+# "chat_write_forbidden" etc. make the failure self-explanatory
+tg_show_error() {
+    local desc
+    desc=$(printf '%s' "$response" | sed -n 's/.*"description":"\([^"]*\)".*/\1/p')
+    if [ -n "$desc" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_TG_FAIL_DESC]}" "$desc")${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+    fi
+}
+
 # Split "chat_id[:thread_id]" into TG_CHAT_ID / TG_THREAD_ID — the thread
 # part targets a forum topic in the user's group
 tg_parse_chat() {
@@ -1186,7 +1198,7 @@ setup_cert_telegram_notifications() {
                 tg_test_send && break
             fi
         fi
-        echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+        tg_show_error
     done
 
     cat > "$notify_conf" <<EOL
@@ -1248,14 +1260,12 @@ EOL
     echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
 }
 
-# Read one value from cert-notify.conf (VAR='value' lines)
 cert_notify_get() {
     local var="$1"
     [ -r "${DIR_REMNAWAVE}cert-notify.conf" ] || return 1
     sed -n "s|^${var}='\\(.*\\)'$|\\1|p" "${DIR_REMNAWAVE}cert-notify.conf"
 }
 
-# Write one value into cert-notify.conf, keeping the quoted format
 cert_notify_set() {
     local var="$1" val="$2" conf="${DIR_REMNAWAVE}cert-notify.conf"
     if grep -q "^${var}=" "$conf"; then
@@ -1265,8 +1275,6 @@ cert_notify_set() {
     fi
 }
 
-# Edit an already configured cert-notify.conf value by value. The saved
-# settings survive: nothing is deleted, only the edited field changes.
 manage_cert_notifications() {
     local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
 
@@ -1349,7 +1357,7 @@ manage_cert_notifications() {
                 if printf '%s' "$response" | grep -q '"ok":true'; then
                     echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
                 else
-                    echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+                    tg_show_error
                 fi
                 ;;
             0)
