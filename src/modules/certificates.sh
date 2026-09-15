@@ -463,6 +463,7 @@ generate_new_certificates() {
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -474,7 +475,7 @@ generate_new_certificates() {
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
                 ;;
-            1|2|3)
+            1|2|3|4)
                 break
                 ;;
             *)
@@ -488,7 +489,11 @@ generate_new_certificates() {
         reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
     fi
 
-    if [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
+    if [ "$CERT_METHOD" == "4" ]; then
+        # 4 = own certificate: upload and verify, no certbot involved
+        manual_certificate_flow "$NEW_DOMAIN" || return 1
+        setup_cert_telegram_notifications
+    elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
         # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
         get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
@@ -670,6 +675,7 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -700,7 +706,7 @@ handle_certificates() {
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                     exit 1
                     ;;
-                1)
+                1|4)
                     break
                     ;;
                 2|3)
@@ -734,6 +740,18 @@ handle_certificates() {
     fi
 
     declare -A cert_domains_added
+
+    if [ "$need_certificates" = true ] && [ "$cert_method" = "4" ]; then
+        # Own certificates: the user uploads each missing domain; a
+        # single wildcard upload covers the rest of the domains
+        for domain in "${!domains_to_check_ref[@]}"; do
+            if check_certificates "$domain" > /dev/null 2>&1; then
+                continue
+            fi
+            manual_certificate_flow "$domain" || return 1
+        done
+        setup_cert_telegram_notifications
+    fi
 
     if [ "$need_certificates" = true ] && [ "$cert_method" == "1" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
@@ -932,18 +950,13 @@ verify_manual_certificate() {
     return 0
 }
 
-# Interactive: the user uploads their own certificate (bought etc.);
-# the script shows where to put it and verifies the pair
-manage_manual_certificate() {
-    local cert_domain cert_dir server_ip ready_answer
+# The upload-and-verify loop for one domain: shows where to put the
+# files and waits until the pair passes verification
+manual_certificate_flow() {
+    local cert_domain="$1"
+    local cert_dir="/etc/letsencrypt/live/$cert_domain"
+    local server_ip ready_answer
 
-    reading "${LANG[CERT_MANUAL_DOMAIN]}" cert_domain
-    if ! [[ "$cert_domain" =~ ^[a-zA-Z0-9.-]+$ ]]; then
-        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_BAD_DOMAIN]}${COLOR_RESET}"
-        return 1
-    fi
-
-    cert_dir="/etc/letsencrypt/live/$cert_domain"
     mkdir -p "$cert_dir"
 
     server_ip=$(curl -s -4 --max-time 10 ifconfig.me 2>/dev/null)
@@ -952,19 +965,32 @@ manage_manual_certificate() {
     printf "${COLOR_YELLOW}${LANG[CERT_MANUAL_UPLOAD]}${COLOR_RESET}\n" "$cert_dir" "$cert_dir" "${server_ip:-<server-ip>}" "$cert_dir"
 
     while true; do
-        reading "${LANG[CERT_MANUAL_READY]}" ready_answer
+        reading "${LANG[CERT_MANUAL_READY]}" ready_answer || return 1
         if [ "$ready_answer" = "0" ]; then
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            return 0
+            return 1
         fi
         if verify_manual_certificate "$cert_domain" "$cert_dir"; then
             chmod 600 "$cert_dir/privkey.pem"
             printf "${COLOR_GREEN}${LANG[CERT_MANUAL_OK]}${COLOR_RESET}\n" "$cert_dir"
-            setup_cert_telegram_notifications
             return 0
         fi
         echo -e "${COLOR_YELLOW}${LANG[CERT_MANUAL_RETRY]}${COLOR_RESET}"
     done
+}
+
+# Interactive menu entry: ask the domain, run the flow, offer reminders
+manage_manual_certificate() {
+    local cert_domain
+
+    reading "${LANG[CERT_MANUAL_DOMAIN]}" cert_domain
+    if ! [[ "$cert_domain" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+        echo -e "${COLOR_RED}${LANG[CERT_MANUAL_BAD_DOMAIN]}${COLOR_RESET}"
+        return 1
+    fi
+
+    manual_certificate_flow "$cert_domain" || return 1
+    setup_cert_telegram_notifications
 }
 
 # Optional daily Telegram reminders about expiring certificates
