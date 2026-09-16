@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.3.7"
+SCRIPT_VERSION="Dev 3.3.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -652,16 +652,20 @@ remove_script() {
     esac
 }
 
+purge_stale_caches() {
+    local stamp_stored=""
+    [ -f "$SOURCE_STAMP_FILE" ] && stamp_stored=$(cat "$SOURCE_STAMP_FILE" 2>/dev/null)
+    if [ "$stamp_stored" != "$SOURCE_STAMP" ]; then
+        rm -rf "${DIR_REMNAWAVE}api" "${DIR_REMNAWAVE}modules" "${DIR_REMNAWAVE}nginx" "${DIR_REMNAWAVE}caddy" "${DIR_REMNAWAVE}lang"
+    fi
+}
+
 install_script_if_missing() {
     local stamp_stored=""
     [ -f "$SOURCE_STAMP_FILE" ] && stamp_stored=$(cat "$SOURCE_STAMP_FILE" 2>/dev/null)
 
     if [ "$stamp_stored" != "$SOURCE_STAMP" ] || [ ! -f "${DIR_REMNAWAVE}remnawave_reverse" ] || [ ! -f "/usr/local/bin/remnawave_reverse" ]; then
         mkdir -p "${DIR_REMNAWAVE}"
-
-        # Modules cached from another repository or another version would be
-        # sourced verbatim by this script, so they go first.
-        rm -rf "${DIR_REMNAWAVE}api" "${DIR_REMNAWAVE}modules" "${DIR_REMNAWAVE}nginx" "${DIR_REMNAWAVE}caddy" "${DIR_REMNAWAVE}lang"
 
         local self_path=""
         if [ -n "${BASH_SOURCE[0]}" ]; then
@@ -1622,8 +1626,12 @@ load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
 
-
 detect_broken_ipv6
+
+check_root
+check_os
+
+purge_stale_caches
 
 if ! load_language; then
     show_language
@@ -1636,8 +1644,6 @@ if ! load_language; then
     esac
 fi
 
-check_root
-check_os
 install_script_if_missing
 check_update_status
 show_menu
