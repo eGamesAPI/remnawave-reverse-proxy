@@ -42,49 +42,41 @@ show_manage_panel_menu() {
         1)
             start_panel_node
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         2)
             stop_panel_node
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         3)
             update_panel_node
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         4)
             view_logs
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         5)
             run_remnawave_cli
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         6)
             manage_panel_access
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         "$opt_upgrade")
             upgrade_panel_to_v3
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         "$opt_minclientver")
             set_reality_min_client_ver
             sleep 2
-            log_clear
             show_manage_panel_menu
             ;;
         0)
@@ -673,7 +665,6 @@ manage_panel_access() {
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
             sleep 2
-            log_clear
             remnawave_reverse
             ;;
         *)
@@ -681,7 +672,6 @@ manage_panel_access() {
             ;;
     esac
     sleep 2
-    log_clear
     manage_panel_access
 }
 

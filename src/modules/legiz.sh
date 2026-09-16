@@ -22,7 +22,6 @@ manage_custom_legiz() {
                 if ! wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq >/dev/null 2>&1; then
                     echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOADING_YQ]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_custom_legiz
                     return 1
                 fi
@@ -30,7 +29,6 @@ manage_custom_legiz() {
                 if ! chmod +x /usr/bin/yq; then
                     echo -e "${COLOR_RED}${LANG[ERROR_SETTING_YQ_PERMISSIONS]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_custom_legiz
                     return 1
                 fi
@@ -42,13 +40,11 @@ manage_custom_legiz() {
             if ! /usr/bin/yq --version >/dev/null 2>&1; then
                 echo -e "${COLOR_RED}${LANG[YQ_DOESNT_WORK_AFTER_INSTALLATION]}${COLOR_RESET}"
                 sleep 2
-                log_clear
                 manage_custom_legiz
                 return 1
             fi
 
             manage_sub_page_upload
-            log_clear
             manage_custom_legiz
             ;;
         0)
@@ -58,7 +54,6 @@ manage_custom_legiz() {
         *)
             echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
             sleep 2
-            log_clear
             manage_custom_legiz
             ;;
     esac
@@ -131,7 +126,6 @@ manage_sub_page_upload() {
     if ! docker ps -a --filter "name=remnawave-subscription-page" --format '{{.Names}}' | grep -q "^remnawave-subscription-page$"; then
         printf "${COLOR_RED}${LANG[CONTAINER_NOT_FOUND]}${COLOR_RESET}\n" "remnawave-subscription-page"
         sleep 2
-        log_clear
         exit 1
     fi
 
@@ -158,7 +152,6 @@ manage_sub_page_upload() {
             if ! download_with_fallback "$index_url" "$index_file"; then
                 echo -e "${COLOR_RED}${LANG[ERROR_FETCH_SUB_PAGE]}${COLOR_RESET}"
                 sleep 2
-                log_clear
                 return 1
             fi
 
@@ -174,14 +167,12 @@ manage_sub_page_upload() {
 
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            log_clear
             manage_custom_legiz
             ;;
 
         *)
             echo -e "${COLOR_YELLOW}${LANG[SUB_PAGE_SELECT_CHOICE]}${COLOR_RESET}"
             sleep 2
-            log_clear
             manage_sub_page_upload
             return 1
             ;;
