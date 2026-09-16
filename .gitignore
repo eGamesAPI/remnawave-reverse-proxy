@@ -9,3 +9,8 @@ docs/src/assets/ru/*.svg
 docs/node_modules/
 docs/dist/
 docs/.astro/
+
+# Local drafts and notes — never meant for the repository
+changelog_draft.md
+*.draft.md
+*.local.md
