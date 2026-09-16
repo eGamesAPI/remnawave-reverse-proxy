@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.3.5"
+SCRIPT_VERSION="Dev 3.3.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -334,6 +334,11 @@ reading() {
     read -rp " $(question "$1")" "$2"
 }
 
+reading_yn() {
+    printf ' %s' "$(question "$1")"
+    read_yn "$2"
+}
+
 read_yn() {
     local __var="$1" __ans
     while true; do
@@ -475,9 +480,8 @@ update_remnawave_reverse() {
     fi
 
     printf "${COLOR_YELLOW}${LANG[UPDATE_AVAILABLE]}${COLOR_RESET}\n" "$remote_version" "$SCRIPT_VERSION"
-    reading "${LANG[UPDATE_CONFIRM]}" confirm_update
 
-    if [[ "$confirm_update" != "y" && "$confirm_update" != "Y" ]]; then
+    if ! reading_yn "${LANG[UPDATE_CONFIRM]}" confirm_update; then
         echo -e "${COLOR_YELLOW}${LANG[UPDATE_CANCELLED]}${COLOR_RESET}"
         return 0
     fi
@@ -917,9 +921,7 @@ manage_install() {
             echo -e ""
             echo -e "${COLOR_YELLOW}${LANG[PANEL_NODE_SINGLE_SERVER_RECOMMENDATION]}${COLOR_RESET}"
             echo -e ""
-            reading "${LANG[CONFIRM_CONTINUE]}" confirm_install
-            
-            if [[ "$confirm_install" != "y" && "$confirm_install" != "Y" ]]; then
+            if ! reading_yn "${LANG[CONFIRM_CONTINUE]}" confirm_install; then
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 exit 0
             fi
@@ -1455,10 +1457,7 @@ check_domain() {
             echo -e "${COLOR_YELLOW}${LANG[WARNING_LABEL]}${COLOR_RESET}"
             echo -e "${COLOR_RED}${LANG[CHECK_DOMAIN_IP_FAIL]}${COLOR_RESET}"
             printf "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_IP_FAIL_INSTRUCTION]}${COLOR_RESET}\n" "$domain" "$server_ip"
-            reading "${LANG[CONFIRM_PROMPT]}" confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                return 2
-            fi
+            reading_yn "${LANG[CONFIRM_PROMPT]}" confirm || return 2
         fi
         return 1
     fi
@@ -1533,12 +1532,7 @@ check_domain() {
             printf "${COLOR_RED}${LANG[CHECK_DOMAIN_MISMATCH]}${COLOR_RESET}\n" "$domain" "${domain_ip:-—}" "$server_ip"
             echo -e "${COLOR_YELLOW}${LANG[CHECK_DOMAIN_MISMATCH_INSTRUCTION]}${COLOR_RESET}"
         fi
-        reading "${LANG[CONFIRM_PROMPT]}" confirm
-        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-            return 1
-        else
-            return 2
-        fi
+        reading_yn "${LANG[CONFIRM_PROMPT]}" confirm || return 2
     fi
     return 1
 }
