@@ -181,31 +181,26 @@ manage_warp_native() {
                ! grep -q "remnanode:" /opt/remnanode/docker-compose.yml 2>/dev/null; then
                 echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
                 sleep 2
-                log_clear
                 manage_warp_native
                 return
             fi
             warp_run_script "install.sh"
             sleep 2
-            log_clear
             manage_warp_native
             ;;
         2)
             warp_run_script "uninstall.sh"
             sleep 2
-            log_clear
             manage_warp_native
             ;;
         3)
             manage_warp_add_config
             sleep 2
-            log_clear
             manage_warp_native
             ;;
         4)
             manage_warp_delete_settings
             sleep 2
-            log_clear
             manage_warp_native
             ;;
         0)
@@ -214,7 +209,6 @@ manage_warp_native() {
         *)
             echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE]}${COLOR_RESET}"
             sleep 2
-            log_clear
             manage_warp_native
             ;;
     esac

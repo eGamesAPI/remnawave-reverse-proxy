@@ -269,31 +269,25 @@ manage_certificates() {
             if ! command -v certbot >/dev/null 2>&1; then
                 install_packages || {
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CERTBOT]}${COLOR_RESET}"
-                    log_clear
                     return 1
                 }
             fi
             update_current_certificates
-            log_clear
             ;;
         2)
             if ! command -v certbot >/dev/null 2>&1; then
                 install_packages || {
                     echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_CERTBOT]}${COLOR_RESET}"
-                    log_clear
                     return 1
                 }
             fi
             generate_new_certificates
-            log_clear
             ;;
         3)
             manage_manual_certificate
-            log_clear
             ;;
         4)
             manage_cert_notifications
-            log_clear
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -479,7 +473,6 @@ EOL
     done
 
     sleep 2
-    log_clear
     remnawave_reverse
 }
 
@@ -549,7 +542,6 @@ generate_new_certificates() {
     fi
 
     sleep 2
-    log_clear
     remnawave_reverse
 }
 

@@ -20,7 +20,6 @@ manage_selfsteal_templates() {
     if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
         echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
         sleep 2
-        log_clear
         remnawave_reverse
         return
     fi
@@ -31,25 +30,21 @@ manage_selfsteal_templates() {
         1)
             randomhtml "simple"
             sleep 2
-            log_clear
             manage_selfsteal_templates
             ;;
         2)
             randomhtml_choose "sni"
             sleep 2
-            log_clear
             manage_selfsteal_templates
             ;;
         3)
             randomhtml_choose "nothing"
             sleep 2
-            log_clear
             manage_selfsteal_templates
             ;;
         4)
             randomhtml_clone
             sleep 2
-            log_clear
             manage_selfsteal_templates
             ;;
         0)
@@ -58,7 +53,6 @@ manage_selfsteal_templates() {
         *)
             echo -e "${COLOR_YELLOW}${LANG[INVALID_TEMPLATE_CHOICE]}${COLOR_RESET}"
             sleep 2
-            log_clear
             manage_selfsteal_templates
             ;;
     esac

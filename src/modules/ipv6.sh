@@ -47,23 +47,19 @@ manage_ipv6() {
             1)
                 enable_ipv6
                 sleep 2
-                log_clear
                 ;;
             2)
                 disable_ipv6
                 sleep 2
-                log_clear
                 ;;
             0)
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                log_clear
                 remnawave_reverse
                 return
                 ;;
             *)
                 echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
                 sleep 2
-                log_clear
                 ;;
         esac
     done
