@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.3.3"
+SCRIPT_VERSION="Dev 3.3.4"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -36,21 +36,69 @@ COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
 COLOR_GRAY='\033[0;90m'
 
+# Some boxes have an IPv6 route that leads nowhere: DNS answers with an AAAA
+# record, the TCP SYN is never answered, and every download silently stalls
+# until its connect timeout — to the user the script "freezes" right after
+# the language choice. Probe IPv6 once at startup; when it is dead, pin curl
+# and wget to IPv4 for the rest of the run. IPv6-only boxes pass the probe
+# and keep the default behaviour.
+CURL_IP_FLAGS=""
+WGET_IP_FLAGS=""
+detect_broken_ipv6() {
+    command -v curl >/dev/null 2>&1 || return 0
+    if curl -6 -s --connect-timeout 5 --max-time 8 -o /dev/null https://api64.ipify.org 2>/dev/null; then
+        return 0
+    fi
+    CURL_IP_FLAGS="-4"
+    WGET_IP_FLAGS="-4"
+}
+
+# Mirror URLs for a raw.githubusercontent file URL: the original first, then
+# public proxies; the branch part is stripped from the original URL so every
+# mirror follows SOURCE_BRANCH too.
+script_mirror_urls() {
+    local file_url="$1"
+    printf '%s\n' \
+        "$file_url" \
+        "https://cdn.jsdelivr.net/gh/${SOURCE_REPO}@${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}" \
+        "https://raw.githack.com/${SOURCE_REPO}/${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}" \
+        "https://gh-proxy.com/${file_url}"
+}
+
+# SCRIPT_VERSION from the remote install script, tried over every mirror and
+# with both curl and wget. A box that cannot reach raw.githubusercontent.com
+# must still learn that an update exists.
+fetch_remote_script_version() {
+    local mirrors mirror head version
+    mapfile -t mirrors < <(script_mirror_urls "$SCRIPT_URL")
+
+    for mirror in "${mirrors[@]}"; do
+        head=""
+        if command -v curl >/dev/null 2>&1; then
+            head=$(curl -sL $CURL_IP_FLAGS --connect-timeout 10 --max-time 20 "$mirror" 2>/dev/null | head -n 5)
+        elif command -v wget >/dev/null 2>&1; then
+            head=$(wget $WGET_IP_FLAGS -q -T 10 -t 1 -O- "$mirror" 2>/dev/null | head -n 5)
+        else
+            return 1
+        fi
+        version=$(printf '%s\n' "$head" | grep -m 1 '^SCRIPT_VERSION=' | cut -d'"' -f2)
+        if [ -n "$version" ]; then
+            echo "$version"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Download file with multiple mirrors and validation
 download_with_mirrors() {
     local file_url="$1"
     local dest_file="$2"
     local file_type="${3:-script}"  # script, lang, module
     
-    # Mirror URLs (GitHub raw content proxies); the branch part is stripped
-    # from the original URL so every mirror follows SOURCE_BRANCH too.
-    local mirrors=(
-        "$file_url"
-        "https://cdn.jsdelivr.net/gh/${SOURCE_REPO}@${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
-        "https://raw.githack.com/${SOURCE_REPO}/${SOURCE_BRANCH}/${file_url#*${SOURCE_BRANCH}/}"
-        "https://gh-proxy.com/${file_url}"
-    )
-    
+    local mirrors
+    mapfile -t mirrors < <(script_mirror_urls "$file_url")
+
     local temp_file="${dest_file}.tmp"
     local download_success=false
     local http_code=""
@@ -58,7 +106,7 @@ download_with_mirrors() {
     # Try each mirror
     for mirror_url in "${mirrors[@]}"; do
         if command -v curl &> /dev/null; then
-            http_code=$(curl -sL -w "%{http_code}" --connect-timeout 10 --max-time 30 "$mirror_url" -o "$temp_file" 2>/dev/null)
+            http_code=$(curl -sL $CURL_IP_FLAGS -w "%{http_code}" --connect-timeout 10 --max-time 30 "$mirror_url" -o "$temp_file" 2>/dev/null)
             if [ "$http_code" = "200" ] && [ -s "$temp_file" ]; then
                 # Validate file content
                 if validate_downloaded_file "$temp_file" "$file_type"; then
@@ -67,7 +115,7 @@ download_with_mirrors() {
                 fi
             fi
         elif command -v wget &> /dev/null; then
-            if wget -q --timeout=10 --tries=1 "$mirror_url" -O "$temp_file" 2>/dev/null; then
+            if wget $WGET_IP_FLAGS -q --timeout=10 --tries=1 "$mirror_url" -O "$temp_file" 2>/dev/null; then
                 if [ -s "$temp_file" ]; then
                     # Validate file content
                     if validate_downloaded_file "$temp_file" "$file_type"; then
@@ -135,9 +183,9 @@ download_script_file() {
 
     rm -f "$dest_file"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 10 --speed-limit 1024 --speed-time 60 -o "$dest_file" "$url" 2>/dev/null || return 1
+        curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --speed-limit 1024 --speed-time 60 -o "$dest_file" "$url" 2>/dev/null || return 1
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --timeout=60 --tries=1 -O "$dest_file" "$url" 2>/dev/null || return 1
+        wget $WGET_IP_FLAGS -q --timeout=60 --tries=1 -O "$dest_file" "$url" 2>/dev/null || return 1
     else
         return 1
     fi
@@ -256,9 +304,9 @@ set_language() {
          if ! download_with_mirrors "$lang_url" "$lang_file" "lang"; then
              # Fallback: try direct download if mirrors fail
              if command -v curl &> /dev/null; then
-                 curl -sL "$lang_url" -o "$lang_file" 2>/dev/null
+                 curl -sL $CURL_IP_FLAGS "$lang_url" -o "$lang_file" 2>/dev/null
              elif command -v wget &> /dev/null; then
-                 wget -q "$lang_url" -O "$lang_file" 2>/dev/null
+                 wget $WGET_IP_FLAGS -q "$lang_url" -O "$lang_file" 2>/dev/null
              fi
          fi
      fi
@@ -276,9 +324,9 @@ set_language() {
          else
              # Last resort: direct download
              if command -v curl &> /dev/null; then
-                 source <(curl -sL "$en_url" 2>/dev/null)
+                 source <(curl -sL $CURL_IP_FLAGS "$en_url" 2>/dev/null)
              elif command -v wget &> /dev/null; then
-                 source <(wget -qO- "$en_url" 2>/dev/null)
+                 source <(wget $WGET_IP_FLAGS -qO- "$en_url" 2>/dev/null)
              fi
          fi
      fi
@@ -387,9 +435,21 @@ allow_ssh_ports() {
 }
 
 check_os() {
-    if ! grep -q "bullseye" /etc/os-release && ! grep -q "bookworm" /etc/os-release && ! grep -q "jammy" /etc/os-release && ! grep -q "noble" /etc/os-release && ! grep -q "trixie" /etc/os-release; then
-        error "${LANG[ERROR_OS]}"
+    local os_id os_major
+    os_id=$(sed -n 's/^ID=//p' /etc/os-release | head -n 1)
+    os_id="${os_id//\"/}"
+    os_major=$(sed -n 's/^VERSION_ID=//p' /etc/os-release | head -n 1)
+    os_major="${os_major%%.*}"
+
+    # Debian 11+ and Ubuntu 22.04+, by version numbers rather than release
+    # codenames so future releases pass without another edit here.
+    if [ "$os_id" = "debian" ] && [ "$os_major" -ge 11 ] 2>/dev/null; then
+        return 0
     fi
+    if [ "$os_id" = "ubuntu" ] && [ "$os_major" -ge 22 ] 2>/dev/null; then
+        return 0
+    fi
+    error "${LANG[ERROR_OS]}"
 }
 
 check_root() {
@@ -398,18 +458,12 @@ check_root() {
     fi
 }
 
-log_clear() {
-  sed -i -e 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$LOGFILE"
-}
-
-log_entry() {
-  mkdir -p ${DIR_REMNAWAVE}
-  LOGFILE="${DIR_REMNAWAVE}remnawave_reverse.log"
-  exec > >(tee -a "$LOGFILE") 2>&1
-}
-
 update_remnawave_reverse() {
-    local remote_version=$(curl -s "$SCRIPT_URL" | grep -m 1 "SCRIPT_VERSION=" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
+    local remote_version
+    if ! remote_version=$(fetch_remote_script_version); then
+        echo -e "${COLOR_YELLOW}${LANG[VERSION_CHECK_FAILED]}${COLOR_RESET}"
+        return 1
+    fi
     local update_script="${DIR_REMNAWAVE}remnawave_reverse"
     local bin_link="/usr/local/bin/remnawave_reverse"
 
@@ -437,6 +491,20 @@ update_remnawave_reverse() {
 
     mkdir -p "${DIR_REMNAWAVE}"
 
+    # Older releases kept appending to these logs (the script itself through
+    # tee, cron rules through a redirect); this version no longer writes
+    # either, and an update is the one moment the old copies can be
+    # reclaimed.
+    if crontab -u root -l 2>/dev/null | grep -q "cron_jobs.log"; then
+        local cron_old=">> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
+        local cron_new="> /dev/null 2>&1"
+        crontab -u root -l 2>/dev/null \
+            | awk -v old="$cron_old" -v new="$cron_new" \
+                  '{ if (i = index($0, old)) print substr($0, 1, i - 1) new; else print }' \
+            | crontab -u root -
+    fi
+    rm -f "${DIR_REMNAWAVE}remnawave_reverse.log" "${DIR_REMNAWAVE}cron_jobs.log"
+
     local current_lang="en"
     if [ -f "$LANG_FILE" ]; then
         case $(cat "$LANG_FILE") in
@@ -454,53 +522,22 @@ update_remnawave_reverse() {
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
 
-    # Nginx modules
-    local nginx_modules=("install_panel_node" "install_panel" "install_node")
-    for module in "${nginx_modules[@]}"; do
-        local module_file="${DIR_REMNAWAVE}nginx/${module}.sh"
-        if [ -f "$module_file" ]; then
-            if load_module "$module" "nginx" "true"; then
-                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "nginx/${module}.sh"
+    # Refresh every module a previous run cached under DIR_REMNAWAVE — the
+    # files there are exactly what this script downloaded, so scanning them
+    # picks up new modules (dns_records, certificates, tinyauth, install_sub,
+    # ...) without maintaining a name list by hand.
+    local module_dir module_file module_name
+    for module_dir in nginx modules caddy api; do
+        for module_file in "${DIR_REMNAWAVE}${module_dir}"/*.sh; do
+            [ -f "$module_file" ] || continue
+            module_name=$(basename "$module_file" .sh)
+            if load_module "$module_name" "$module_dir" "true"; then
+                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "${module_dir}/${module_name}.sh"
             else
-                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "nginx/${module}.sh"
+                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "${module_dir}/${module_name}.sh"
             fi
-        fi
+        done
     done
-
-    # Modules (common)
-    local common_modules=("add_node" "manage_panel" "warp" "ipv6" "selfsteal_templates" "legiz")
-    for module in "${common_modules[@]}"; do
-        local module_file="${DIR_REMNAWAVE}modules/${module}.sh"
-        if [ -f "$module_file" ]; then
-            if load_module "$module" "modules" "true"; then
-                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "modules/${module}.sh"
-            else
-                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "modules/${module}.sh"
-            fi
-        fi
-    done
-
-    # Caddy modules
-    local caddy_modules=("install_panel_node" "install_panel" "install_node")
-    for module in "${caddy_modules[@]}"; do
-        local module_file="${DIR_REMNAWAVE}caddy/${module}.sh"
-        if [ -f "$module_file" ]; then
-            if load_module "$module" "caddy" "true"; then
-                printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "caddy/${module}.sh"
-            else
-                printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "caddy/${module}.sh"
-            fi
-        fi
-    done
-
-    local api_file="${DIR_REMNAWAVE}api/remnawave_api.sh"
-    if [ -f "$api_file" ]; then
-        if load_module "remnawave_api" "api" "true"; then
-            printf "${COLOR_GREEN}${LANG[LANG_FILE_UPDATED]}${COLOR_RESET}\n" "remnawave_api.sh"
-        else
-            printf "${COLOR_RED}${LANG[LANG_FILE_UPDATE_FAILED]}${COLOR_RESET}\n" "remnawave_api.sh"
-        fi
-    fi
 
     echo -e ""
 
@@ -535,7 +572,7 @@ update_remnawave_reverse() {
         exit 0
     else
         # Fallback: try direct download with wget
-        if wget -q -O "$temp_script" "$SCRIPT_URL" 2>/dev/null; then
+        if wget $WGET_IP_FLAGS -q -O "$temp_script" "$SCRIPT_URL" 2>/dev/null; then
             local downloaded_version=$(grep -m 1 "SCRIPT_VERSION=" "$temp_script" | sed -E 's/.*SCRIPT_VERSION="([^"]+)".*/\1/')
             if [ "$downloaded_version" != "$remote_version" ]; then
                 echo -e "${COLOR_RED}${LANG[UPDATE_FAILED]}${COLOR_RESET}"
@@ -651,9 +688,9 @@ install_script_if_missing() {
             cp -f "$self_path" "$staged" 2>/dev/null
         elif ! download_with_mirrors "$SCRIPT_URL" "$staged" "script"; then
             if command -v curl &> /dev/null; then
-                curl -fsSL "$SCRIPT_URL" -o "$staged" 2>/dev/null
+                curl -fsSL $CURL_IP_FLAGS "$SCRIPT_URL" -o "$staged" 2>/dev/null
             elif command -v wget &> /dev/null; then
-                wget -q -O "$staged" "$SCRIPT_URL" 2>/dev/null
+                wget $WGET_IP_FLAGS -q -O "$staged" "$SCRIPT_URL" 2>/dev/null
             fi
         fi
 
@@ -717,20 +754,8 @@ generate_password() {
 
 #Displaying the availability of the update in the menu
 check_update_status() {
-    local TEMP_REMOTE_VERSION_FILE
-    TEMP_REMOTE_VERSION_FILE=$(mktemp)
-
-    if ! curl -fsSL "$SCRIPT_URL" 2>/dev/null | head -n 100 > "$TEMP_REMOTE_VERSION_FILE"; then
-        UPDATE_AVAILABLE=false
-        rm -f "$TEMP_REMOTE_VERSION_FILE"
-        return
-    fi
-
     local REMOTE_VERSION
-    REMOTE_VERSION=$(grep -m 1 "^SCRIPT_VERSION=" "$TEMP_REMOTE_VERSION_FILE" | cut -d'"' -f2)
-    rm -f "$TEMP_REMOTE_VERSION_FILE"
-
-    if [[ -z "$REMOTE_VERSION" ]]; then
+    if ! REMOTE_VERSION=$(fetch_remote_script_version); then
         UPDATE_AVAILABLE=false
         return
     fi
@@ -922,7 +947,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -934,7 +958,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -942,20 +965,17 @@ manage_install() {
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    log_clear
                     remnawave_reverse
                     return
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_install
                     return
                     ;;
             esac
             sleep 2
-            log_clear
             ;;
         2)
             PANEL_WITH_SUB=true
@@ -967,7 +987,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -979,7 +998,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -987,26 +1005,22 @@ manage_install() {
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    log_clear
                     remnawave_reverse
                     return
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_install
                     return
                     ;;
             esac
             sleep 2
-            log_clear
             ;;
         3)
             load_add_node_module
             load_api_module
             add_node_to_panel
-            log_clear
             ;;
         4)
             show_webserver_select
@@ -1016,7 +1030,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1027,7 +1040,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1035,20 +1047,17 @@ manage_install() {
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    log_clear
                     remnawave_reverse
                     return
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_install
                     return
                     ;;
             esac
             sleep 2
-            log_clear
             ;;
         5)
             PANEL_WITH_SUB=false
@@ -1060,7 +1069,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1072,7 +1080,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1080,20 +1087,17 @@ manage_install() {
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    log_clear
                     remnawave_reverse
                     return
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_install
                     return
                     ;;
             esac
             sleep 2
-            log_clear
             ;;
         6)
             show_webserver_select
@@ -1103,7 +1107,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1114,7 +1117,6 @@ manage_install() {
                     if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
                         install_packages || {
                             echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                            log_clear
                             exit 1
                         }
                     fi
@@ -1122,30 +1124,25 @@ manage_install() {
                     ;;
                 0)
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    log_clear
                     remnawave_reverse
                     return
                     ;;
                 *)
                     echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
                     sleep 2
-                    log_clear
                     manage_install
                     return
                     ;;
             esac
             sleep 2
-            log_clear
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            log_clear
             remnawave_reverse
             ;;
         *)
             echo -e "${COLOR_YELLOW}${LANG[INSTALL_INVALID_CHOICE]}${COLOR_RESET}"
             sleep 2
-            log_clear
             manage_install
             ;;
     esac
@@ -1206,7 +1203,6 @@ choose_reinstall_type() {
                             exit 1
                             ;;
                     esac
-                    log_clear
                 else
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                     exit 0
@@ -1239,7 +1235,6 @@ choose_reinstall_type() {
                             exit 1
                             ;;
                     esac
-                    log_clear
                 else
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                     exit 0
@@ -1284,7 +1279,7 @@ reinstall_subscription() {
 
 add_cron_rule() {
     local rule="$1"
-    local logged_rule="${rule} >> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
+    local logged_rule="${rule} > /dev/null 2>&1"
 
     if ! crontab -u root -l > /dev/null 2>&1; then
         crontab -u root -l 2>/dev/null | crontab -u root -
@@ -1483,7 +1478,21 @@ check_domain() {
         return 1
     fi
 
-    local cf_ranges=$(curl -s https://www.cloudflare.com/ips-v4)
+    # The list barely changes, so it is cached for a week instead of being
+    # fetched on every domain check. A failed refresh falls back to the
+    # stale cache rather than to "not Cloudflare".
+    local cf_cache="${DIR_REMNAWAVE}cloudflare_ips_v4.cache"
+    local cf_ranges=""
+    if [ -s "$cf_cache" ] && [ -z "$(find "$cf_cache" -mtime +7 2>/dev/null)" ]; then
+        cf_ranges=$(cat "$cf_cache")
+    else
+        cf_ranges=$(curl -s $CURL_IP_FLAGS --connect-timeout 10 --max-time 15 https://www.cloudflare.com/ips-v4)
+        if echo "$cf_ranges" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$'; then
+            printf '%s\n' "$cf_ranges" > "$cf_cache"
+        elif [ -s "$cf_cache" ]; then
+            cf_ranges=$(cat "$cf_cache")
+        fi
+    fi
     local cf_array=()
     if [ -n "$cf_ranges" ]; then
         IFS=$'\n' read -r -d '' -a cf_array <<<"$cf_ranges"
@@ -1576,7 +1585,7 @@ load_module() {
             # Fallback: try direct download if mirrors fail
             if command -v curl &> /dev/null; then
                 local http_code
-                http_code=$(curl -sL -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
+                http_code=$(curl -sL $CURL_IP_FLAGS -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
                 if [ "$http_code" != "200" ] || [ ! -s "$module_file" ]; then
                     if [ -f "$backup_file" ]; then
                         mv "$backup_file" "$module_file"
@@ -1584,7 +1593,7 @@ load_module() {
                     return 1
                 fi
             elif command -v wget &> /dev/null; then
-                wget -q "$module_url" -O "$module_file" 2>/dev/null
+                wget $WGET_IP_FLAGS -q "$module_url" -O "$module_file" 2>/dev/null
                 if [ ! -s "$module_file" ]; then
                     if [ -f "$backup_file" ]; then
                         mv "$backup_file" "$module_file"
@@ -1630,7 +1639,8 @@ load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
 
-log_entry
+
+detect_broken_ipv6
 
 if ! load_language; then
     show_language
@@ -1666,21 +1676,18 @@ case $OPTION in
         load_selfsteal_templates_module
         manage_selfsteal_templates
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     5)
         load_legiz_module
         manage_custom_legiz
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     6)
         load_warp_module
         manage_warp_native
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     7)
@@ -1690,27 +1697,23 @@ case $OPTION in
             run_backup_restore
         fi
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     8)
         load_ipv6_module
         manage_ipv6
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     9)
         load_certificates_module
         manage_certificates
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     10)
         update_remnawave_reverse
         sleep 2
-        log_clear
         remnawave_reverse
         ;;
     11)
