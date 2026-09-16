@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.3.6"
+SCRIPT_VERSION="Dev 3.3.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -8,7 +8,7 @@ LANG_FILE="${DIR_REMNAWAVE}selected_language"
 # Flip SOURCE_BRANCH to "dev" to point every download at the development
 # branch at once — no other URL in this file mentions the branch.
 SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
-SOURCE_BRANCH="dev"
+SOURCE_BRANCH="main"
 SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
 
 SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
@@ -873,7 +873,11 @@ show_menu() {
     echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
     echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
-    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+    if [[ "$UPDATE_AVAILABLE" == true ]]; then
+        echo -e "${COLOR_YELLOW}10. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+    fi
     echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
