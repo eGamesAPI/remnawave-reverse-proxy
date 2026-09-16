@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "type": "module",
-  "version": "v3.3.1",
+  "version": "v3.3.2",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
