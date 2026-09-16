@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.3.4"
+SCRIPT_VERSION="Dev 3.3.5"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -36,12 +36,6 @@ COLOR_WHITE="\033[1;37m"
 COLOR_RED="\033[1;31m"
 COLOR_GRAY='\033[0;90m'
 
-# Some boxes have an IPv6 route that leads nowhere: DNS answers with an AAAA
-# record, the TCP SYN is never answered, and every download silently stalls
-# until its connect timeout — to the user the script "freezes" right after
-# the language choice. Probe IPv6 once at startup; when it is dead, pin curl
-# and wget to IPv4 for the rest of the run. IPv6-only boxes pass the probe
-# and keep the default behaviour.
 CURL_IP_FLAGS=""
 WGET_IP_FLAGS=""
 detect_broken_ipv6() {
@@ -440,9 +434,8 @@ check_os() {
     os_id="${os_id//\"/}"
     os_major=$(sed -n 's/^VERSION_ID=//p' /etc/os-release | head -n 1)
     os_major="${os_major%%.*}"
+    os_major="${os_major//\"/}"
 
-    # Debian 11+ and Ubuntu 22.04+, by version numbers rather than release
-    # codenames so future releases pass without another edit here.
     if [ "$os_id" = "debian" ] && [ "$os_major" -ge 11 ] 2>/dev/null; then
         return 0
     fi
@@ -491,10 +484,6 @@ update_remnawave_reverse() {
 
     mkdir -p "${DIR_REMNAWAVE}"
 
-    # Older releases kept appending to these logs (the script itself through
-    # tee, cron rules through a redirect); this version no longer writes
-    # either, and an update is the one moment the old copies can be
-    # reclaimed.
     if crontab -u root -l 2>/dev/null | grep -q "cron_jobs.log"; then
         local cron_old=">> ${DIR_REMNAWAVE}cron_jobs.log 2>&1"
         local cron_new="> /dev/null 2>&1"
@@ -522,10 +511,6 @@ update_remnawave_reverse() {
 	#Update modules
     echo -e "${COLOR_YELLOW}${LANG[UPDATING_MODULES]}${COLOR_RESET}"
 
-    # Refresh every module a previous run cached under DIR_REMNAWAVE — the
-    # files there are exactly what this script downloaded, so scanning them
-    # picks up new modules (dns_records, certificates, tinyauth, install_sub,
-    # ...) without maintaining a name list by hand.
     local module_dir module_file module_name
     for module_dir in nginx modules caddy api; do
         for module_file in "${DIR_REMNAWAVE}${module_dir}"/*.sh; do
