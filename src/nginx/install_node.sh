@@ -41,13 +41,7 @@ install_node_nginx() {
     done
 
     echo -e "${COLOR_YELLOW}${LANG[CERT_CONFIRM]}${COLOR_RESET}"
-    read confirm
-    echo
-
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
-    fi
+    read_yn confirm || { echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"; exit 1; }
 
 SELFSTEAL_BASE_DOMAIN=$(extract_domain "$SELFSTEAL_DOMAIN")
 
@@ -82,6 +76,7 @@ EOL
 
 installation_node() {
     check_node_not_running
+    check_port_443_free
     load_certificates_module
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     sleep 1
