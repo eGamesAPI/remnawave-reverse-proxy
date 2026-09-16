@@ -279,6 +279,7 @@ services:
       command: sh -c 'rm -f /dev/shm/nginx.sock && caddy run --config /etc/caddy/Caddyfile --adapter caddyfile'
       environment:
           - PANEL_DOMAIN=${PANEL_DOMAIN}
+          - SUB_DOMAIN=${SUB_DOMAIN}
           - BACKEND_URL=127.0.0.1:3000
           - SUB_BACKEND_URL=127.0.0.1:3010${AUTHP_ENV}
       healthcheck:
@@ -513,6 +514,7 @@ EOL
 
 installation_panel_caddy() {
     check_panel_not_running
+    check_port_443_free
     install_panel_caddy
 	
     echo -e "${COLOR_YELLOW}${LANG[STARTING_PANEL]}${COLOR_RESET}"

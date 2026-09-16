@@ -577,6 +577,7 @@ EOL
 
 installation_panel_node_caddy() {
     check_panel_not_running
+    check_port_443_free
     check_node_not_running
     install_panel_node_caddy
 	

@@ -41,13 +41,7 @@ install_node_caddy() {
     done
 
     echo -e "${COLOR_YELLOW}${LANG[CERT_CONFIRM]}${COLOR_RESET}"
-    read confirm
-    echo
-
-    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-        echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
-    fi
+    read_yn confirm || { echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"; exit 1; }
 
     cat > docker-compose.yml <<EOL
 x-common: &common
@@ -141,6 +135,7 @@ EOL
 
 installation_node_caddy() {
     check_node_not_running
+    check_port_443_free
     echo -e "${COLOR_YELLOW}${LANG[INSTALLING_NODE]}${COLOR_RESET}"
     install_node_caddy
 
