@@ -1,11 +1,20 @@
 #!/bin/bash
 # Module: Node Plugins — Torrent Blocker, Ingress Filter and Egress Filter
-# management via the panel API. Depends on the api module (make_api_request,
-# get_panel_token) being loaded and on $token being set beforehand.
+#
+# All three features live as sections of ONE plugin record: a node has a
+# single activePluginUuid, so separate records could never be active on the
+# same node. Every config change re-binds the plugin to all enabled nodes
+# (POST /api/nodes/bulk-actions/update also pushes the config to them).
 
-NP_PLUGIN_NAME="Torrent Blocker"
+NP_PLUGIN_NAME="Reverse Node Plugins"
 NP_PANEL_HOST="127.0.0.1:3000"
 NP_DEFAULT_DURATION=3600
+
+# jq literals: sections of the shared pluginConfig and every record name the
+# script has ever used (the shared one first, then legacy per-feature names —
+# matched to find and merge records created by older script versions).
+NP_PLUGIN_SECTIONS='["torrentBlocker","ingressFilter","egressFilter"]'
+NP_PLUGIN_KNOWN_NAMES='["Reverse Node Plugins","Torrent Blocker","Ingress Filter","Egress Filter"]'
 
 np_api() {
     local method="$1" path="$2" data="${3:-}"
@@ -43,30 +52,42 @@ np_fetch_plugins() {
 # The ?_=<timestamp> cache-buster matters here as much as on the list: the
 # panel caches this GET too, and a stale reply showed an outdated entry
 # count right after list changes.
-np_fetch_plugin_config() {
+np_plugin_config_by_uuid() {
     local response
-    response=$(np_api "GET" "/api/node-plugins/${np_uuid}?_=$(date +%s)")
+    response=$(np_api "GET" "/api/node-plugins/$1?_=$(date +%s)")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
         return 1
     fi
-    np_config_json=$(echo "$response" | jq -c '.response.pluginConfig // {}')
+    echo "$response" | jq -c '.response.pluginConfig // {}'
+}
+
+np_fetch_plugin_config() {
+    if ! np_config_json=$(np_plugin_config_by_uuid "$np_uuid"); then
+        return 1
+    fi
     return 0
 }
 
-# Pick a plugin by its config section first, plugin name second — so a plugin
-# renamed in the panel UI is still found. Sets np_uuid, np_name and
+# Pick the shared plugin for a config section. Preference order: the record
+# named exactly like the shared plugin, then any plugin already carrying the
+# section (adoption), then any record under a known legacy name — so a
+# renamed-but-empty plugin is still found. Sets np_uuid, np_name and
 # np_config_json; np_uuid stays empty when there is no such plugin.
 np_select_plugin() {
     local section="$1" fallback_name="$2"
     np_uuid=""
     np_name="$fallback_name"
     np_config_json="{}"
-    local match list_cfg
-    match=$(echo "$np_plugins_json" | jq -c --arg name "$fallback_name" --arg section "$section" \
-        '[.[] | select(((.pluginConfig // {}) | has($section)) or .name == $name)][0] // empty' 2>/dev/null)
-    if [ -n "$match" ]; then
+    local match
+    match=$(echo "$np_plugins_json" | jq -c --arg section "$section" --arg shared "$NP_PLUGIN_NAME" --argjson names "$NP_PLUGIN_KNOWN_NAMES" '
+        ([.[] | select(.name == $shared)] | .[0]) as $by_shared
+        | ($by_shared
+            // ([.[] | select(((.pluginConfig // {}) | has($section)))] | .[0])
+            // ([.[] | select(.name as $n | ($names | index($n)) != null)] | .[0])) // null' 2>/dev/null)
+    if [ -n "$match" ] && [ "$match" != "null" ]; then
         np_uuid=$(echo "$match" | jq -r '.uuid // empty')
         np_name=$(echo "$match" | jq -r --arg fallback "$fallback_name" '.name // $fallback')
+        local list_cfg
         list_cfg=$(echo "$match" | jq -c '.pluginConfig // {}')
         np_config_json="$list_cfg"
         np_fetch_plugin_config || np_config_json="$list_cfg"
@@ -76,6 +97,86 @@ np_select_plugin() {
 np_refresh_plugin() {
     np_fetch_plugins || return 1
     np_select_plugin "$1" "$2"
+}
+
+# Older script versions kept one plugin record per feature, but a node holds a
+# single activePluginUuid — so at most one of them ever ran. Merge any legacy
+# records into the shared plugin (sections deep-merged, the first record wins
+# where two configs collide), delete the extras and re-bind the nodes. A lone
+# record already named right is left alone.
+np_consolidate_plugins() {
+    np_fetch_plugins || return 1
+    local candidates total
+    candidates=$(echo "$np_plugins_json" | jq -c --argjson names "$NP_PLUGIN_KNOWN_NAMES" --argjson sections "$NP_PLUGIN_SECTIONS" '
+        [.[] | . as $rec | select(
+            ($names | index($rec.name)) != null
+            or any($sections[]; . as $s | (($rec.pluginConfig // {}) | has($s)))
+        )]' 2>/dev/null)
+    [ -z "$candidates" ] && candidates="[]"
+    total=$(echo "$candidates" | jq 'length')
+    [ "$total" -eq 0 ] && return 0
+
+    local keeper_uuid keeper_name
+    keeper_uuid=$(echo "$candidates" | jq -r '.[0].uuid')
+    keeper_name=$(echo "$candidates" | jq -r '.[0].name')
+    if [ "$total" -eq 1 ] && [ "$keeper_name" = "$NP_PLUGIN_NAME" ]; then
+        return 0
+    fi
+
+    local i uuid cfg merged="" names_summary body response
+    names_summary=$(echo "$candidates" | jq -r '[.[].name] | join(", ")')
+    step_do "$(printf "${LANG[NP_MIGRATE_STEP]}" "$names_summary")"
+
+    # Deep-merge in reverse list order so the keeper (first record) wins
+    # wherever two legacy configs collide on a key. A failed config fetch
+    # aborts the whole run: merging on top of unknown state could wipe it.
+    for ((i = total - 1; i >= 0; i--)); do
+        uuid=$(echo "$candidates" | jq -r ".[$i].uuid")
+        if ! cfg=$(np_plugin_config_by_uuid "$uuid"); then
+            echo -e "${COLOR_RED}$(printf "${LANG[NP_MIGRATE_FAIL]}" "$uuid")${COLOR_RESET}"
+            return 1
+        fi
+        if [ -z "$merged" ]; then
+            merged="$cfg"
+        else
+            # jq's * keeps the right side on conflicts, so the merge gathered
+            # so far (records closer to the keeper) beats the current one.
+            merged=$(jq -nc --argjson cur "$cfg" --argjson acc "$merged" '$cur * $acc')
+        fi
+    done
+
+    body=$(jq -n --arg uuid "$keeper_uuid" --argjson cfg "$merged" '{uuid: $uuid, pluginConfig: $cfg}')
+    # A stock/legacy name gives way to the shared one; a custom rename sticks.
+    local rename
+    rename=$(echo "$NP_PLUGIN_KNOWN_NAMES" | jq --arg n "$keeper_name" --arg shared "$NP_PLUGIN_NAME" '$n != $shared and index($n) != null')
+    if [ "$rename" = "true" ]; then
+        body=$(echo "$body" | jq -c --arg name "$NP_PLUGIN_NAME" '. + {name: $name}')
+    fi
+    response=$(np_api "PATCH" "/api/node-plugins" "$body")
+    if ! echo "$response" | jq -e '.response.uuid' >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_MIGRATE_FAIL]}" "$response")${COLOR_RESET}"
+        return 1
+    fi
+
+    for ((i = 1; i < total; i++)); do
+        uuid=$(echo "$candidates" | jq -r ".[$i].uuid")
+        response=$(np_api "DELETE" "/api/node-plugins/${uuid}")
+        np_accepted "$response" || echo -e "${COLOR_YELLOW}$(printf "${LANG[NP_MIGRATE_DELETE_FAIL]}" "$uuid")${COLOR_RESET}"
+    done
+
+    # Nodes still pointing at a deleted record must move to the keeper —
+    # binding every enabled node also activates the merged plugin everywhere.
+    local attach_rc=0
+    np_attach_plugin "$keeper_uuid" || attach_rc=$?
+    if [ "$attach_rc" -eq 0 ]; then
+        step_ok "${LANG[NP_MIGRATE_OK]}"
+    elif [ "$attach_rc" -eq 2 ]; then
+        step_ok "${LANG[NP_MIGRATE_OK_NO_NODES]}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[NP_ATTACH_FAIL]}${COLOR_RESET}"
+    fi
+    np_fetch_plugins || return 1
+    return 0
 }
 
 # Enabled either as a JSON boolean or as the string the panel may normalize to.
@@ -101,7 +202,8 @@ np_state() {
 np_ensure_plugin() {
     [ -n "$np_uuid" ] && return 0
     local response
-    response=$(np_api "POST" "/api/node-plugins" "$(jq -n --arg name "$np_name" '{name: $name}')")
+    # Always created under the shared name — per-feature records are gone.
+    response=$(np_api "POST" "/api/node-plugins" "$(jq -n --arg name "$NP_PLUGIN_NAME" '{name: $name}')")
     np_uuid=$(echo "$response" | jq -r '.response.uuid // empty')
     if [ -z "$np_uuid" ]; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_CREATE_FAIL]}" "$response")${COLOR_RESET}"
@@ -111,7 +213,71 @@ np_ensure_plugin() {
     return 0
 }
 
-# PATCH the full pluginConfig and push it to the connected nodes.
+# --- Node binding -------------------------------------------------------------
+# A saved pluginConfig does nothing until the plugin is the node's active one
+# (activePluginUuid). The bulk endpoint binds it and pushes the config in one
+# shot; offline nodes keep the binding in the panel DB and pick the config up
+# on reconnect.
+
+# Space-separated uuids of every enabled node; empty when there are none.
+np_enabled_node_uuids() {
+    local response
+    response=$(np_api "GET" "/api/nodes?_=$(date +%s)")
+    if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
+        return 1
+    fi
+    echo "$response" | jq -r '[.response[] | select(.isDisabled == false) | .uuid] | join(" ")'
+}
+
+# Bind the plugin to every enabled node. 0 — bound; 1 — API failed;
+# 2 — no enabled nodes.
+np_attach_plugin() {
+    local plugin_uuid="$1"
+    local uuids uuids_json body response
+    uuids=$(np_enabled_node_uuids) || return 1
+    [ -z "$uuids" ] && return 2
+    uuids_json=$(printf '%s\n' $uuids | jq -R . | jq -s .)
+    body=$(jq -n --argjson uuids "$uuids_json" --arg uuid "$plugin_uuid" \
+        '{uuids: $uuids, fields: {activePluginUuid: $uuid}}')
+    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body")
+    np_accepted "$response"
+}
+
+# Unbind the plugin from every enabled node carrying it. 0 — done (or nothing
+# to unbind); 1 — API failed.
+np_detach_plugin() {
+    local plugin_uuid="$1"
+    local response uuids_json body
+    response=$(np_api "GET" "/api/nodes?_=$(date +%s)")
+    if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
+        return 1
+    fi
+    uuids_json=$(echo "$response" | jq -c --arg uuid "$plugin_uuid" \
+        '[.response[] | select(.isDisabled == false) | select(.activePluginUuid == $uuid) | .uuid]')
+    [ "$(echo "$uuids_json" | jq 'length')" -eq 0 ] && return 0
+    body=$(jq -n --argjson uuids "$uuids_json" '{uuids: $uuids, fields: {activePluginUuid: null}}')
+    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body")
+    np_accepted "$response"
+}
+
+# Fill NP_BOUND_COUNT / NP_NODES_COUNT with "enabled nodes running the
+# plugin" / "enabled nodes"; counts stay empty when the API call fails.
+np_bound_summary() {
+    local plugin_uuid="$1"
+    NP_BOUND_COUNT=""
+    NP_NODES_COUNT=""
+    local response
+    response=$(np_api "GET" "/api/nodes?_=$(date +%s)")
+    if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
+        return 1
+    fi
+    NP_NODES_COUNT=$(echo "$response" | jq '[.response[] | select(.isDisabled == false)] | length')
+    NP_BOUND_COUNT=$(echo "$response" | jq --arg uuid "$plugin_uuid" \
+        '[.response[] | select(.isDisabled == false) | select(.activePluginUuid == $uuid)] | length')
+}
+
+# PATCH the full pluginConfig, sync it, then re-bind to every enabled node —
+# the binding is what actually activates the plugin on a node.
 np_apply_config() {
     local config="$1"
     local body response sync_response
@@ -126,6 +292,15 @@ np_apply_config() {
     if ! np_accepted "$sync_response"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_SYNC_FAIL]}" "$sync_response")${COLOR_RESET}"
         return 1
+    fi
+    # The config is saved; a failed binding must not read as a failed save,
+    # so warn and keep the success path.
+    local attach_rc=0
+    np_attach_plugin "$np_uuid" || attach_rc=$?
+    if [ "$attach_rc" -eq 1 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_ATTACH_FAIL]}${COLOR_RESET}"
+    elif [ "$attach_rc" -eq 2 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_ATTACH_NO_NODES]}${COLOR_RESET}"
     fi
     return 0
 }
@@ -363,11 +538,18 @@ np_delete() {
     if ! reading_yn "${LANG[NP_DELETE_CONFIRM]}" confirm; then
         return 0
     fi
+    # Unbind first: a node pointing at a deleted record keeps a dangling
+    # activePluginUuid and no plugin at all.
+    if ! np_detach_plugin "$np_uuid"; then
+        echo -e "${COLOR_RED}${LANG[NP_DETACH_FAIL]}${COLOR_RESET}"
+        return 1
+    fi
     step_do "${LANG[NP_DELETING]}"
     local response
     response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
     if np_accepted "$response"; then
         step_ok "${LANG[NP_DELETED_OK]}"
+        rm -f "$IG_STATE_FILE" "$EG_STATE_FILE"
     else
         echo -e "${COLOR_RED}$(printf "${LANG[NP_DELETE_FAIL]}" "$response")${COLOR_RESET}"
     fi
@@ -670,12 +852,14 @@ ig_manual_remove() {
     fi
 }
 
+# The plugin record is shared, so "delete Ingress" means dropping the
+# ingressFilter section from it — Torrent Blocker and Egress stay untouched.
 ig_delete() {
     if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
         return 1
     fi
-    if [ -z "$np_uuid" ]; then
+    if [ -z "$np_uuid" ] || [ "$(echo "$np_config_json" | jq 'has("ingressFilter")')" != "true" ]; then
         echo -e "${COLOR_YELLOW}${LANG[IG_NOTHING_TO_DELETE]}${COLOR_RESET}"
         return 0
     fi
@@ -684,13 +868,11 @@ ig_delete() {
         return 0
     fi
     step_do "${LANG[IG_DELETING]}"
-    local response
-    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
-    if np_accepted "$response"; then
+    local config
+    config=$(echo "$np_config_json" | jq -c 'del(.ingressFilter)')
+    if np_apply_config "$config"; then
         step_ok "${LANG[IG_DELETED_OK]}"
         rm -f "$IG_STATE_FILE"
-    else
-        echo -e "${COLOR_RED}$(printf "${LANG[IG_DELETE_FAIL]}" "$response")${COLOR_RESET}"
     fi
 }
 
@@ -1288,12 +1470,13 @@ eg_manual_remove() {
     fi
 }
 
+# Same as ig_delete: the egressFilter section leaves the shared record.
 eg_delete() {
     if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
         return 1
     fi
-    if [ -z "$np_uuid" ]; then
+    if [ -z "$np_uuid" ] || [ "$(echo "$np_config_json" | jq 'has("egressFilter")')" != "true" ]; then
         echo -e "${COLOR_YELLOW}${LANG[EG_NOTHING_TO_DELETE]}${COLOR_RESET}"
         return 0
     fi
@@ -1302,13 +1485,11 @@ eg_delete() {
         return 0
     fi
     step_do "${LANG[EG_DELETING]}"
-    local response
-    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
-    if np_accepted "$response"; then
+    local config
+    config=$(echo "$np_config_json" | jq -c 'del(.egressFilter)')
+    if np_apply_config "$config"; then
         step_ok "${LANG[EG_DELETED_OK]}"
         rm -f "$EG_STATE_FILE"
-    else
-        echo -e "${COLOR_RED}$(printf "${LANG[EG_DELETE_FAIL]}" "$response")${COLOR_RESET}"
     fi
 }
 
@@ -1504,10 +1685,6 @@ show_egress_filter_menu() {
     esac
 }
 
-# --- Telegram notifications via the panel .env -------------------------------
-# The panel sends TB reports itself once the env vars below are set; the docs
-# require recreating the stack (down + up), a plain restart is not enough.
-
 NP_PANEL_ENV="/opt/remnawave/.env"
 
 np_env_get() {
@@ -1525,8 +1702,6 @@ np_env_set() {
     fi
 }
 
-# Same helper as in the certificates module: the user types the proxy password
-# as is, it goes into the URL percent-encoded (safe for .env and for the panel).
 percent_encode_proxy_auth() {
     local url="$1"
     local scheme rest hostpart userinfo user pass
@@ -1764,6 +1939,18 @@ show_node_plugins_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NP_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
+    # One line of truth about binding: a plugin nothing points at is dead
+    # weight no matter what the per-feature statuses say.
+    if np_fetch_plugins; then
+        np_select_plugin "torrentBlocker" "$NP_PLUGIN_NAME"
+        if [ -n "$np_uuid" ] && np_bound_summary "$np_uuid"; then
+            if [ "${NP_BOUND_COUNT:-0}" -gt 0 ]; then
+                echo -e " ${COLOR_GRAY}$(printf "${LANG[NP_BOUND_FMT]}" "$NP_BOUND_COUNT" "$NP_NODES_COUNT")${COLOR_RESET}"
+            else
+                echo -e " ${COLOR_YELLOW}${LANG[NP_NOT_BOUND]}${COLOR_RESET}"
+            fi
+        fi
+    fi
     echo -e "${COLOR_YELLOW}1. ${LANG[NP_TB_LABEL]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
     state=$(ig_state)
     np_status_strings "$state"
@@ -1900,5 +2087,8 @@ manage_node_plugins() {
         sleep 2
         return
     fi
+    # Fold legacy per-feature records into the shared plugin before the first
+    # refresh picks anything; a failed run just retries on the next entry.
+    np_consolidate_plugins || true
     show_node_plugins_menu
 }

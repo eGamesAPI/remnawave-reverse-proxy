@@ -216,8 +216,14 @@ create_node() {
     local inbound_uuid=$4
     local node_address="${5:-172.30.0.1}"
     local node_name="${6:-Steal}"
+    local plugin_uuid="${7:-}"
 
     step_do "${LANG[CREATING_NODE]}"
+    # activePluginUuid is only accepted when there is a plugin to bind.
+    local plugin_field=""
+    if [ -n "$plugin_uuid" ]; then
+        plugin_field="\"activePluginUuid\": \"$plugin_uuid\","
+    fi
     local node_data=$(cat <<EOF
 {
     "name": "$node_name",
@@ -227,6 +233,7 @@ create_node() {
         "activeConfigProfileUuid": "$config_profile_uuid",
         "activeInbounds": ["$inbound_uuid"]
     },
+    $plugin_field
     "isTrafficTrackingActive": false,
     "trafficLimitBytes": 0,
     "notifyPercent": 0,
