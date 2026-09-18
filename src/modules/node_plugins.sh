@@ -35,6 +35,19 @@ np_fetch_plugins() {
     return 0
 }
 
+# The list endpoint serves pluginConfig as null on the real panel (the spec
+# marks it nullable); the actual config only comes from the per-plugin
+# endpoint. Fetch it by uuid after the plugin was picked from the list.
+np_fetch_tb_config() {
+    local response
+    response=$(np_api "GET" "/api/node-plugins/${np_uuid}")
+    if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
+        return 1
+    fi
+    np_config_json=$(echo "$response" | jq -c '.response.pluginConfig // {}')
+    return 0
+}
+
 # The plugin that owns torrentBlocker — matched by config section first, name
 # second, so a plugin renamed in the panel UI is still found. Sets np_uuid,
 # np_name and np_config_json; np_uuid stays empty when there is no such plugin.
@@ -42,13 +55,15 @@ np_select_tb_plugin() {
     np_uuid=""
     np_name="$NP_PLUGIN_NAME"
     np_config_json="{}"
-    local match
+    local match list_cfg
     match=$(echo "$np_plugins_json" | jq -c --arg name "$NP_PLUGIN_NAME" \
         '[.[] | select(((.pluginConfig // {}) | has("torrentBlocker")) or .name == $name)][0] // empty' 2>/dev/null)
     if [ -n "$match" ]; then
         np_uuid=$(echo "$match" | jq -r '.uuid // empty')
         np_name=$(echo "$match" | jq -r --arg fallback "$NP_PLUGIN_NAME" '.name // $fallback')
-        np_config_json=$(echo "$match" | jq -c '.pluginConfig // {}')
+        list_cfg=$(echo "$match" | jq -c '.pluginConfig // {}')
+        np_config_json="$list_cfg"
+        np_fetch_tb_config || np_config_json="$list_cfg"
     fi
 }
 
