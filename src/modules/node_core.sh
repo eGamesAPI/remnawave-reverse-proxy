@@ -61,6 +61,70 @@ xc_latest_tag() {
         | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
+# Last XC_RELEASES_COUNT releases with publish dates -> XC_TAGS[] / XC_DATES[]
+# (date cut to the day). rc=1 when the API is unreachable.
+XC_RELEASES_COUNT=5
+
+xc_list_releases() {
+    local repo="$1" response line tag
+    response=$(curl -fsSL --connect-timeout 8 --max-time 20 \
+        "https://api.github.com/repos/${repo}/releases?per_page=${XC_RELEASES_COUNT}" 2>/dev/null)
+    [ -n "$response" ] || return 1
+    XC_TAGS=()
+    XC_DATES=()
+    while IFS= read -r line; do
+        case "$line" in
+            *'"tag_name":'*)
+                tag=$(printf '%s\n' "$line" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p')
+                [ -n "$tag" ] && XC_TAGS+=("$tag")
+                ;;
+            *'"published_at":'*)
+                tag=$(printf '%s\n' "$line" | sed -n 's/.*"published_at":[[:space:]]*"\([^"]*\)".*/\1/p' | cut -dT -f1)
+                XC_DATES+=("$tag")
+                ;;
+        esac
+    done <<< "$(printf '%s\n' "$response" | grep -E '"(tag_name|published_at)":')"
+    [ "${#XC_TAGS[@]}" -gt 0 ] || return 1
+    while [ "${#XC_DATES[@]}" -lt "${#XC_TAGS[@]}" ]; do
+        XC_DATES+=("")
+    done
+    return 0
+}
+
+# Interactive picker over the recent releases; prints the chosen tag on
+# stdout. Falls back to the pinned version when the API is unreachable,
+# rc=1 when the user cancelled.
+xc_pick_release() {
+    local source="$1" repo i n pick
+    repo=$(xc_repo_of "$source")
+
+    step_do "${LANG[XC_RESOLVING]}"
+    if ! xc_list_releases "$repo"; then
+        local pinned
+        pinned=$(eval "echo \"\$XC_PIN_${source}\"")
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_LATEST_FAILED]}" "$pinned")${COLOR_RESET}"
+        echo "$pinned"
+        return 0
+    fi
+
+    n=${#XC_TAGS[@]}
+    echo -e ""
+    echo -e " ${COLOR_GREEN}$(printf "${LANG[XC_PICK_TITLE]}" "$(xc_source_name "$source")")${COLOR_RESET}"
+    echo -e ""
+    for ((i = 0; i < n; i++)); do
+        printf " ${COLOR_YELLOW}%d. %-16s %s${COLOR_RESET}\n" "$((i + 1))" "${XC_TAGS[$i]}" "${XC_DATES[$i]}"
+    done
+    echo -e ""
+    reading "$(printf "${LANG[XC_PICK_PROMPT]}" "$n")" pick || return 1
+    [ -z "$pick" ] && pick=1
+    if ! [[ "$pick" =~ ^[0-9]+$ ]] || [ "$pick" -lt 1 ] || [ "$pick" -gt "$n" ]; then
+        printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$n"
+        return 1
+    fi
+    echo "${XC_TAGS[$((pick - 1))]}"
+    return 0
+}
+
 # Resolve the newest tag for a source; prints the tag, rc=1 when the pinned
 # fallback was used because GitHub API is unreachable.
 xc_resolve_tag() {
@@ -319,8 +383,8 @@ show_xray_core_menu() {
     echo -e ""
     xc_print_status
     echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[XC_SOURCE_OFF]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[XC_SOURCE_JOLY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}1. ${LANG[XC_SOURCE_OFF_NAME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[XC_SOURCE_JOLY_NAME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[XC_MANUAL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[XC_UPDATE]}${COLOR_RESET}"
     echo -e ""
@@ -335,13 +399,9 @@ show_xray_core_menu() {
     case $xc_option in
         1|2)
             [ "$xc_option" = "1" ] && source="off" || source="joly"
-            step_do "${LANG[XC_RESOLVING]}"
-            if tag=$(xc_resolve_tag "$source"); then
-                echo -e "${COLOR_GREEN}$(printf "${LANG[XC_LATEST_FOUND]}" "$tag")${COLOR_RESET}"
-            else
-                echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_LATEST_FAILED]}" "$tag")${COLOR_RESET}"
+            if tag=$(xc_pick_release "$source"); then
+                xc_install_core "$source" "$tag"
             fi
-            xc_install_core "$source" "$tag"
             sleep 2
             show_xray_core_menu
             ;;
