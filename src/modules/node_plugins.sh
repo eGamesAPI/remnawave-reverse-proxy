@@ -585,7 +585,7 @@ ig_manual_add() {
     np_ensure_plugin || return 1
     local ig_input entries=() entry merged total
     reading "${LANG[IG_ADD_PROMPT]}" ig_input || return 0
-    [ "$ig_input" = "0" ] && return 0
+    { [ -z "$ig_input" ] || [ "$ig_input" = "0" ]; } && return 0
     read -ra entries <<< "${ig_input//,/ }"
     for entry in "${entries[@]}"; do
         [ -z "$entry" ] && continue
@@ -616,9 +616,18 @@ ig_manual_remove() {
     printf '%s\n' "$current" | head -20 | while IFS= read -r entry; do
         echo -e "   ${COLOR_GRAY}${entry}${COLOR_RESET}"
     done
-    local ig_input entries=() entry after before_count after_count removed
+    local ig_input entries=() entry remove_args=() wipe_confirm
     reading "${LANG[IG_REMOVE_PROMPT]}" ig_input || return 0
     [ "$ig_input" = "0" ] && return 0
+    # Enter — wipe the whole list, behind its own confirmation
+    if [ -z "$ig_input" ]; then
+        if reading_yn "${LANG[IG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
+            if ig_apply_entries ""; then
+                step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "0")"
+            fi
+        fi
+        return 0
+    fi
     read -ra entries <<< "${ig_input//,/ }"
     for entry in "${entries[@]}"; do
         [ -z "$entry" ] && continue
@@ -626,13 +635,13 @@ ig_manual_remove() {
             echo -e "${COLOR_RED}$(printf "${LANG[IG_ADD_INVALID]}" "$entry")${COLOR_RESET}"
             return 1
         fi
-    done
-    before_count=$(printf '%s\n' "$current" | sed '/^$/d' | wc -l)
-    local remove_args=()
-    for entry in "${entries[@]}"; do
-        [ -z "$entry" ] && continue
         remove_args+=(-e "$entry")
     done
+    # input like ", ," parses to nothing — cancel instead of grepping
+    # without a single pattern
+    [ "${#remove_args[@]}" -eq 0 ] && return 0
+    local after before_count after_count removed
+    before_count=$(printf '%s\n' "$current" | sed '/^$/d' | wc -l)
     after=$(printf '%s\n' "$current" | grep -Fxv "${remove_args[@]}" | sed '/^$/d')
     after_count=$(printf '%s\n' "$after" | sed '/^$/d' | wc -l)
     removed=$(( before_count - after_count ))
@@ -762,6 +771,7 @@ show_ingress_filter_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[IG_PRESETS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[IG_MANUAL_ADD]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[IG_MANUAL_REMOVE]}${COLOR_RESET}"
+    echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[IG_DELETE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
@@ -1085,7 +1095,7 @@ eg_manual_add_ip() {
     np_ensure_plugin || return 1
     local eg_input entries=() entry merged
     reading "${LANG[EG_ADD_IP_PROMPT]}" eg_input || return 0
-    [ "$eg_input" = "0" ] && return 0
+    { [ -z "$eg_input" ] || [ "$eg_input" = "0" ]; } && return 0
     read -ra entries <<< "${eg_input//,/ }"
     for entry in "${entries[@]}"; do
         [ -z "$entry" ] && continue
@@ -1108,7 +1118,7 @@ eg_manual_add_port() {
     np_ensure_plugin || return 1
     local eg_input entries=() entry merged
     reading "${LANG[EG_ADD_PORT_PROMPT]}" eg_input || return 0
-    [ "$eg_input" = "0" ] && return 0
+    { [ -z "$eg_input" ] || [ "$eg_input" = "0" ]; } && return 0
     read -ra entries <<< "${eg_input//,/ }"
     for entry in "${entries[@]}"; do
         [ -z "$entry" ] && continue
@@ -1148,11 +1158,19 @@ eg_manual_remove() {
         done
     }
 
-    local eg_input entries=() entry
+    local eg_input entries=() entry ip_args=() port_args=() wipe_confirm
     reading "${LANG[EG_REMOVE_PROMPT]}" eg_input || return 0
     [ "$eg_input" = "0" ] && return 0
+    # Enter — wipe both lists, behind its own confirmation
+    if [ -z "$eg_input" ]; then
+        if reading_yn "${LANG[EG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
+            if eg_apply "" ""; then
+                step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "0" "0")"
+            fi
+        fi
+        return 0
+    fi
     read -ra entries <<< "${eg_input//,/ }"
-    local ip_args=() port_args=()
     for entry in "${entries[@]}"; do
         [ -z "$entry" ] && continue
         if eg_is_port_entry "$entry"; then
@@ -1164,6 +1182,8 @@ eg_manual_remove() {
             return 1
         fi
     done
+    # nothing parseable — cancel instead of grepping without patterns
+    [ "${#ip_args[@]}" -eq 0 ] && [ "${#port_args[@]}" -eq 0 ] && return 0
 
     local new_ips="$ips" new_ports="$ports"
     [ "${#ip_args[@]}" -gt 0 ] && new_ips=$(printf '%s\n' "$ips" | grep -Fxv "${ip_args[@]}" | sed '/^$/d')
@@ -1273,6 +1293,7 @@ show_egress_filter_menu() {
     echo -e "${COLOR_YELLOW}3. ${LANG[EG_MANUAL_ADD_IP]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[EG_MANUAL_ADD_PORT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[EG_MANUAL_REMOVE]}${COLOR_RESET}"
+    echo -e ""
     echo -e "${COLOR_YELLOW}6. ${LANG[EG_DELETE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
@@ -1646,8 +1667,9 @@ show_torrent_blocker_menu() {
     echo -e "${COLOR_YELLOW}3. ${LANG[NP_STATS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[NP_UNBLOCK]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[NP_RECREATE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}6. ${LANG[NP_DELETE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}7. ${LANG[NP_TG_MENU]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}6. ${LANG[NP_TG_MENU]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}7. ${LANG[NP_DELETE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -1685,12 +1707,12 @@ show_torrent_blocker_menu() {
             show_torrent_blocker_menu
             ;;
         6)
-            np_delete
+            np_setup_tg
             sleep 2
             show_torrent_blocker_menu
             ;;
         7)
-            np_setup_tg
+            np_delete
             sleep 2
             show_torrent_blocker_menu
             ;;
