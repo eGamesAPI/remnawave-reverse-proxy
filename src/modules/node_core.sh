@@ -120,16 +120,15 @@ xc_fetch_file() {
     return 1
 }
 
+# One rolling backup next to the compose file — overwritten on every edit,
+# never accumulating a pile of timestamped copies.
 xc_backup_compose() {
-    local compose="$1" bak stamp
-    stamp=$(date +%Y%m%d-%H%M%S 2>/dev/null || echo manual)
-    bak="${compose}.bak-${stamp}"
-    cp -p "$compose" "$bak" 2>/dev/null || return 1
-    XC_LAST_BACKUP="$bak"
-    ls -1t "${compose}".bak-* 2>/dev/null | tail -n +6 | while IFS= read -r old; do
-        rm -f "$old" 2>/dev/null
-    done
-    return 0
+    local compose="$1"
+    if cp -p "$compose" "${compose}.bak" 2>/dev/null; then
+        XC_LAST_BACKUP="${compose}.bak"
+        return 0
+    fi
+    return 1
 }
 
 xc_compose_valid() {
@@ -324,6 +323,7 @@ show_xray_core_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[XC_SOURCE_JOLY]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[XC_MANUAL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[XC_UPDATE]}${COLOR_RESET}"
+    echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[XC_RESTORE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
