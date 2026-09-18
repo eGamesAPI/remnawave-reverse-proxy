@@ -91,9 +91,10 @@ xc_list_releases() {
     return 0
 }
 
-# Interactive picker over the recent releases; prints the chosen tag on
-# stdout. Falls back to the pinned version when the API is unreachable,
-# rc=1 when the user cancelled.
+# Interactive picker over the recent releases; sets XC_PICKED_TAG.
+# The result goes through a global on purpose: the menu itself prints to
+# stdout, so capturing the function with $(...) would swallow the list.
+# rc=0 — a tag was picked, rc=1 — cancelled.
 xc_pick_release() {
     local source="$1" repo i n pick
     repo=$(xc_repo_of "$source")
@@ -103,7 +104,7 @@ xc_pick_release() {
         local pinned
         pinned=$(eval "echo \"\$XC_PIN_${source}\"")
         echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_LATEST_FAILED]}" "$pinned")${COLOR_RESET}"
-        echo "$pinned"
+        XC_PICKED_TAG="$pinned"
         return 0
     fi
 
@@ -121,7 +122,7 @@ xc_pick_release() {
         printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$n"
         return 1
     fi
-    echo "${XC_TAGS[$((pick - 1))]}"
+    XC_PICKED_TAG="${XC_TAGS[$((pick - 1))]}"
     return 0
 }
 
@@ -395,12 +396,12 @@ show_xray_core_menu() {
     local last=5 xc_option
     reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" xc_option
 
-    local source tag
+    local source
     case $xc_option in
         1|2)
             [ "$xc_option" = "1" ] && source="off" || source="joly"
-            if tag=$(xc_pick_release "$source"); then
-                xc_install_core "$source" "$tag"
+            if xc_pick_release "$source"; then
+                xc_install_core "$source" "$XC_PICKED_TAG"
             fi
             sleep 2
             show_xray_core_menu
