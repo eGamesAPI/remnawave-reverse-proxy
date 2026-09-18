@@ -608,6 +608,8 @@ LANG[IG_PRESET_CONFIRM]="Write %s entries into the blocklist? This preset's prev
 LANG[IG_PRESET_APPLIED]="Preset applied: %s entries in the blocklist."
 LANG[IG_PRESET_ENABLE_HINT]="Ingress Filter is currently disabled — enable it via option 1, otherwise the lists do nothing."
 LANG[IG_PRESET_APPLIED_MARK]="applied"
+LANG[IG_PRESET_CHECKING]="Checking applied presets for updates..."
+LANG[IG_PRESET_UPDATE_FMT]="applied: %s, available: %s — update it"
 #Egress Filter module
 LANG[EG_MENU_TITLE]="Egress Filter"
 LANG[EG_STATUS_IPS]="IP entries: %s"

@@ -492,6 +492,17 @@ ig_fetch_preset_entries() {
     return 0
 }
 
+# True when the preset is applied AND the remote list differs from what was
+# applied. Offline (all mirrors failed) → false, no false alarms.
+ig_preset_needs_update() {
+    local id="$1" applied remote
+    applied=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
+    [ -n "$applied" ] || return 1
+    ig_fetch_preset_entries "$id" || return 1
+    remote=$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u)
+    [ "$remote" != "$applied" ]
+}
+
 ig_preset_apply() {
     local id="$1"
     step_do "${LANG[IG_PRESET_DOWNLOADING]}"
@@ -662,14 +673,35 @@ show_ingress_presets_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[IG_PRESET_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
-    local id n i=1 key
+
+    # Applied presets are diffed against the remote lists (via mirrors); a
+    # failed check leaves the preset unmarked rather than crying wolf.
+    local id n any_applied=0 remote_ru="" remote_classic="" remote_fofa
+    for id in ru classic fofa; do
+        [ "$(ig_preset_state_get "$id" | sed '/^$/d' | wc -l)" -gt 0 ] && any_applied=1
+    done
+    if [ "$any_applied" = "1" ]; then
+        echo -e " ${COLOR_GRAY}${LANG[IG_PRESET_CHECKING]}${COLOR_RESET}"
+        if ig_preset_needs_update "ru"; then remote_ru="$IG_PRESET_COUNT"; fi
+        if ig_preset_needs_update "classic"; then remote_classic="$IG_PRESET_COUNT"; fi
+        if ig_preset_needs_update "fofa"; then remote_fofa="$IG_PRESET_COUNT"; fi
+    fi
+
+    local i=1 key remote_n
     for id in ru classic fofa; do
         n=$(ig_preset_state_get "$id" | sed '/^$/d' | wc -l)
-        if [ "$n" -gt 0 ]; then
-            key="IG_PRESET_NAME_$id"
+        key="IG_PRESET_NAME_$id"
+        remote_n=""
+        case $id in
+            ru)      remote_n="$remote_ru" ;;
+            classic) remote_n="$remote_classic" ;;
+            fofa)    remote_n="$remote_fofa" ;;
+        esac
+        if [ "$n" -gt 0 ] && [ -n "$remote_n" ]; then
+            echo -e "${COLOR_YELLOW}${i}. ${LANG[$key]} ${COLOR_RED}[$(printf "${LANG[IG_PRESET_UPDATE_FMT]}" "$n" "$remote_n")]${COLOR_RESET}"
+        elif [ "$n" -gt 0 ]; then
             echo -e "${COLOR_YELLOW}${i}. ${LANG[$key]} ${COLOR_GREEN}[${LANG[IG_PRESET_APPLIED_MARK]}: ${n}]${COLOR_RESET}"
         else
-            key="IG_PRESET_NAME_$id"
             echo -e "${COLOR_YELLOW}${i}. ${LANG[$key]}${COLOR_RESET}"
         fi
         key="IG_PRESET_DESC_$id"

@@ -608,6 +608,8 @@ LANG[IG_PRESET_CONFIRM]="Записать в блок-лист %s записей
 LANG[IG_PRESET_APPLIED]="Пресет применён: %s записей в блок-листе."
 LANG[IG_PRESET_ENABLE_HINT]="Ingress Filter сейчас выключен — включите его пунктом 1, иначе списки не работают."
 LANG[IG_PRESET_APPLIED_MARK]="установлен"
+LANG[IG_PRESET_CHECKING]="Проверяю обновления применённых пресетов..."
+LANG[IG_PRESET_UPDATE_FMT]="установлен: %s, доступно: %s — обновите"
 #Egress Filter module
 LANG[EG_MENU_TITLE]="Egress Filter"
 LANG[EG_STATUS_IPS]="IP-записей: %s"
