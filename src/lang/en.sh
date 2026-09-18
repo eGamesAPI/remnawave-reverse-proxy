@@ -550,6 +550,7 @@ LANG[NODE_EXT_SELFSTEAL]="Install template for selfsteal node"
 LANG[NODE_EXT_PLUGINS]="Node Plugins (Torrent Blocker)"
 #Node Plugins module
 LANG[NP_MENU_TITLE]="Node Plugins"
+LANG[NP_SELECT_PLUGIN]="Select plugin (0-%s):"
 LANG[NP_TB_LABEL]="Torrent Blocker"
 LANG[NP_STATUS_ON]="ENABLED"
 LANG[NP_STATUS_OFF]="disabled"

@@ -353,20 +353,61 @@ np_delete() {
     fi
 }
 
+# Sets NP_STATUS_COLOR / NP_STATUS_TEXT for a plugin state.
+np_tb_status_strings() {
+    local state="$1"
+    NP_STATUS_COLOR="$COLOR_RED"
+    NP_STATUS_TEXT="${LANG[NP_STATUS_UNKNOWN]}"
+    case $state in
+        on)     NP_STATUS_COLOR="$COLOR_GREEN"; NP_STATUS_TEXT="${LANG[NP_STATUS_ON]}" ;;
+        off)    NP_STATUS_COLOR="$COLOR_YELLOW"; NP_STATUS_TEXT="${LANG[NP_STATUS_OFF]}" ;;
+        absent) NP_STATUS_COLOR="$COLOR_GRAY"; NP_STATUS_TEXT="${LANG[NP_STATUS_ABSENT]}" ;;
+    esac
+}
+
+# Plugin chooser: each plugin gets its own submenu, so a new plugin later is
+# just one more entry here.
 show_node_plugins_menu() {
     local state
     state=$(np_state)
+    np_tb_status_strings "$state"
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NP_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
-    local status_color="$COLOR_RED" status_text="${LANG[NP_STATUS_UNKNOWN]}"
-    case $state in
-        on)     status_color="$COLOR_GREEN"; status_text="${LANG[NP_STATUS_ON]}" ;;
-        off)    status_color="$COLOR_YELLOW"; status_text="${LANG[NP_STATUS_OFF]}" ;;
-        absent) status_color="$COLOR_GRAY"; status_text="${LANG[NP_STATUS_ABSENT]}" ;;
+    echo -e "${COLOR_YELLOW}1. ${LANG[NP_TB_LABEL]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    local last=1
+    reading "$(printf "${LANG[NP_SELECT_PLUGIN]}" "$last")" NP_OPTION
+
+    case $NP_OPTION in
+        1)
+            show_torrent_blocker_menu
+            sleep 1
+            show_node_plugins_menu
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_node_plugins_menu
+            ;;
     esac
-    echo -e " ${status_color}${LANG[NP_TB_LABEL]}: ${status_text}${COLOR_RESET}"
+}
+
+show_torrent_blocker_menu() {
+    local state
+    state=$(np_state)
+    np_tb_status_strings "$state"
+
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[NP_TB_LABEL]}${COLOR_RESET}"
+    echo -e ""
+    echo -e " ${NP_STATUS_COLOR}${LANG[NP_TB_LABEL]}: ${NP_STATUS_TEXT}${COLOR_RESET}"
     echo -e ""
 
     if [ "$state" = "on" ]; then
@@ -393,32 +434,32 @@ show_node_plugins_menu() {
                 np_toggle "true"
             fi
             sleep 2
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         2)
             np_settings
             sleep 2
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         3)
             np_stats
             sleep 3
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         4)
             np_unblock_ip
             sleep 2
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         5)
             np_recreate_tables
             sleep 2
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         6)
             np_delete
             sleep 2
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -426,7 +467,7 @@ show_node_plugins_menu() {
         *)
             printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
             sleep 1
-            show_node_plugins_menu
+            show_torrent_blocker_menu
             ;;
     esac
 }
