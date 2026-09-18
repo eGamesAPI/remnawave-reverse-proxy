@@ -24,7 +24,10 @@ np_accepted() {
 np_fetch_plugins() {
     np_plugins_json=""
     local response
-    response=$(np_api "GET" "/api/node-plugins")
+    # The ?_=<timestamp> cache-buster keeps the status line honest: the panel
+    # caches this GET, and without it the menu showed a stale state right
+    # after enabling/disabling.
+    response=$(np_api "GET" "/api/node-plugins?_=$(date +%s)")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.nodePlugins' >/dev/null 2>&1; then
         return 1
     fi
@@ -54,6 +57,11 @@ np_refresh_tb_plugin() {
     np_select_tb_plugin
 }
 
+# Enabled either as a JSON boolean or as the string the panel may normalize to.
+np_tb_is_on() {
+    echo "$np_config_json" | jq -e '.torrentBlocker.enabled == true or .torrentBlocker.enabled == "true"' >/dev/null 2>&1
+}
+
 # Current torrentBlocker state: on | off | absent | unknown.
 np_state() {
     if ! np_fetch_plugins; then
@@ -63,7 +71,7 @@ np_state() {
     np_select_tb_plugin
     if [ -z "$np_uuid" ]; then
         echo "absent"
-    elif echo "$np_config_json" | jq -e '.torrentBlocker.enabled == true' >/dev/null 2>&1; then
+    elif np_tb_is_on; then
         echo "on"
     else
         echo "off"
@@ -87,8 +95,8 @@ np_ensure_plugin() {
 np_apply_config() {
     local config="$1"
     local body response sync_response
-    body=$(jq -n --arg uuid "$np_uuid" --arg name "$np_name" --argjson cfg "$config" \
-        '{uuid: $uuid, name: $name, pluginConfig: $cfg}')
+    body=$(jq -n --arg uuid "$np_uuid" --argjson cfg "$config" \
+        '{uuid: $uuid, pluginConfig: $cfg}')
     response=$(np_api "PATCH" "/api/node-plugins" "$body")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.uuid' >/dev/null 2>&1; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_UPDATE_FAIL]}" "$response")${COLOR_RESET}"
@@ -149,6 +157,15 @@ np_toggle() {
         echo -e "${COLOR_YELLOW}${LANG[NP_REQUIREMENTS_NOTE]}${COLOR_RESET}"
     else
         step_ok "${LANG[NP_DISABLED_OK]}"
+    fi
+    # Re-read what the panel now serves; if it still returns the previous
+    # state, say so instead of silently showing a wrong status in the menu.
+    local now_on="false"
+    if np_refresh_tb_plugin && [ -n "$np_uuid" ] && np_tb_is_on; then
+        now_on="true"
+    fi
+    if [ "$now_on" != "$new_enabled" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_STATUS_PENDING]}${COLOR_RESET}"
     fi
 }
 
@@ -298,6 +315,29 @@ np_recreate_tables() {
     fi
 }
 
+np_delete() {
+    if ! np_refresh_tb_plugin; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    if [ -z "$np_uuid" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_NOTHING_TO_DELETE]}${COLOR_RESET}"
+        return 0
+    fi
+    local confirm
+    if ! reading_yn "${LANG[NP_DELETE_CONFIRM]}" confirm; then
+        return 0
+    fi
+    step_do "${LANG[NP_DELETING]}"
+    local response
+    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
+    if np_accepted "$response"; then
+        step_ok "${LANG[NP_DELETED_OK]}"
+    else
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_DELETE_FAIL]}" "$response")${COLOR_RESET}"
+    fi
+}
+
 show_node_plugins_menu() {
     local state
     state=$(np_state)
@@ -323,10 +363,11 @@ show_node_plugins_menu() {
     echo -e "${COLOR_YELLOW}3. ${LANG[NP_STATS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[NP_UNBLOCK]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[NP_RECREATE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}6. ${LANG[NP_DELETE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    local last=5
+    local last=6
     reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NP_OPTION
 
     case $NP_OPTION in
@@ -356,6 +397,11 @@ show_node_plugins_menu() {
             ;;
         5)
             np_recreate_tables
+            sleep 2
+            show_node_plugins_menu
+            ;;
+        6)
+            np_delete
             sleep 2
             show_node_plugins_menu
             ;;
