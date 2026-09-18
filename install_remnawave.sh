@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.6"
+SCRIPT_VERSION="Dev 3.5.7"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -912,6 +912,7 @@ show_node_extensions_menu() {
 
     local last=1
     local opt_plugins="__none__"
+    local opt_core="__none__"
 
     echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
     # Plugins are configured through the panel API, so a node-only box —
@@ -920,6 +921,13 @@ show_node_extensions_menu() {
         last=$((last + 1))
         opt_plugins=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_PLUGINS]}${COLOR_RESET}"
+    fi
+    # The Xray core swap works straight on the node compose, no panel needed.
+    if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
+       { [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; }; then
+        last=$((last + 1))
+        opt_core=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_CORE]}${COLOR_RESET}"
     fi
 
     echo -e ""
@@ -938,6 +946,12 @@ show_node_extensions_menu() {
             load_node_plugins_module
             load_api_module
             manage_node_plugins
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_core")
+            load_xray_core_module
+            manage_xray_core
             sleep 2
             show_node_extensions_menu
             ;;
@@ -1672,6 +1686,7 @@ load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
+load_xray_core_module() { load_module "xray_core" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
