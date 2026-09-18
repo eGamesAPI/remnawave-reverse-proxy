@@ -83,13 +83,13 @@ np_ensure_plugin() {
     return 0
 }
 
-# PUT the full pluginConfig and push it to the connected nodes.
+# PATCH the full pluginConfig and push it to the connected nodes.
 np_apply_config() {
     local config="$1"
     local body response sync_response
     body=$(jq -n --arg uuid "$np_uuid" --arg name "$np_name" --argjson cfg "$config" \
         '{uuid: $uuid, name: $name, pluginConfig: $cfg}')
-    response=$(np_api "PUT" "/api/node-plugins" "$body")
+    response=$(np_api "PATCH" "/api/node-plugins" "$body")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.uuid' >/dev/null 2>&1; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_UPDATE_FAIL]}" "$response")${COLOR_RESET}"
         return 1
