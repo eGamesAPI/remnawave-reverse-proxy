@@ -101,18 +101,20 @@ xc_mirror_prefixes() {
     printf '%s\n' "" "https://gh-proxy.com/" "https://ghfast.top/" "https://ghproxy.net/"
 }
 
-# One URL over all mirrors -> body on stdout.
-xc_fetch_url() {
-    local url="$1" prefix body
+# One URL over all mirrors, written straight to a file. The core is a binary
+# zip — it must never pass through a command substitution, bash strips null
+# bytes there and corrupts the archive.
+xc_fetch_file() {
+    local url="$1" dest="$2" prefix
     while IFS= read -r prefix; do
         if command -v curl >/dev/null 2>&1; then
-            body=$(curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --max-time 300 "${prefix}${url}" 2>/dev/null)
+            if curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --max-time 300 -o "$dest" "${prefix}${url}" 2>/dev/null && [ -s "$dest" ]; then
+                return 0
+            fi
         else
-            body=$(wget $WGET_IP_FLAGS -q -T 20 -t 1 -O- "${prefix}${url}" 2>/dev/null)
-        fi
-        if [ -n "$body" ]; then
-            printf '%s' "$body"
-            return 0
+            if wget $WGET_IP_FLAGS -q -T 20 -t 1 -O "$dest" "${prefix}${url}" 2>/dev/null && [ -s "$dest" ]; then
+                return 0
+            fi
         fi
     done < <(xc_mirror_prefixes)
     return 1
@@ -181,14 +183,14 @@ xc_download_core() {
     step_do "$(printf "${LANG[XC_DOWNLOADING]}" "$tag" "$asset")"
     tmpd=$(mktemp -d) || return 1
 
-    if ! xc_fetch_url "$base/$asset" > "$tmpd/core.zip" || [ ! -s "$tmpd/core.zip" ]; then
+    if ! xc_fetch_file "$base/$asset" "$tmpd/core.zip"; then
         echo -e "${COLOR_RED}${LANG[XC_DOWNLOAD_FAILED]}${COLOR_RESET}"
         rm -rf "$tmpd"
         return 1
     fi
 
     # SHA2-256 from the .dgst sidecar when it is served
-    if xc_fetch_url "$base/${asset}.dgst" > "$tmpd/core.dgst" 2>/dev/null && [ -s "$tmpd/core.dgst" ]; then
+    if xc_fetch_file "$base/${asset}.dgst" "$tmpd/core.dgst" && [ -s "$tmpd/core.dgst" ]; then
         want=$(sed -n 's/^SHA2-256=//p' "$tmpd/core.dgst" | head -n1 | tr -d ' ')
         have=$(sha256sum "$tmpd/core.zip" 2>/dev/null | cut -d' ' -f1)
         if [ -n "$want" ] && [ "$want" != "$have" ]; then
