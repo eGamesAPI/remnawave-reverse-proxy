@@ -686,6 +686,7 @@ LANG[EG_REMOVE_ALL_CONFIRM]="Удалить ВСЕ записи из обоих 
 LANG[EG_NOT_REMOVED]="Таких записей в списках нет."
 LANG[EG_PRESET_MENU_TITLE]="Пресеты Egress"
 LANG[EG_PRESET_NAME_PRIVATE]="Частные диапазоны"
+LANG[EG_PRESET_DRIFT_FMT]="установлен: %s, актуально: %s — пере-примените"
 LANG[EG_PRESET_DESC_PRIVATE]="Внутренние сети (RFC1918, CGNAT, link-local); занятое на этом хосте пропускается автоматически"
 LANG[EG_PRESET_NAME_MAIL]="Почтовые порты"
 LANG[EG_PRESET_DESC_MAIL]="Закрыть исходящую почту с сервера: 25, 465, 587"

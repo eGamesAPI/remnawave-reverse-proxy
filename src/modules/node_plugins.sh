@@ -1316,9 +1316,68 @@ show_egress_presets_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[EG_PRESET_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
+
+    # The egress twin of the ingress preset logic: reconcile the local state
+    # with the live config and self-heal a lost state file. Presets here are
+    # computed locally (host routes / constants), so nothing is downloaded;
+    # instead of a remote update mark, private ranges get a drift mark when
+    # the host state changed since the apply.
+    local current_ips="" current_ports="" applied present total pm p_present
+    if np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME" && [ -n "$np_uuid" ]; then
+        current_ips=$(eg_ip_entries | sed '/^$/d' | sort -u)
+        current_ports=$(eg_port_entries | sed '/^$/d' | sort -n -u)
+    fi
+
+    local computed computed_count drift_n=""
+    eg_private_compute
+    computed=$(printf '%s\n' "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u)
+    computed_count=$(printf '%s\n' "$computed" | sed '/^$/d' | wc -l)
+
+    applied=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
+    if [ -n "$applied" ]; then
+        total=$(printf '%s\n' "$applied" | sed '/^$/d' | wc -l)
+        if [ -z "$current_ips" ]; then
+            present=0
+        else
+            present=$(comm -12 <(printf '%s\n' "$applied") <(printf '%s\n' "$current_ips") | sed '/^$/d' | wc -l)
+        fi
+        if [ "$present" -eq 0 ]; then
+            eg_preset_state_set "private" ""
+            applied=""
+        elif [ "$present" -lt "$total" ]; then
+            applied=$(comm -12 <(printf '%s\n' "$applied") <(printf '%s\n' "$current_ips"))
+            eg_preset_state_set "private" "$applied"
+        fi
+        if [ -n "$applied" ] && [ "$applied" != "$computed" ]; then
+            drift_n="$computed_count"
+        fi
+    elif [ -n "$current_ips" ] && [ "$computed_count" -gt 0 ]; then
+        present=$(comm -12 <(printf '%s\n' "$computed") <(printf '%s\n' "$current_ips") | sed '/^$/d' | wc -l)
+        if [ "$present" -eq "$computed_count" ]; then
+            eg_preset_state_set "private" "$computed"
+            applied="$computed"
+        fi
+    fi
+
+    if [ -n "$(eg_preset_state_get "mail" | sed '/^$/d')" ]; then
+        p_present=0
+        for pm in 25 465 587; do
+            [ -n "$current_ports" ] && printf '%s\n' "$current_ports" | grep -qx "$pm" && p_present=$((p_present + 1))
+        done
+        [ "$p_present" -eq 0 ] && eg_preset_state_set "mail" ""
+    elif [ -n "$current_ports" ]; then
+        p_present=0
+        for pm in 25 465 587; do
+            printf '%s\n' "$current_ports" | grep -qx "$pm" && p_present=$((p_present + 1))
+        done
+        [ "$p_present" -eq 3 ] && eg_preset_state_set "mail" "$(printf '25\n465\n587')"
+    fi
+
     local n
     n=$(eg_preset_state_get "private" | sed '/^$/d' | wc -l)
-    if [ "$n" -gt 0 ]; then
+    if [ "$n" -gt 0 ] && [ -n "$drift_n" ]; then
+        echo -e "${COLOR_YELLOW}1. ${LANG[EG_PRESET_NAME_PRIVATE]} ${COLOR_RED}[$(printf "${LANG[EG_PRESET_DRIFT_FMT]}" "$n" "$drift_n")]${COLOR_RESET}"
+    elif [ "$n" -gt 0 ]; then
         echo -e "${COLOR_YELLOW}1. ${LANG[EG_PRESET_NAME_PRIVATE]} ${COLOR_GREEN}[${LANG[IG_PRESET_APPLIED_MARK]}: ${n}]${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}1. ${LANG[EG_PRESET_NAME_PRIVATE]}${COLOR_RESET}"
