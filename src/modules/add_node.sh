@@ -65,7 +65,16 @@ add_node_to_panel() {
         return 1
     fi
 
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" || return 1
+    # Best-effort: bind the shared node plugin (node plugins menu manages it)
+    # right at birth — without activePluginUuid the node runs no plugin at all.
+    local plugin_uuid=""
+    plugin_uuid=$(make_api_request "GET" "http://$domain_url/api/node-plugins?_=$(date +%s)" "$token" 2>/dev/null \
+        | jq -r '[.response[]? | select(
+               .name == "Reverse Node Plugins"
+               or ((.pluginConfig // {}) | (has("torrentBlocker") or has("ingressFilter") or has("egressFilter"))))]
+             | first | .uuid // empty' 2>/dev/null)
+
+    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$plugin_uuid" || return 1
 
     create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
 
