@@ -86,7 +86,6 @@ np_state() {
         echo "unknown"
         return
     fi
-    np_select_tb_plugin
     if [ -z "$np_uuid" ]; then
         echo "absent"
     elif np_tb_is_on; then
