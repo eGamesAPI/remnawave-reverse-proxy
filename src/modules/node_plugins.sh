@@ -996,7 +996,7 @@ eg_preset_apply_private() {
     local old_private merged
     old_private=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
     merged=$(printf '%s\n%s\n' "$(eg_ip_entries | sed '/^$/d' | sort -u)" \
-        <(printf '%s\n' "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u) | sed '/^$/d' | sort -u)
+        "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u)
     if [ -n "$old_private" ]; then
         merged=$(comm -23 <(printf '%s\n' "$merged" | sort -u) <(printf '%s\n' "$old_private" | sort -u))
     fi
