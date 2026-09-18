@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.3.8"
+SCRIPT_VERSION="Dev 3.4.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -902,6 +902,56 @@ show_webserver_select() {
     reading "${LANG[SELECT_WEBSERVER_PROMPT]}" WEBSERVER_OPTION
 }
 
+# Everything that customizes a node lives behind this one hub entry — selfsteal
+# templates, node plugins (Torrent Blocker), room for a custom core later — so
+# the main menu does not grow with every new node feature.
+show_node_extensions_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[NODE_EXTENSIONS_TITLE]}${COLOR_RESET}"
+    echo -e ""
+
+    local last=1
+    local opt_plugins="__none__"
+
+    echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
+    # Plugins are configured through the panel API, so a node-only box —
+    # which has no panel to call — keeps the hub at a single entry.
+    if panel_is_installed; then
+        last=$((last + 1))
+        opt_plugins=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_PLUGINS]}${COLOR_RESET}"
+    fi
+
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NODE_EXTENSIONS_OPTION
+
+    case $NODE_EXTENSIONS_OPTION in
+        1)
+            load_selfsteal_templates_module
+            manage_selfsteal_templates
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_plugins")
+            load_node_plugins_module
+            load_api_module
+            manage_node_plugins
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        0)
+            remnawave_reverse
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_node_extensions_menu
+            ;;
+    esac
+}
+
 #Manage Install Remnawave Components
 show_install_menu() {
     echo -e ""
@@ -1621,6 +1671,7 @@ load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
+load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
@@ -1662,10 +1713,7 @@ case $OPTION in
         show_manage_panel_menu
         ;;
     4)
-        load_selfsteal_templates_module
-        manage_selfsteal_templates
-        sleep 2
-        remnawave_reverse
+        show_node_extensions_menu
         ;;
     5)
         load_legiz_module

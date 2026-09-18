@@ -25,3 +25,12 @@ logs/
 # Temp files
 *.tmp
 *.bak
+
+# Local drafts and notes — never meant for the repository
+changelog_draft.md
+*.draft.md
+*.local.md
+
+# Local API snapshots (Remnawave panel OpenAPI spec)
+api-1.yaml
+api-1.json
