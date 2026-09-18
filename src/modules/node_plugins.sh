@@ -353,6 +353,244 @@ np_delete() {
     fi
 }
 
+# --- Telegram notifications via the panel .env -------------------------------
+# The panel sends TB reports itself once the env vars below are set; the docs
+# require recreating the stack (down + up), a plain restart is not enough.
+
+NP_PANEL_ENV="/opt/remnawave/.env"
+
+np_env_get() {
+    [ -r "$NP_PANEL_ENV" ] || return 1
+    sed -n "s|^$1=||p" "$NP_PANEL_ENV" | head -n1
+}
+
+np_env_set() {
+    local var="$1" val="$2"
+    local escaped="${val//&/\\&}"
+    if grep -q "^$var=" "$NP_PANEL_ENV"; then
+        sed -i "s|^$var=.*|$var=$escaped|" "$NP_PANEL_ENV"
+    else
+        printf '%s=%s\n' "$var" "$val" >> "$NP_PANEL_ENV"
+    fi
+}
+
+# Same helper as in the certificates module: the user types the proxy password
+# as is, it goes into the URL percent-encoded (safe for .env and for the panel).
+percent_encode_proxy_auth() {
+    local url="$1"
+    local scheme rest hostpart userinfo user pass
+    local c octet out_user="" out_pass=""
+
+    case "$url" in
+        *://*) scheme="${url%%://*}"; rest="${url#*://}" ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    case "$rest" in
+        *@*)
+            hostpart="${rest##*@}"
+            userinfo="${rest%@${hostpart}}"
+            ;;
+        *) printf '%s\n' "$url"; return 0 ;;
+    esac
+
+    user="${userinfo%%:*}"
+    if [[ "$userinfo" == *:* ]]; then
+        pass="${userinfo#*:}"
+    else
+        pass=""
+    fi
+
+    while IFS= read -r -n 1 c; do
+        case "$c" in
+            [A-Za-z0-9.-_~]) out_user+="$c" ;;
+            *) printf -v octet '%%%02X' "'$c"; out_user+="$octet" ;;
+        esac
+    done <<< "$user"
+
+    while IFS= read -r -n 1 c; do
+        case "$c" in
+            [A-Za-z0-9.-_~]) out_pass+="$c" ;;
+            *) printf -v octet '%%%02X' "'$c"; out_pass+="$octet" ;;
+        esac
+    done <<< "$pass"
+
+    if [ -n "$out_pass" ]; then
+        printf '%s://%s:%s@%s\n' "$scheme" "$out_user" "$out_pass" "$hostpart"
+    else
+        printf '%s://%s@%s\n' "$scheme" "$out_user" "$hostpart"
+    fi
+}
+
+# Split "chat_id[:thread_id]" into NP_TG_CHAT_VAL / NP_TG_THREAD_VAL.
+np_tg_parse_chat() {
+    local input="$1"
+    NP_TG_THREAD_VAL=""
+    case "$input" in
+        *:*) NP_TG_CHAT_VAL="${input%%:*}"; NP_TG_THREAD_VAL="${input##*:}" ;;
+        *)   NP_TG_CHAT_VAL="$input" ;;
+    esac
+    [[ "$NP_TG_CHAT_VAL" =~ ^-?[0-9]+$ ]] || return 1
+    if [ -n "$NP_TG_THREAD_VAL" ] && ! [[ "$NP_TG_THREAD_VAL" =~ ^-?[0-9]+$ ]]; then
+        return 1
+    fi
+    return 0
+}
+
+np_tg_send_test() {
+    local curl_proxy=() thread_args=()
+    [ -n "$NP_TG_PROXY_VAL" ] && curl_proxy=(--proxy "$NP_TG_PROXY_VAL")
+    [ -n "$NP_TG_THREAD_VAL" ] && thread_args=(--data-urlencode "message_thread_id=${NP_TG_THREAD_VAL}")
+    NP_TG_RESPONSE=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${NP_TG_TOKEN_VAL}/sendMessage" \
+        --data-urlencode "chat_id=${NP_TG_CHAT_VAL}" \
+        "${thread_args[@]}" \
+        --data-urlencode "text=✅ ${LANG[NP_TG_TEST_TEXT]}" 2>/dev/null)
+    NP_TG_CURL_RC=$?
+    printf '%s' "$NP_TG_RESPONSE" | grep -q '"ok":true'
+}
+
+np_tg_show_error() {
+    local desc
+    desc=$(printf '%s' "$NP_TG_RESPONSE" | sed -n 's/.*"description":"\([^"]*\)".*/\1/p')
+    if [ -n "$desc" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[CERT_TG_FAIL_DESC]}" "$desc")${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"
+    fi
+}
+
+np_tg_recreate_stack() {
+    (
+        cd /opt/remnawave || exit 1
+        docker compose down > /dev/null 2>&1
+        docker compose up -d > /dev/null 2>&1
+    ) &
+    spinner $! "${LANG[WAITING]}"
+}
+
+np_tg_disable() {
+    local confirm
+    if ! reading_yn "${LANG[NP_TG_DISABLE_CONFIRM]}" confirm; then
+        return 0
+    fi
+    step_do "${LANG[NP_TG_RECREATING]}"
+    np_env_set "TELEGRAM_NOTIFY_TBLOCKER" "change_me"
+    # Keep the global switch on while other categories still carry a real chat.
+    local other others_left=0 v
+    for v in TELEGRAM_NOTIFY_USERS TELEGRAM_NOTIFY_NODES TELEGRAM_NOTIFY_CRM TELEGRAM_NOTIFY_SERVICE; do
+        other=$(np_env_get "$v")
+        if [ -n "$other" ] && [ "$other" != "change_me" ]; then
+            others_left=1
+            break
+        fi
+    done
+    [ "$others_left" = "0" ] && np_env_set "IS_TELEGRAM_NOTIFICATIONS_ENABLED" "false"
+    np_tg_recreate_stack
+    step_ok "${LANG[NP_TG_DISABLED_OK]}"
+}
+
+np_setup_tg() {
+    if [ ! -r "$NP_PANEL_ENV" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_TG_NO_ENV]}${COLOR_RESET}"
+        return 1
+    fi
+
+    local cur_enabled cur_token cur_chat
+    cur_enabled=$(np_env_get "IS_TELEGRAM_NOTIFICATIONS_ENABLED")
+    cur_token=$(np_env_get "TELEGRAM_BOT_TOKEN")
+    cur_chat=$(np_env_get "TELEGRAM_NOTIFY_TBLOCKER")
+
+    local state_txt="${LANG[NP_TG_STATE_OFF]}"
+    [ "$cur_enabled" = "true" ] && state_txt="${LANG[NP_TG_STATE_ON]}"
+    local chat_txt="—"
+    { [ -n "$cur_chat" ] && [ "$cur_chat" != "change_me" ]; } && chat_txt="$cur_chat"
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[NP_TG_CURRENT]}" "$state_txt" "$chat_txt")${COLOR_RESET}"
+
+    if [ "$cur_enabled" = "true" ] && [ "$chat_txt" != "—" ]; then
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[NP_TG_MENU_RECONFIG]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[NP_TG_MENU_DISABLE]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+        echo -e ""
+        local tg_action
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" tg_action
+        case $tg_action in
+            2) np_tg_disable ;;
+            1) ;;
+            *) return 0 ;;
+        esac
+    fi
+
+    local token_val="" proxy_val="" token_input chat_input chat_full
+    while true; do
+        local token_def="—"
+        { [ -n "$cur_token" ] && [ "$cur_token" != "change_me" ]; } && token_def="$cur_token"
+        reading "$(printf "${LANG[NP_TG_TOKEN_PROMPT]}" "$token_def")" token_input || return 0
+        [ "$token_input" = "0" ] && return 0
+
+        local chat_def="—"
+        { [ -n "$cur_chat" ] && [ "$cur_chat" != "change_me" ]; } && chat_def="$cur_chat"
+        reading "$(printf "${LANG[NP_TG_CHAT_PROMPT]}" "$chat_def")" chat_input || return 0
+        [ "$chat_input" = "0" ] && return 0
+
+        if [ -n "$token_input" ]; then
+            token_val="$token_input"
+        elif [ "$token_def" != "—" ]; then
+            token_val="$cur_token"
+        fi
+        if [ -n "$chat_input" ]; then
+            chat_full="$chat_input"
+        elif [ "$chat_def" != "—" ]; then
+            chat_full="$cur_chat"
+        fi
+
+        if ! [[ "$token_val" =~ ^[0-9A-Za-z:_-]+$ ]] || ! np_tg_parse_chat "$chat_full"; then
+            echo -e "${COLOR_RED}${LANG[NP_TG_INVALID]}${COLOR_RESET}"
+            continue
+        fi
+
+        NP_TG_TOKEN_VAL="$token_val"
+        NP_TG_PROXY_VAL=""
+        echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+        np_tg_send_test && break
+
+        # Empty reply with a curl error = api.telegram.org unreachable
+        if [ -z "$NP_TG_RESPONSE" ] && [ "$NP_TG_CURL_RC" -ne 0 ]; then
+            echo -e "${COLOR_YELLOW}${LANG[CERT_TG_BLOCKED]}${COLOR_RESET}"
+            local use_proxy proxy_url
+            printf "${COLOR_YELLOW}${LANG[CERT_TG_PROXY]}${COLOR_RESET}\n"
+            read_yn use_proxy || { echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"; continue; }
+            reading "${LANG[CERT_TG_PROXY_URL]}" proxy_url || proxy_url=""
+            proxy_url=$(percent_encode_proxy_auth "$proxy_url")
+            if [ -n "$proxy_url" ] && [[ "$proxy_url" =~ ^(https?|socks5h?)://[A-Za-z0-9.:_%@/?=&-]+$ ]]; then
+                NP_TG_PROXY_VAL="$proxy_url"
+                echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+                np_tg_send_test && { proxy_val="$proxy_url"; break; }
+            fi
+        fi
+        np_tg_show_error
+    done
+
+    echo ""
+    local tg_apply
+    if ! reading_yn "${LANG[NP_TG_APPLY_CONFIRM]}" tg_apply; then
+        return 0
+    fi
+    step_do "${LANG[NP_TG_SAVING]}"
+    np_env_set "IS_TELEGRAM_NOTIFICATIONS_ENABLED" "true"
+    np_env_set "TELEGRAM_BOT_TOKEN" "$token_val"
+    np_env_set "TELEGRAM_NOTIFY_TBLOCKER" "$chat_full"
+    if [ -n "$proxy_val" ]; then
+        np_env_set "TELEGRAM_BOT_PROXY" "$proxy_val"
+    elif grep -q "^TELEGRAM_BOT_PROXY=" "$NP_PANEL_ENV"; then
+        sed -i "s|^TELEGRAM_BOT_PROXY=|# TELEGRAM_BOT_PROXY=|" "$NP_PANEL_ENV"
+    fi
+    step_do "${LANG[NP_TG_RECREATING]}"
+    np_tg_recreate_stack
+    step_ok "${LANG[NP_TG_DONE]}"
+}
+
 # Sets NP_STATUS_COLOR / NP_STATUS_TEXT for a plugin state.
 np_tb_status_strings() {
     local state="$1"
@@ -420,10 +658,11 @@ show_torrent_blocker_menu() {
     echo -e "${COLOR_YELLOW}4. ${LANG[NP_UNBLOCK]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[NP_RECREATE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[NP_DELETE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}7. ${LANG[NP_TG_MENU]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    local last=6
+    local last=7
     reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NP_OPTION
 
     case $NP_OPTION in
@@ -458,6 +697,11 @@ show_torrent_blocker_menu() {
             ;;
         6)
             np_delete
+            sleep 2
+            show_torrent_blocker_menu
+            ;;
+        7)
+            np_setup_tg
             sleep 2
             show_torrent_blocker_menu
             ;;
