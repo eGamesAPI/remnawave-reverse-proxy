@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.8"
+SCRIPT_VERSION="Dev 3.5.9"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -950,7 +950,7 @@ show_node_extensions_menu() {
             show_node_extensions_menu
             ;;
         "$opt_core")
-            load_xray_core_module
+            load_node_core_module
             manage_xray_core
             sleep 2
             show_node_extensions_menu
@@ -1686,7 +1686,7 @@ load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
-load_xray_core_module() { load_module "xray_core" "modules" "${1:-false}"; }
+load_node_core_module() { load_module "node_core" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }

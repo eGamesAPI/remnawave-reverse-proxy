@@ -1,7 +1,7 @@
 #!/bin/bash
-# Module: Xray core for the node — official XTLS build or the Jolymmiles
-# server-focused fork, installed as a bind-mount over the bundled binary.
-# Works purely on the host (docker compose), no panel API involved.
+# Module: node_core — Xray core for the node: official XTLS build or the
+# Jolymmiles server-focused fork, installed as a bind-mount over the bundled
+# binary. Works purely on the host (docker compose), no panel API involved.
 
 XC_STATE_FILE="${DIR_REMNAWAVE}xray-core.state"
 XC_BINARY_NAME="xray-core"
