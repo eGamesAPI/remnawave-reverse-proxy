@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.10"
+SCRIPT_VERSION="Dev 3.5.11"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -869,7 +869,8 @@ show_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
     echo -e ""
-    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Templates for the selfsteal node
+    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Node extensions hub
+    echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
     echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
     echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore

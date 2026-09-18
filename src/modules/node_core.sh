@@ -3,8 +3,8 @@
 # Jolymmiles server-focused fork, installed as a bind-mount over the bundled
 # binary. Works purely on the host (docker compose), no panel API involved.
 
-XC_STATE_FILE="${DIR_REMNAWAVE}xray-core.state"
-XC_BINARY_NAME="xray-core"
+XC_STATE_FILE="${DIR_REMNAWAVE}node-core.state"
+XC_BINARY_NAME="xray-custom"
 XC_MOUNT="./${XC_BINARY_NAME}:/usr/local/bin/xray"
 
 # Known-good pins used when api.github.com is unreachable.
