@@ -319,6 +319,7 @@ services:
       - SECRET_KEY="PUBLIC KEY FROM REMNAWAVE-PANEL"
     volumes:
       - /dev/shm:/dev/shm:rw
+      - /var/log/remnanode:/var/log/remnanode
 
 networks:
   remnawave-network:

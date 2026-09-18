@@ -14,3 +14,7 @@ docs/.astro/
 changelog_draft.md
 *.draft.md
 *.local.md
+
+# Local API snapshots (Remnawave panel OpenAPI spec)
+api-1.yaml
+api-1.json

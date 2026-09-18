@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.3.5"
+SCRIPT_VERSION="3.3.6"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -869,7 +869,8 @@ show_menu() {
     echo -e "${COLOR_YELLOW}2. ${LANG[MENU_2]}${COLOR_RESET}" # Reinstall panel/node
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
     echo -e ""
-    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Templates for the selfsteal node
+    echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Node extensions hub
+    echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
     echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
     echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
@@ -900,6 +901,70 @@ show_webserver_select() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     reading "${LANG[SELECT_WEBSERVER_PROMPT]}" WEBSERVER_OPTION
+}
+
+# Everything that customizes a node lives behind this one hub entry — selfsteal
+# templates, node plugins (Torrent Blocker), room for a custom core later — so
+# the main menu does not grow with every new node feature.
+show_node_extensions_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[NODE_EXTENSIONS_TITLE]}${COLOR_RESET}"
+    echo -e ""
+
+    local last=1
+    local opt_plugins="__none__"
+    local opt_core="__none__"
+
+    echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
+    # Plugins are configured through the panel API, so a node-only box —
+    # which has no panel to call — keeps the hub at a single entry.
+    if panel_is_installed; then
+        last=$((last + 1))
+        opt_plugins=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_PLUGINS]}${COLOR_RESET}"
+    fi
+    # The Xray core swap works straight on the node compose, no panel needed.
+    if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
+       { [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; }; then
+        last=$((last + 1))
+        opt_core=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_CORE]}${COLOR_RESET}"
+    fi
+
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NODE_EXTENSIONS_OPTION
+
+    case $NODE_EXTENSIONS_OPTION in
+        1)
+            load_selfsteal_templates_module
+            manage_selfsteal_templates
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_plugins")
+            load_node_plugins_module
+            load_api_module
+            manage_node_plugins
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_core")
+            load_node_core_module
+            manage_xray_core
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        0)
+            remnawave_reverse
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_node_extensions_menu
+            ;;
+    esac
 }
 
 #Manage Install Remnawave Components
@@ -1621,6 +1686,8 @@ load_caddy_sub_module() { load_module "install_sub" "caddy" "${1:-false}"; }
 load_warp_module() { load_module "warp" "modules" "${1:-false}"; }
 load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
+load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
+load_node_core_module() { load_module "node_core" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
@@ -1662,10 +1729,7 @@ case $OPTION in
         show_manage_panel_menu
         ;;
     4)
-        load_selfsteal_templates_module
-        manage_selfsteal_templates
-        sleep 2
-        remnawave_reverse
+        show_node_extensions_menu
         ;;
     5)
         load_legiz_module
