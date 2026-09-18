@@ -394,7 +394,11 @@ ig_state() {
 }
 
 ig_entry_count() {
-    echo "$np_config_json" | jq -r '.ingressFilter.blockedIps // [] | length'
+    if [ -z "$np_config_json" ]; then
+        echo 0
+        return
+    fi
+    echo "$np_config_json" | jq -r '.ingressFilter.blockedIps // [] | length' 2>/dev/null || echo 0
 }
 
 ig_current_entries() {
@@ -683,9 +687,36 @@ show_ingress_presets_menu() {
     echo -e "${COLOR_GREEN}${LANG[IG_PRESET_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
 
+    # Reconcile the local state with what the panel actually serves: entries
+    # wiped outside the presets (manual removal, panel edits, past bugs) must
+    # not keep showing as an applied preset.
+    local id current applied present total
+    current=""
+    if np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME" && [ -n "$np_uuid" ]; then
+        current=$(ig_current_entries | sed '/^$/d' | sort -u)
+    fi
+    for id in ru classic fofa; do
+        applied=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
+        [ -n "$applied" ] || continue
+        total=$(printf '%s\n' "$applied" | sed '/^$/d' | wc -l)
+        if [ -z "$current" ]; then
+            present=0
+        else
+            present=$(comm -12 <(printf '%s\n' "$applied") <(printf '%s\n' "$current") | sed '/^$/d' | wc -l)
+        fi
+        if [ "$present" -eq 0 ]; then
+            # nothing of this preset is in the list any more — drop the mark
+            ig_preset_state_set "$id" ""
+        elif [ "$present" -lt "$total" ]; then
+            # partially present (some entries removed manually) — keep the
+            # surviving subset as the preset's baseline
+            ig_preset_state_set "$id" "$(comm -12 <(printf '%s\n' "$applied") <(printf '%s\n' "$current"))"
+        fi
+    done
+
     # Applied presets are diffed against the remote lists (via mirrors); a
     # failed check leaves the preset unmarked rather than crying wolf.
-    local id n any_applied=0 remote_ru="" remote_classic="" remote_fofa
+    local n any_applied=0 remote_ru="" remote_classic="" remote_fofa
     for id in ru classic fofa; do
         [ "$(ig_preset_state_get "$id" | sed '/^$/d' | wc -l)" -gt 0 ] && any_applied=1
     done
@@ -844,11 +875,19 @@ eg_state() {
 }
 
 eg_ip_count() {
-    echo "$np_config_json" | jq -r '.egressFilter.blockedIps // [] | length'
+    if [ -z "$np_config_json" ]; then
+        echo 0
+        return
+    fi
+    echo "$np_config_json" | jq -r '.egressFilter.blockedIps // [] | length' 2>/dev/null || echo 0
 }
 
 eg_port_count() {
-    echo "$np_config_json" | jq -r '.egressFilter.blockedPorts // [] | length'
+    if [ -z "$np_config_json" ]; then
+        echo 0
+        return
+    fi
+    echo "$np_config_json" | jq -r '.egressFilter.blockedPorts // [] | length' 2>/dev/null || echo 0
 }
 
 eg_ip_entries() {
