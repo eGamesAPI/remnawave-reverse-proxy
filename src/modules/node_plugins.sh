@@ -726,6 +726,22 @@ show_ingress_presets_menu() {
         fi
     done
 
+    # Self-heal: a lost or deleted state file must not erase applied marks —
+    # when the whole remote preset is present in the live list, adopt it.
+    if [ -n "$current" ]; then
+        for id in ru classic fofa; do
+            applied=$(ig_preset_state_get "$id" | sed '/^$/d')
+            [ -n "$applied" ] && continue
+            if ig_fetch_preset_entries "$id" && [ "$IG_PRESET_COUNT" -gt 0 ]; then
+                present=$(comm -12 <(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u) \
+                    <(printf '%s\n' "$current") | sed '/^$/d' | wc -l)
+                if [ "$present" -eq "$IG_PRESET_COUNT" ]; then
+                    ig_preset_state_set "$id" "$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d')"
+                fi
+            fi
+        done
+    fi
+
     # Applied presets are diffed against the remote lists (via mirrors); a
     # failed check leaves the preset unmarked rather than crying wolf.
     local n any_applied=0 remote_ru="" remote_classic="" remote_fofa
