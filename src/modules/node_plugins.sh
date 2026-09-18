@@ -563,7 +563,7 @@ np_setup_tg() {
             read_yn use_proxy || { echo -e "${COLOR_RED}${LANG[CERT_TG_FAIL]}${COLOR_RESET}"; continue; }
             reading "${LANG[CERT_TG_PROXY_URL]}" proxy_url || proxy_url=""
             proxy_url=$(percent_encode_proxy_auth "$proxy_url")
-            if [ -n "$proxy_url" ] && [[ "$proxy_url" =~ ^(https?|socks5h?)://[A-Za-z0-9.:_%@/?=&-]+$ ]]; then
+            if [ -n "$proxy_url" ] && [[ "$proxy_url" =~ ^(https?|socks5h?)://[A-Za-z0-9.:_%@/?=-]+$ ]]; then
                 NP_TG_PROXY_VAL="$proxy_url"
                 echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
                 np_tg_send_test && { proxy_val="$proxy_url"; break; }
