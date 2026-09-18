@@ -1,6 +1,6 @@
 #!/bin/bash
-# Module: Node Plugins — Torrent Blocker and Ingress Filter management via
-# the panel API. Depends on the api module (make_api_request,
+# Module: Node Plugins — Torrent Blocker, Ingress Filter and Egress Filter
+# management via the panel API. Depends on the api module (make_api_request,
 # get_panel_token) being loaded and on $token being set beforehand.
 
 NP_PLUGIN_NAME="Torrent Blocker"
@@ -778,6 +778,522 @@ show_ingress_filter_menu() {
     esac
 }
 
+# --- Egress Filter: outbound blocking by destination IP/port ---------------
+
+EG_PLUGIN_NAME="Egress Filter"
+EG_STATE_FILE="${DIR_REMNAWAVE}egress-preset.state"
+
+eg_is_on() {
+    echo "$np_config_json" | jq -e '.egressFilter.enabled == true or .egressFilter.enabled == "true"' >/dev/null 2>&1
+}
+
+eg_state() {
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo "unknown"
+        return
+    fi
+    if [ -z "$np_uuid" ]; then
+        echo "absent"
+    elif eg_is_on; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+eg_ip_count() {
+    echo "$np_config_json" | jq -r '.egressFilter.blockedIps // [] | length'
+}
+
+eg_port_count() {
+    echo "$np_config_json" | jq -r '.egressFilter.blockedPorts // [] | length'
+}
+
+eg_ip_entries() {
+    echo "$np_config_json" | jq -r '.egressFilter.blockedIps // [] | .[]'
+}
+
+eg_port_entries() {
+    echo "$np_config_json" | jq -r '.egressFilter.blockedPorts // [] | .[]'
+}
+
+eg_apply() {
+    local ips="$1" ports="$2" ips_arr ports_arr config
+    ips_arr=$(printf '%s\n' "$ips" | sed '/^$/d' | jq -R . | jq -s .)
+    ports_arr=$(printf '%s\n' "$ports" | sed '/^$/d' | jq -R 'tonumber' | jq -s .)
+    config=$(echo "$np_config_json" | jq -c --argjson ips "$ips_arr" --argjson ports "$ports_arr" \
+        '.egressFilter = ((.egressFilter // {enabled: false, blockedIps: [], blockedPorts: []})
+            | .blockedIps = $ips | .blockedPorts = $ports)')
+    np_apply_config "$config"
+}
+
+eg_preset_state_get() {
+    [ -r "$EG_STATE_FILE" ] || return 0
+    awk -F'\t' -v id="$1" '$1 == id { print $2 }' "$EG_STATE_FILE"
+}
+
+eg_preset_state_set() {
+    local id="$1" entries="$2" tmp entry
+    tmp=$(mktemp)
+    [ -r "$EG_STATE_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$EG_STATE_FILE" > "$tmp"
+    while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        printf '%s\t%s\n' "$id" "$entry" >> "$tmp"
+    done <<< "$entries"
+    mv "$tmp" "$EG_STATE_FILE"
+    chmod 600 "$EG_STATE_FILE" 2>/dev/null
+}
+
+# --- private-ranges preset machinery ---
+
+eg_v4_to_int() {
+    local IFS=.
+    local o=($1)
+    echo $(( (o[0] << 24) + (o[1] << 16) + (o[2] << 8) + o[3] ))
+}
+
+# True when one CIDR contains the other (or they are equal) — enough for
+# candidate-vs-host-route checks, partial overlaps are impossible here.
+eg_cidr_overlaps() {
+    local a="$1" b="$2"
+    local an am bn bm ip mask
+    ip="${a%%/*}"; mask="${a##*/}"
+    an=$(eg_v4_to_int "$ip"); am=$(( (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF ))
+    ip="${b%%/*}"; mask="${b##*/}"
+    bn=$(eg_v4_to_int "$ip"); bm=$(( (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF ))
+    [ $(( an & bm )) -eq $(( bn & am )) ]
+}
+
+# Every IPv4 prefix the host actually routes to or owns: connected routes,
+# interface addresses. These must never land in the egress blocklist.
+eg_host_v4_ranges() {
+    {
+        ip -4 route show 2>/dev/null | awk '$1 != "default" && $1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+$/ { print $1 }'
+        ip -4 addr show 2>/dev/null | sed -n 's/.*inet \([0-9.]*\)\/.*/\1\/32/p'
+    } | sort -u
+}
+
+eg_is_port_entry() {
+    [[ "$1" =~ ^[0-9]{1,5}$ ]] || return 1
+    (( $1 >= 1 && $1 <= 65535 ))
+}
+
+# IPv4 (plain or CIDR, octets checked) or loose IPv6 / IPv6-CIDR.
+eg_valid_ip_entry() {
+    np_valid_cidr4 "$1" && return 0
+    local addr="${1%%/*}"
+    [[ "$addr" == *:* && "$addr" =~ ^[0-9a-fA-F:]+$ ]] || return 1
+    [[ "$(echo "$addr" | tr -cd ':')" == *:*:* ]] || return 1
+    case "$1" in
+        */*) [[ "${1##*/}" =~ ^[0-9]{1,3}$ ]] || return 1 ;;
+    esac
+    return 0
+}
+
+# Compute the private-ranges preset against the live host state: candidates
+# that overlap any route/address in use are reported as skipped.
+eg_private_compute() {
+    EG_PRIVATE_BLOCKED=""
+    EG_PRIVATE_SKIPPED=""
+    local cand hr skip reason
+    local host_ranges
+    host_ranges=$(eg_host_v4_ranges)
+    for cand in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 169.254.0.0/16; do
+        skip=""
+        while IFS= read -r hr; do
+            [ -z "$hr" ] && continue
+            if eg_cidr_overlaps "$cand" "$hr"; then
+                skip="$hr"
+                break
+            fi
+        done <<< "$host_ranges"
+        if [ -n "$skip" ]; then
+            EG_PRIVATE_SKIPPED+="${cand} ← ${skip}"$'\n'
+        else
+            EG_PRIVATE_BLOCKED+="$cand"$'\n'
+        fi
+    done
+    # IPv6 ULA (fc00::/7): tailscale/netbird meshes live in fd00::/8 — skip
+    # the whole candidate as soon as the host owns any fd-address.
+    if ip -6 addr show scope global 2>/dev/null | grep -q 'inet6 fd[0-9a-fA-F][0-9a-fA-F]:'; then
+        EG_PRIVATE_SKIPPED+="fc00::/7 ← fd00::/8"$'\n'
+    else
+        EG_PRIVATE_BLOCKED+="fc00::/7"$'\n'
+    fi
+    EG_PRIVATE_BLOCKED=$(printf '%s' "$EG_PRIVATE_BLOCKED" | sed '/^$/d')
+    EG_PRIVATE_SKIPPED=$(printf '%s' "$EG_PRIVATE_SKIPPED" | sed '/^$/d')
+    return 0
+}
+
+eg_preset_apply_private() {
+    eg_private_compute
+    local blocked_n skipped_n
+    blocked_n=$(printf '%s\n' "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | wc -l)
+    skipped_n=$(printf '%s\n' "$EG_PRIVATE_SKIPPED" | sed '/^$/d' | wc -l)
+
+    if [ "$blocked_n" -eq 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_PRESET_EMPTY]}${COLOR_RESET}"
+        return 0
+    fi
+
+    echo -e ""
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[EG_PRESET_BLOCKED_HEAD]}" "$blocked_n")${COLOR_RESET}"
+    printf '%s\n' "$EG_PRIVATE_BLOCKED" | while IFS= read -r line; do
+        echo -e "   ${COLOR_RED}${line}${COLOR_RESET}"
+    done
+    if [ "$skipped_n" -gt 0 ]; then
+        echo -e " ${COLOR_GRAY}$(printf "${LANG[EG_PRESET_SKIPPED_HEAD]}" "$skipped_n")${COLOR_RESET}"
+        printf '%s\n' "$EG_PRIVATE_SKIPPED" | while IFS= read -r line; do
+            echo -e "   ${COLOR_GREEN}${line}${COLOR_RESET}"
+        done
+    fi
+    echo ""
+
+    local confirm
+    if ! reading_yn "${LANG[EG_PRESET_PRIVATE_CONFIRM]}" confirm; then
+        return 0
+    fi
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local was_on="false"
+    eg_is_on && was_on="true"
+
+    local old_private merged
+    old_private=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
+    merged=$(printf '%s\n%s\n' "$(eg_ip_entries | sed '/^$/d' | sort -u)" \
+        <(printf '%s\n' "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u) | sed '/^$/d' | sort -u)
+    if [ -n "$old_private" ]; then
+        merged=$(comm -23 <(printf '%s\n' "$merged" | sort -u) <(printf '%s\n' "$old_private" | sort -u))
+    fi
+
+    if ! eg_apply "$merged" "$(eg_port_entries | sed '/^$/d' | sort -n -u)"; then
+        return 1
+    fi
+    eg_preset_state_set "private" "$(printf '%s\n' "$EG_PRIVATE_BLOCKED" | sed '/^$/d')"
+    step_ok "$(printf "${LANG[EG_PRESET_PRIVATE_APPLIED]}" "$blocked_n")"
+    if [ "$was_on" != "true" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_PRESET_ENABLE_HINT]}${COLOR_RESET}"
+    fi
+}
+
+eg_preset_apply_mail() {
+    local confirm
+    if ! reading_yn "${LANG[EG_PRESET_MAIL_CONFIRM]}" confirm; then
+        return 0
+    fi
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local was_on="false"
+    eg_is_on && was_on="true"
+
+    local old_mail merged
+    old_mail=$(eg_preset_state_get "mail" | sed '/^$/d' | sort -u)
+    merged=$(printf '25\n465\n587\n' | sort -n -u)
+    local current_ports
+    current_ports=$(eg_port_entries | sed '/^$/d' | sort -n -u)
+    if [ -n "$old_mail" ]; then
+        current_ports=$(comm -23 <(printf '%s\n' "$current_ports") <(printf '%s\n' "$old_mail" | sort -n))
+    fi
+    merged=$(printf '%s\n%s\n' "$current_ports" "$merged" | sed '/^$/d' | sort -n -u)
+
+    if ! eg_apply "$(eg_ip_entries | sed '/^$/d' | sort -u)" "$merged"; then
+        return 1
+    fi
+    eg_preset_state_set "mail" "$(printf '25\n465\n587\n')"
+    step_ok "$(printf "${LANG[EG_PRESET_MAIL_APPLIED]}" "25, 465, 587")"
+    if [ "$was_on" != "true" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_PRESET_ENABLE_HINT]}${COLOR_RESET}"
+    fi
+}
+
+eg_toggle() {
+    local new_enabled="$1"
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    if [ "$new_enabled" = "true" ]; then
+        step_do "${LANG[EG_ENABLING]}"
+    else
+        step_do "${LANG[EG_DISABLING]}"
+    fi
+    local config
+    config=$(echo "$np_config_json" | jq -c --argjson enabled "$new_enabled" \
+        '.egressFilter = ((.egressFilter // {enabled: false, blockedIps: [], blockedPorts: []}) | .enabled = $enabled)')
+    if ! np_apply_config "$config"; then
+        return 1
+    fi
+    if [ "$new_enabled" = "true" ]; then
+        step_ok "${LANG[EG_ENABLED_OK]}"
+        echo -e "${COLOR_YELLOW}${LANG[EG_NOTE]}${COLOR_RESET}"
+    else
+        step_ok "${LANG[EG_DISABLED_OK]}"
+    fi
+    local now_on="false"
+    if np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME" && [ -n "$np_uuid" ] && eg_is_on; then
+        now_on="true"
+    fi
+    if [ "$now_on" != "$new_enabled" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_STATUS_PENDING]}${COLOR_RESET}"
+    fi
+}
+
+eg_manual_add_ip() {
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local eg_input entries=() entry merged
+    reading "${LANG[EG_ADD_IP_PROMPT]}" eg_input || return 0
+    [ "$eg_input" = "0" ] && return 0
+    read -ra entries <<< "${eg_input//,/ }"
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        if ! eg_valid_ip_entry "$entry"; then
+            echo -e "${COLOR_RED}$(printf "${LANG[EG_INVALID_IP]}" "$entry")${COLOR_RESET}"
+            return 1
+        fi
+    done
+    merged=$(printf '%s\n%s\n' "$(eg_ip_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)
+    if eg_apply "$merged" "$(eg_port_entries | sed '/^$/d' | sort -n -u)"; then
+        step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)" "$(eg_port_count)")"
+    fi
+}
+
+eg_manual_add_port() {
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local eg_input entries=() entry merged
+    reading "${LANG[EG_ADD_PORT_PROMPT]}" eg_input || return 0
+    [ "$eg_input" = "0" ] && return 0
+    read -ra entries <<< "${eg_input//,/ }"
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        if ! eg_is_port_entry "$entry"; then
+            echo -e "${COLOR_RED}$(printf "${LANG[EG_INVALID_PORT]}" "$entry")${COLOR_RESET}"
+            return 1
+        fi
+    done
+    merged=$(printf '%s\n%s\n' "$(eg_port_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -n -u)
+    if eg_apply "$(eg_ip_entries | sed '/^$/d' | sort -u)" "$merged"; then
+        step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(eg_ip_count)" "$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)")"
+    fi
+}
+
+eg_manual_remove() {
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    local ips ports
+    ips=$(eg_ip_entries | sed '/^$/d')
+    ports=$(eg_port_entries | sed '/^$/d')
+    if [ -z "$ips" ] && [ -z "$ports" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_LIST_EMPTY]}${COLOR_RESET}"
+        return 0
+    fi
+    [ -n "$ips" ] && {
+        echo -e " ${COLOR_GRAY}${LANG[EG_LIST_HEAD_IP]}${COLOR_RESET}"
+        printf '%s\n' "$ips" | head -20 | while IFS= read -r entry; do
+            echo -e "   ${COLOR_GRAY}${entry}${COLOR_RESET}"
+        done
+    }
+    [ -n "$ports" ] && {
+        echo -e " ${COLOR_GRAY}${LANG[EG_LIST_HEAD_PORT]}${COLOR_RESET}"
+        printf '%s\n' "$ports" | head -20 | while IFS= read -r entry; do
+            echo -e "   ${COLOR_GRAY}${entry}${COLOR_RESET}"
+        done
+    }
+
+    local eg_input entries=() entry
+    reading "${LANG[EG_REMOVE_PROMPT]}" eg_input || return 0
+    [ "$eg_input" = "0" ] && return 0
+    read -ra entries <<< "${eg_input//,/ }"
+    local ip_args=() port_args=()
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        if eg_is_port_entry "$entry"; then
+            port_args+=(-e "$entry")
+        elif eg_valid_ip_entry "$entry"; then
+            ip_args+=(-e "$entry")
+        else
+            echo -e "${COLOR_RED}$(printf "${LANG[EG_INVALID_IP]}" "$entry")${COLOR_RESET}"
+            return 1
+        fi
+    done
+
+    local new_ips="$ips" new_ports="$ports"
+    [ "${#ip_args[@]}" -gt 0 ] && new_ips=$(printf '%s\n' "$ips" | grep -Fxv "${ip_args[@]}" | sed '/^$/d')
+    [ "${#port_args[@]}" -gt 0 ] && new_ports=$(printf '%s\n' "$ports" | grep -Fxv "${port_args[@]}" | sed '/^$/d')
+
+    local removed_ips=$(( $(printf '%s\n' "$ips" | sed '/^$/d' | wc -l) - $(printf '%s\n' "$new_ips" | sed '/^$/d' | wc -l) ))
+    local removed_ports=$(( $(printf '%s\n' "$ports" | sed '/^$/d' | wc -l) - $(printf '%s\n' "$new_ports" | sed '/^$/d' | wc -l) ))
+    if [ "$removed_ips" -eq 0 ] && [ "$removed_ports" -eq 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_NOT_REMOVED]}${COLOR_RESET}"
+        return 0
+    fi
+    if eg_apply "$new_ips" "$new_ports"; then
+        step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(printf '%s\n' "$new_ips" | sed '/^$/d' | wc -l)" "$(printf '%s\n' "$new_ports" | sed '/^$/d' | wc -l)")"
+    fi
+}
+
+eg_delete() {
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    if [ -z "$np_uuid" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[EG_NOTHING_TO_DELETE]}${COLOR_RESET}"
+        return 0
+    fi
+    local confirm
+    if ! reading_yn "${LANG[EG_DELETE_CONFIRM]}" confirm; then
+        return 0
+    fi
+    step_do "${LANG[EG_DELETING]}"
+    local response
+    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
+    if np_accepted "$response"; then
+        step_ok "${LANG[EG_DELETED_OK]}"
+        rm -f "$EG_STATE_FILE"
+    else
+        echo -e "${COLOR_RED}$(printf "${LANG[EG_DELETE_FAIL]}" "$response")${COLOR_RESET}"
+    fi
+}
+
+show_egress_presets_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[EG_PRESET_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    local n
+    n=$(eg_preset_state_get "private" | sed '/^$/d' | wc -l)
+    if [ "$n" -gt 0 ]; then
+        echo -e "${COLOR_YELLOW}1. ${LANG[EG_PRESET_NAME_PRIVATE]} ${COLOR_GREEN}[${LANG[IG_PRESET_APPLIED_MARK]}: ${n}]${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}1. ${LANG[EG_PRESET_NAME_PRIVATE]}${COLOR_RESET}"
+    fi
+    echo -e "    ${COLOR_GRAY}${LANG[EG_PRESET_DESC_PRIVATE]}${COLOR_RESET}"
+    n=$(eg_preset_state_get "mail" | sed '/^$/d' | wc -l)
+    if [ "$n" -gt 0 ]; then
+        echo -e "${COLOR_YELLOW}2. ${LANG[EG_PRESET_NAME_MAIL]} ${COLOR_GREEN}[${LANG[IG_PRESET_APPLIED_MARK]}: ${n}]${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}2. ${LANG[EG_PRESET_NAME_MAIL]}${COLOR_RESET}"
+    fi
+    echo -e "    ${COLOR_GRAY}${LANG[EG_PRESET_DESC_MAIL]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    local last=2 eg_preset_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_preset_option
+
+    case $eg_preset_option in
+        1)
+            eg_preset_apply_private
+            sleep 2
+            show_egress_presets_menu
+            ;;
+        2)
+            eg_preset_apply_mail
+            sleep 2
+            show_egress_presets_menu
+            ;;
+        0)
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_egress_presets_menu
+            ;;
+    esac
+}
+
+show_egress_filter_menu() {
+    local state
+    state=$(eg_state)
+    np_status_strings "$state"
+
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[EG_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e " ${NP_STATUS_COLOR}${LANG[EG_MENU_TITLE]}: ${NP_STATUS_TEXT}${COLOR_RESET}"
+    if [ "$state" = "on" ] || [ "$state" = "off" ]; then
+        echo -e " ${COLOR_GRAY}$(printf "${LANG[EG_STATUS_IPS]}" "$(eg_ip_count)") | $(printf "${LANG[EG_STATUS_PORTS]}" "$(eg_port_count)")${COLOR_RESET}"
+    fi
+    echo -e ""
+
+    if [ "$state" = "on" ]; then
+        echo -e "${COLOR_YELLOW}1. ${LANG[EG_TOGGLE_OFF]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}1. ${LANG[EG_TOGGLE_ON]}${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_YELLOW}2. ${LANG[EG_PRESETS]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[EG_MANUAL_ADD_IP]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[EG_MANUAL_ADD_PORT]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[EG_MANUAL_REMOVE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}6. ${LANG[EG_DELETE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    local last=6 eg_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_option
+
+    case $eg_option in
+        1)
+            if [ "$state" = "on" ]; then
+                eg_toggle "false"
+            else
+                eg_toggle "true"
+            fi
+            sleep 2
+            show_egress_filter_menu
+            ;;
+        2)
+            show_egress_presets_menu
+            sleep 1
+            show_egress_filter_menu
+            ;;
+        3)
+            eg_manual_add_ip
+            sleep 2
+            show_egress_filter_menu
+            ;;
+        4)
+            eg_manual_add_port
+            sleep 2
+            show_egress_filter_menu
+            ;;
+        5)
+            eg_manual_remove
+            sleep 2
+            show_egress_filter_menu
+            ;;
+        6)
+            eg_delete
+            sleep 2
+            show_egress_filter_menu
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_egress_filter_menu
+            ;;
+    esac
+}
+
 # --- Telegram notifications via the panel .env -------------------------------
 # The panel sends TB reports itself once the env vars below are set; the docs
 # require recreating the stack (down + up), a plain restart is not enough.
@@ -1042,10 +1558,13 @@ show_node_plugins_menu() {
     state=$(ig_state)
     np_status_strings "$state"
     echo -e "${COLOR_YELLOW}2. ${LANG[IG_MENU_TITLE]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
+    state=$(eg_state)
+    np_status_strings "$state"
+    echo -e "${COLOR_YELLOW}3. ${LANG[EG_MENU_TITLE]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    local last=2
+    local last=3
     reading "$(printf "${LANG[NP_SELECT_PLUGIN]}" "$last")" NP_OPTION
 
     case $NP_OPTION in
@@ -1056,6 +1575,11 @@ show_node_plugins_menu() {
             ;;
         2)
             show_ingress_filter_menu
+            sleep 1
+            show_node_plugins_menu
+            ;;
+        3)
+            show_egress_filter_menu
             sleep 1
             show_node_plugins_menu
             ;;
