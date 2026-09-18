@@ -185,8 +185,9 @@ xc_fetch_file() {
     return 1
 }
 
-# One rolling backup next to the compose file — overwritten on every edit,
-# never accumulating a pile of timestamped copies.
+# One rolling backup next to the compose file — a transient safety net for
+# the edit in progress: restored-from and removed once the change validates,
+# never accumulating a pile of copies.
 xc_backup_compose() {
     local compose="$1"
     if cp -p "$compose" "${compose}.bak" 2>/dev/null; then
@@ -194,6 +195,11 @@ xc_backup_compose() {
         return 0
     fi
     return 1
+}
+
+xc_backup_cleanup() {
+    [ -n "$XC_LAST_BACKUP" ] && rm -f "$XC_LAST_BACKUP" 2>/dev/null
+    XC_LAST_BACKUP=""
 }
 
 xc_compose_valid() {
@@ -310,10 +316,12 @@ xc_install_core() {
     fi
     if [ "$was_valid" = "0" ] && ! xc_compose_valid "$dir"; then
         [ -n "$XC_LAST_BACKUP" ] && cp -p "$XC_LAST_BACKUP" "$compose"
+        xc_backup_cleanup
         echo -e "${COLOR_RED}${LANG[XC_COMPOSE_ROLLED_BACK]}${COLOR_RESET}"
         rm -f "$dir/$XC_BINARY_NAME"
         return 1
     fi
+    xc_backup_cleanup
 
     xc_state_set "$source" "$tag"
 
@@ -349,6 +357,13 @@ xc_restore_core() {
 
     xc_backup_compose "$compose"
     xc_remove_mount "$compose"
+    if ! xc_compose_valid "$dir"; then
+        [ -n "$XC_LAST_BACKUP" ] && cp -p "$XC_LAST_BACKUP" "$compose"
+        xc_backup_cleanup
+        echo -e "${COLOR_RED}${LANG[XC_COMPOSE_ROLLED_BACK]}${COLOR_RESET}"
+        return 1
+    fi
+    xc_backup_cleanup
     rm -f "$dir/$XC_BINARY_NAME"
     xc_state_clear
 
