@@ -94,6 +94,7 @@ services:
         - SECRET_KEY=$(echo -e "$CERTIFICATE")
       volumes:
         - /dev/shm:/dev/shm:rw
+        - /var/log/remnanode:/var/log/remnanode
 
 volumes:
   caddy_data:
