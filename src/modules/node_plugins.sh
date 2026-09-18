@@ -40,9 +40,12 @@ np_fetch_plugins() {
 # The list endpoint serves pluginConfig as null on the real panel (the spec
 # marks it nullable); the actual config only comes from the per-plugin
 # endpoint. Fetch it by uuid after the plugin was picked from the list.
+# The ?_=<timestamp> cache-buster matters here as much as on the list: the
+# panel caches this GET too, and a stale reply showed an outdated entry
+# count right after list changes.
 np_fetch_plugin_config() {
     local response
-    response=$(np_api "GET" "/api/node-plugins/${np_uuid}")
+    response=$(np_api "GET" "/api/node-plugins/${np_uuid}?_=$(date +%s)")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
         return 1
     fi
@@ -262,7 +265,7 @@ np_settings() {
 np_stats() {
     step_do "${LANG[NP_STATS_TITLE]}"
     local response
-    response=$(np_api "GET" "/api/node-plugins/torrent-blocker/stats")
+    response=$(np_api "GET" "/api/node-plugins/torrent-blocker/stats?_=$(date +%s)")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response.stats' >/dev/null 2>&1; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "$response")${COLOR_RESET}"
         return 1
@@ -293,7 +296,7 @@ np_stats() {
     fi
 
     local reports
-    reports=$(np_api "GET" "/api/node-plugins/torrent-blocker?start=0&size=15")
+    reports=$(np_api "GET" "/api/node-plugins/torrent-blocker?start=0&size=15&_=$(date +%s)")
     if [ -n "$reports" ] && echo "$reports" | jq -e '.response.records' >/dev/null 2>&1; then
         local records_total
         records_total=$(echo "$reports" | jq -r '.response.total // 0')
@@ -620,30 +623,39 @@ ig_manual_remove() {
     printf '%s\n' "$current" | head -20 | while IFS= read -r entry; do
         echo -e "   ${COLOR_GRAY}${entry}${COLOR_RESET}"
     done
+    # The whole input section re-asks on mistakes: a declined wipe or an
+    # invalid entry keeps the user in the flow; 0 is the only way out.
     local ig_input entries=() entry remove_args=() wipe_confirm
-    reading "${LANG[IG_REMOVE_PROMPT]}" ig_input || return 0
-    [ "$ig_input" = "0" ] && return 0
-    # Enter — wipe the whole list, behind its own confirmation
-    if [ -z "$ig_input" ]; then
-        if reading_yn "${LANG[IG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
-            if ig_apply_entries ""; then
-                step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "0")"
+    while true; do
+        reading "${LANG[IG_REMOVE_PROMPT]}" ig_input || return 0
+        if [ -z "$ig_input" ]; then
+            if reading_yn "${LANG[IG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
+                if ig_apply_entries ""; then
+                    step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "0")"
+                fi
+                return 0
             fi
+            continue
         fi
-        return 0
-    fi
-    read -ra entries <<< "${ig_input//,/ }"
-    for entry in "${entries[@]}"; do
-        [ -z "$entry" ] && continue
-        if ! np_valid_cidr4 "$entry"; then
-            echo -e "${COLOR_RED}$(printf "${LANG[IG_ADD_INVALID]}" "$entry")${COLOR_RESET}"
-            return 1
-        fi
-        remove_args+=(-e "$entry")
+        [ "$ig_input" = "0" ] && return 0
+        entries=()
+        remove_args=()
+        read -ra entries <<< "${ig_input//,/ }"
+        local bad_entry=""
+        for entry in "${entries[@]}"; do
+            [ -z "$entry" ] && continue
+            if ! np_valid_cidr4 "$entry"; then
+                echo -e "${COLOR_RED}$(printf "${LANG[IG_ADD_INVALID]}" "$entry")${COLOR_RESET}"
+                bad_entry=1
+                break
+            fi
+            remove_args+=(-e "$entry")
+        done
+        [ "$bad_entry" = "1" ] && continue
+        # input like ", ," parses to nothing — ask again
+        [ "${#remove_args[@]}" -eq 0 ] && continue
+        break
     done
-    # input like ", ," parses to nothing — cancel instead of grepping
-    # without a single pattern
-    [ "${#remove_args[@]}" -eq 0 ] && return 0
     local after before_count after_count removed
     before_count=$(printf '%s\n' "$current" | sed '/^$/d' | wc -l)
     after=$(printf '%s\n' "$current" | grep -Fxv "${remove_args[@]}" | sed '/^$/d')
@@ -1197,32 +1209,43 @@ eg_manual_remove() {
         done
     }
 
+    # The whole input section re-asks on mistakes: a declined wipe or an
+    # invalid entry keeps the user in the flow; 0 is the only way out.
     local eg_input entries=() entry ip_args=() port_args=() wipe_confirm
-    reading "${LANG[EG_REMOVE_PROMPT]}" eg_input || return 0
-    [ "$eg_input" = "0" ] && return 0
-    # Enter — wipe both lists, behind its own confirmation
-    if [ -z "$eg_input" ]; then
-        if reading_yn "${LANG[EG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
-            if eg_apply "" ""; then
-                step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "0" "0")"
+    while true; do
+        reading "${LANG[EG_REMOVE_PROMPT]}" eg_input || return 0
+        if [ -z "$eg_input" ]; then
+            if reading_yn "${LANG[EG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
+                if eg_apply "" ""; then
+                    step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "0" "0")"
+                fi
+                return 0
             fi
+            continue
         fi
-        return 0
-    fi
-    read -ra entries <<< "${eg_input//,/ }"
-    for entry in "${entries[@]}"; do
-        [ -z "$entry" ] && continue
-        if eg_is_port_entry "$entry"; then
-            port_args+=(-e "$entry")
-        elif eg_valid_ip_entry "$entry"; then
-            ip_args+=(-e "$entry")
-        else
-            echo -e "${COLOR_RED}$(printf "${LANG[EG_INVALID_IP]}" "$entry")${COLOR_RESET}"
-            return 1
-        fi
+        [ "$eg_input" = "0" ] && return 0
+        entries=()
+        ip_args=()
+        port_args=()
+        read -ra entries <<< "${eg_input//,/ }"
+        local bad_entry=""
+        for entry in "${entries[@]}"; do
+            [ -z "$entry" ] && continue
+            if eg_is_port_entry "$entry"; then
+                port_args+=(-e "$entry")
+            elif eg_valid_ip_entry "$entry"; then
+                ip_args+=(-e "$entry")
+            else
+                echo -e "${COLOR_RED}$(printf "${LANG[EG_INVALID_IP]}" "$entry")${COLOR_RESET}"
+                bad_entry=1
+                break
+            fi
+        done
+        [ "$bad_entry" = "1" ] && continue
+        # nothing parseable — ask again instead of grepping without patterns
+        [ "${#ip_args[@]}" -eq 0 ] && [ "${#port_args[@]}" -eq 0 ] && continue
+        break
     done
-    # nothing parseable — cancel instead of grepping without patterns
-    [ "${#ip_args[@]}" -eq 0 ] && [ "${#port_args[@]}" -eq 0 ] && return 0
 
     local new_ips="$ips" new_ports="$ports"
     [ "${#ip_args[@]}" -gt 0 ] && new_ips=$(printf '%s\n' "$ips" | grep -Fxv "${ip_args[@]}" | sed '/^$/d')
