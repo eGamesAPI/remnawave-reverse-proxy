@@ -793,8 +793,18 @@ show_ingress_presets_menu() {
 }
 
 show_ingress_filter_menu() {
+    # Refresh in the caller context: the entry count below reads
+    # np_config_json, and a $(ig_state) subshell would die with it.
     local state
-    state=$(ig_state)
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        state="unknown"
+    elif [ -z "$np_uuid" ]; then
+        state="absent"
+    elif ig_is_on; then
+        state="on"
+    else
+        state="off"
+    fi
     np_status_strings "$state"
 
     echo -e ""
@@ -1333,8 +1343,18 @@ show_egress_presets_menu() {
 }
 
 show_egress_filter_menu() {
+    # Same as ingress: counts read np_config_json, so the refresh must run
+    # here and not inside a $(eg_state) subshell.
     local state
-    state=$(eg_state)
+    if ! np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        state="unknown"
+    elif [ -z "$np_uuid" ]; then
+        state="absent"
+    elif eg_is_on; then
+        state="on"
+    else
+        state="off"
+    fi
     np_status_strings "$state"
 
     echo -e ""
