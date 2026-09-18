@@ -1,5 +1,7 @@
 #!/bin/bash
-# Module: Node Plugins — Torrent Blocker management via the panel API.
+# Module: Node Plugins — Torrent Blocker and Ingress Filter management via
+# the panel API. Depends on the api module (make_api_request,
+# get_panel_token) being loaded and on $token being set beforehand.
 
 NP_PLUGIN_NAME="Torrent Blocker"
 NP_PANEL_HOST="127.0.0.1:3000"
@@ -38,7 +40,7 @@ np_fetch_plugins() {
 # The list endpoint serves pluginConfig as null on the real panel (the spec
 # marks it nullable); the actual config only comes from the per-plugin
 # endpoint. Fetch it by uuid after the plugin was picked from the list.
-np_fetch_tb_config() {
+np_fetch_plugin_config() {
     local response
     response=$(np_api "GET" "/api/node-plugins/${np_uuid}")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
@@ -48,28 +50,29 @@ np_fetch_tb_config() {
     return 0
 }
 
-# The plugin that owns torrentBlocker — matched by config section first, name
-# second, so a plugin renamed in the panel UI is still found. Sets np_uuid,
-# np_name and np_config_json; np_uuid stays empty when there is no such plugin.
-np_select_tb_plugin() {
+# Pick a plugin by its config section first, plugin name second — so a plugin
+# renamed in the panel UI is still found. Sets np_uuid, np_name and
+# np_config_json; np_uuid stays empty when there is no such plugin.
+np_select_plugin() {
+    local section="$1" fallback_name="$2"
     np_uuid=""
-    np_name="$NP_PLUGIN_NAME"
+    np_name="$fallback_name"
     np_config_json="{}"
     local match list_cfg
-    match=$(echo "$np_plugins_json" | jq -c --arg name "$NP_PLUGIN_NAME" \
-        '[.[] | select(((.pluginConfig // {}) | has("torrentBlocker")) or .name == $name)][0] // empty' 2>/dev/null)
+    match=$(echo "$np_plugins_json" | jq -c --arg name "$fallback_name" --arg section "$section" \
+        '[.[] | select(((.pluginConfig // {}) | has($section)) or .name == $name)][0] // empty' 2>/dev/null)
     if [ -n "$match" ]; then
         np_uuid=$(echo "$match" | jq -r '.uuid // empty')
-        np_name=$(echo "$match" | jq -r --arg fallback "$NP_PLUGIN_NAME" '.name // $fallback')
+        np_name=$(echo "$match" | jq -r --arg fallback "$fallback_name" '.name // $fallback')
         list_cfg=$(echo "$match" | jq -c '.pluginConfig // {}')
         np_config_json="$list_cfg"
-        np_fetch_tb_config || np_config_json="$list_cfg"
+        np_fetch_plugin_config || np_config_json="$list_cfg"
     fi
 }
 
-np_refresh_tb_plugin() {
+np_refresh_plugin() {
     np_fetch_plugins || return 1
-    np_select_tb_plugin
+    np_select_plugin "$1" "$2"
 }
 
 # Enabled either as a JSON boolean or as the string the panel may normalize to.
@@ -79,7 +82,7 @@ np_tb_is_on() {
 
 # Current torrentBlocker state: on | off | absent | unknown.
 np_state() {
-    if ! np_fetch_plugins; then
+    if ! np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME"; then
         echo "unknown"
         return
     fi
@@ -96,7 +99,7 @@ np_state() {
 np_ensure_plugin() {
     [ -n "$np_uuid" ] && return 0
     local response
-    response=$(np_api "POST" "/api/node-plugins" "$(jq -n --arg name "$NP_PLUGIN_NAME" '{name: $name}')")
+    response=$(np_api "POST" "/api/node-plugins" "$(jq -n --arg name "$np_name" '{name: $name}')")
     np_uuid=$(echo "$response" | jq -r '.response.uuid // empty')
     if [ -z "$np_uuid" ]; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_CREATE_FAIL]}" "$response")${COLOR_RESET}"
@@ -148,9 +151,24 @@ np_valid_ip() {
     [[ "$1" == *:* && "$1" =~ ^[0-9a-fA-F:]+$ ]] && [[ "$(echo "$1" | tr -cd ':')" == *:*:* ]]
 }
 
+# Plain IPv4 or IPv4/prefix-length (ingressFilter blockedIps entry format).
+np_valid_cidr4() {
+    local entry="$1" ip prefix
+    ip="${entry%%/*}"
+    np_valid_ipv4 "$ip" || return 1
+    case "$entry" in
+        */*)
+            prefix="${entry##*/}"
+            [[ "$prefix" =~ ^[0-9]{1,2}$ ]] || return 1
+            (( 8 <= 10#$prefix && 10#$prefix <= 32 )) || return 1
+            ;;
+    esac
+    return 0
+}
+
 np_toggle() {
     local new_enabled="$1"
-    if ! np_refresh_tb_plugin; then
+    if ! np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
         return 1
     fi
@@ -176,7 +194,7 @@ np_toggle() {
     # Re-read what the panel now serves; if it still returns the previous
     # state, say so instead of silently showing a wrong status in the menu.
     local now_on="false"
-    if np_refresh_tb_plugin && [ -n "$np_uuid" ] && np_tb_is_on; then
+    if np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME" && [ -n "$np_uuid" ] && np_tb_is_on; then
         now_on="true"
     fi
     if [ "$now_on" != "$new_enabled" ]; then
@@ -185,7 +203,7 @@ np_toggle() {
 }
 
 np_settings() {
-    if ! np_refresh_tb_plugin; then
+    if ! np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
         return 1
     fi
@@ -331,7 +349,7 @@ np_recreate_tables() {
 }
 
 np_delete() {
-    if ! np_refresh_tb_plugin; then
+    if ! np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
         return 1
     fi
@@ -351,6 +369,414 @@ np_delete() {
     else
         echo -e "${COLOR_RED}$(printf "${LANG[NP_DELETE_FAIL]}" "$response")${COLOR_RESET}"
     fi
+}
+
+# --- Ingress Filter: permanent inbound blocking with list presets -----------
+
+IG_PLUGIN_NAME="Ingress Filter"
+IG_STATE_FILE="${DIR_REMNAWAVE}ingress-preset.state"
+
+ig_is_on() {
+    echo "$np_config_json" | jq -e '.ingressFilter.enabled == true or .ingressFilter.enabled == "true"' >/dev/null 2>&1
+}
+
+ig_state() {
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo "unknown"
+        return
+    fi
+    if [ -z "$np_uuid" ]; then
+        echo "absent"
+    elif ig_is_on; then
+        echo "on"
+    else
+        echo "off"
+    fi
+}
+
+ig_entry_count() {
+    echo "$np_config_json" | jq -r '.ingressFilter.blockedIps // [] | length'
+}
+
+ig_current_entries() {
+    echo "$np_config_json" | jq -r '.ingressFilter.blockedIps // [] | .[]'
+}
+
+ig_apply_entries() {
+    local entries="$1" arr config
+    arr=$(printf '%s\n' "$entries" | sed '/^$/d' | jq -R . | jq -s .)
+    config=$(echo "$np_config_json" | jq -c --argjson ips "$arr" \
+        '.ingressFilter = ((.ingressFilter // {enabled: false, blockedIps: []}) | .blockedIps = $ips)')
+    np_apply_config "$config"
+}
+
+# Mirror prefixes for raw.githubusercontent.com — the same set the script uses
+# for its own downloads; GitHub itself is often unreachable from RU networks.
+ig_mirror_prefixes() {
+    printf '%s\n' "" "https://gh-proxy.com/" "https://ghfast.top/" "https://ghproxy.net/"
+}
+
+# One URL over all mirrors -> body on stdout. Garbage pages (a mirror's error
+# interstitial, the origin's 404 text) are dropped later by the CIDR filter.
+ig_fetch_url() {
+    local url="$1" prefix body
+    while IFS= read -r prefix; do
+        if command -v curl >/dev/null 2>&1; then
+            body=$(curl -sL $CURL_IP_FLAGS --connect-timeout 10 --max-time 60 "${prefix}${url}" 2>/dev/null)
+        else
+            body=$(wget $WGET_IP_FLAGS -q -T 10 -t 1 -O- "${prefix}${url}" 2>/dev/null)
+        fi
+        if [ -n "$body" ]; then
+            printf '%s\n' "$body"
+            return 0
+        fi
+    done < <(ig_mirror_prefixes)
+    return 1
+}
+
+ig_preset_sources() {
+    local base="https://raw.githubusercontent.com/OpenFilters/internet-scanners/main/cidr"
+    case "$1" in
+        ru)
+            echo "https://raw.githubusercontent.com/tread-lightly/CyberOK_Skipa_ips/main/lists/skipa_cidr.txt"
+            ;;
+        classic)
+            printf '%s\n' \
+                "$base/censys_v4.txt" "$base/shodan_v4.txt" "$base/paloaltonetworks_v4.txt" \
+                "$base/shadowserver_v4.txt" "$base/driftnet_v4.txt" "$base/onyphe_v4.txt" \
+                "$base/zoomeye_v4.txt" "$base/leakix_v4.txt" "$base/rapid7_v4.txt" \
+                "$base/internetmeasurementresearch_v4.txt"
+            ;;
+        fofa)
+            printf '%s\n' "$base/fofa_v4.txt" "$base/quake_v4.txt"
+            ;;
+    esac
+}
+
+ig_preset_source_label() {
+    case "$1" in
+        ru) echo "github.com/tread-lightly/CyberOK_Skipa_ips" ;;
+        *)  echo "github.com/OpenFilters/internet-scanners" ;;
+    esac
+}
+
+ig_preset_state_get() {
+    [ -r "$IG_STATE_FILE" ] || return 0
+    awk -F'\t' -v id="$1" '$1 == id { print $2 }' "$IG_STATE_FILE"
+}
+
+ig_preset_state_set() {
+    local id="$1" entries="$2" tmp entry
+    tmp=$(mktemp)
+    [ -r "$IG_STATE_FILE" ] && awk -F'\t' -v id="$id" '$1 != id' "$IG_STATE_FILE" > "$tmp"
+    while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        printf '%s\t%s\n' "$id" "$entry" >> "$tmp"
+    done <<< "$entries"
+    mv "$tmp" "$IG_STATE_FILE"
+    chmod 600 "$IG_STATE_FILE" 2>/dev/null
+}
+
+# Download every file of a preset over mirrors (all-or-nothing) and keep only
+# clean IPv4 / IPv4-CIDR lines.
+ig_fetch_preset_entries() {
+    local id="$1" url body entries=""
+    while IFS= read -r url; do
+        [ -z "$url" ] && continue
+        body=$(ig_fetch_url "$url") || return 1
+        entries+="$body"$'\n'
+    done <<< "$(ig_preset_sources "$id")"
+    IG_PRESET_ENTRIES=$(printf '%s' "$entries" | sed 's/\r//g' \
+        | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$' | sort -u)
+    IG_PRESET_COUNT=$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | wc -l)
+    [ "$IG_PRESET_COUNT" -gt 0 ] || return 1
+    return 0
+}
+
+ig_preset_apply() {
+    local id="$1"
+    step_do "${LANG[IG_PRESET_DOWNLOADING]}"
+    if ! ig_fetch_preset_entries "$id"; then
+        echo -e "${COLOR_RED}${LANG[IG_PRESET_FETCH_FAIL]}${COLOR_RESET}"
+        return 1
+    fi
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local was_on="false"
+    ig_is_on && was_on="true"
+
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[IG_PRESET_SOURCE_NOTE]}" "$(ig_preset_source_label "$id")")${COLOR_RESET}"
+    local confirm
+    if ! reading_yn "$(printf "${LANG[IG_PRESET_CONFIRM]}" "$IG_PRESET_COUNT")" confirm; then
+        return 0
+    fi
+
+    # Replace only this preset's previous entries; manual entries and other
+    # presets stay in place.
+    local current old_preset merged
+    current=$(ig_current_entries | sed '/^$/d' | sort -u)
+    old_preset=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
+    if [ -n "$old_preset" ]; then
+        current=$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$old_preset"))
+    fi
+    merged=$(printf '%s\n%s\n' "$current" "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u)
+
+    if ! ig_apply_entries "$merged"; then
+        return 1
+    fi
+    ig_preset_state_set "$id" "$IG_PRESET_ENTRIES"
+    step_ok "$(printf "${LANG[IG_PRESET_APPLIED]}" "$IG_PRESET_COUNT")"
+    if [ "$was_on" != "true" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IG_PRESET_ENABLE_HINT]}${COLOR_RESET}"
+    fi
+}
+
+ig_toggle() {
+    local new_enabled="$1"
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    if [ "$new_enabled" = "true" ]; then
+        step_do "${LANG[IG_ENABLING]}"
+    else
+        step_do "${LANG[IG_DISABLING]}"
+    fi
+    local config
+    config=$(echo "$np_config_json" | jq -c --argjson enabled "$new_enabled" \
+        '.ingressFilter = ((.ingressFilter // {enabled: false, blockedIps: []}) | .enabled = $enabled)')
+    if ! np_apply_config "$config"; then
+        return 1
+    fi
+    if [ "$new_enabled" = "true" ]; then
+        step_ok "${LANG[IG_ENABLED_OK]}"
+        echo -e "${COLOR_YELLOW}${LANG[IG_NOTE]}${COLOR_RESET}"
+    else
+        step_ok "${LANG[IG_DISABLED_OK]}"
+    fi
+    local now_on="false"
+    if np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME" && [ -n "$np_uuid" ] && ig_is_on; then
+        now_on="true"
+    fi
+    if [ "$now_on" != "$new_enabled" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_STATUS_PENDING]}${COLOR_RESET}"
+    fi
+}
+
+ig_manual_add() {
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    np_ensure_plugin || return 1
+    local ig_input entries=() entry merged total
+    reading "${LANG[IG_ADD_PROMPT]}" ig_input || return 0
+    [ "$ig_input" = "0" ] && return 0
+    read -ra entries <<< "${ig_input//,/ }"
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        if ! np_valid_cidr4 "$entry"; then
+            echo -e "${COLOR_RED}$(printf "${LANG[IG_ADD_INVALID]}" "$entry")${COLOR_RESET}"
+            return 1
+        fi
+    done
+    merged=$(printf '%s\n%s\n' "$(ig_current_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)
+    total=$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)
+    if ig_apply_entries "$merged"; then
+        step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "$total")"
+    fi
+}
+
+ig_manual_remove() {
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    local current
+    current=$(ig_current_entries | sed '/^$/d')
+    if [ -z "$current" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IG_LIST_EMPTY]}${COLOR_RESET}"
+        return 0
+    fi
+    echo -e " ${COLOR_GRAY}${LANG[IG_LIST_HEAD]}${COLOR_RESET}"
+    printf '%s\n' "$current" | head -20 | while IFS= read -r entry; do
+        echo -e "   ${COLOR_GRAY}${entry}${COLOR_RESET}"
+    done
+    local ig_input entries=() entry after before_count after_count removed
+    reading "${LANG[IG_REMOVE_PROMPT]}" ig_input || return 0
+    [ "$ig_input" = "0" ] && return 0
+    read -ra entries <<< "${ig_input//,/ }"
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        if ! np_valid_cidr4 "$entry"; then
+            echo -e "${COLOR_RED}$(printf "${LANG[IG_ADD_INVALID]}" "$entry")${COLOR_RESET}"
+            return 1
+        fi
+    done
+    before_count=$(printf '%s\n' "$current" | sed '/^$/d' | wc -l)
+    local remove_args=()
+    for entry in "${entries[@]}"; do
+        [ -z "$entry" ] && continue
+        remove_args+=(-e "$entry")
+    done
+    after=$(printf '%s\n' "$current" | grep -Fxv "${remove_args[@]}" | sed '/^$/d')
+    after_count=$(printf '%s\n' "$after" | sed '/^$/d' | wc -l)
+    removed=$(( before_count - after_count ))
+    if [ "$removed" -eq 0 ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IG_NOT_REMOVED]}${COLOR_RESET}"
+        return 0
+    fi
+    if ig_apply_entries "$after"; then
+        step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "$after_count")"
+    fi
+}
+
+ig_delete() {
+    if ! np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[NP_API_FAIL]}" "")${COLOR_RESET}"
+        return 1
+    fi
+    if [ -z "$np_uuid" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[IG_NOTHING_TO_DELETE]}${COLOR_RESET}"
+        return 0
+    fi
+    local confirm
+    if ! reading_yn "${LANG[IG_DELETE_CONFIRM]}" confirm; then
+        return 0
+    fi
+    step_do "${LANG[IG_DELETING]}"
+    local response
+    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
+    if np_accepted "$response"; then
+        step_ok "${LANG[IG_DELETED_OK]}"
+        rm -f "$IG_STATE_FILE"
+    else
+        echo -e "${COLOR_RED}$(printf "${LANG[IG_DELETE_FAIL]}" "$response")${COLOR_RESET}"
+    fi
+}
+
+show_ingress_presets_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[IG_PRESET_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    local id n i=1 key
+    for id in ru classic fofa; do
+        n=$(ig_preset_state_get "$id" | sed '/^$/d' | wc -l)
+        if [ "$n" -gt 0 ]; then
+            key="IG_PRESET_NAME_$id"
+            echo -e "${COLOR_YELLOW}${i}. ${LANG[$key]} ${COLOR_GREEN}[${LANG[IG_PRESET_APPLIED_MARK]}: ${n}]${COLOR_RESET}"
+        else
+            key="IG_PRESET_NAME_$id"
+            echo -e "${COLOR_YELLOW}${i}. ${LANG[$key]}${COLOR_RESET}"
+        fi
+        key="IG_PRESET_DESC_$id"
+        echo -e "    ${COLOR_GRAY}${LANG[$key]}${COLOR_RESET}"
+        i=$((i + 1))
+    done
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    local last=3 ig_preset_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_preset_option
+
+    case $ig_preset_option in
+        1)
+            ig_preset_apply "ru"
+            sleep 2
+            show_ingress_presets_menu
+            ;;
+        2)
+            ig_preset_apply "classic"
+            sleep 2
+            show_ingress_presets_menu
+            ;;
+        3)
+            ig_preset_apply "fofa"
+            sleep 2
+            show_ingress_presets_menu
+            ;;
+        0)
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_ingress_presets_menu
+            ;;
+    esac
+}
+
+show_ingress_filter_menu() {
+    local state
+    state=$(ig_state)
+    np_status_strings "$state"
+
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[IG_MENU_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e " ${NP_STATUS_COLOR}${LANG[IG_MENU_TITLE]}: ${NP_STATUS_TEXT}${COLOR_RESET}"
+    if [ "$state" = "on" ] || [ "$state" = "off" ]; then
+        echo -e " ${COLOR_GRAY}$(printf "${LANG[IG_STATUS_ENTRIES]}" "$(ig_entry_count)")${COLOR_RESET}"
+    fi
+    echo -e ""
+
+    if [ "$state" = "on" ]; then
+        echo -e "${COLOR_YELLOW}1. ${LANG[IG_TOGGLE_OFF]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}1. ${LANG[IG_TOGGLE_ON]}${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_YELLOW}2. ${LANG[IG_PRESETS]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[IG_MANUAL_ADD]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[IG_MANUAL_REMOVE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[IG_DELETE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    local last=5 ig_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_option
+
+    case $ig_option in
+        1)
+            if [ "$state" = "on" ]; then
+                ig_toggle "false"
+            else
+                ig_toggle "true"
+            fi
+            sleep 2
+            show_ingress_filter_menu
+            ;;
+        2)
+            show_ingress_presets_menu
+            sleep 1
+            show_ingress_filter_menu
+            ;;
+        3)
+            ig_manual_add
+            sleep 2
+            show_ingress_filter_menu
+            ;;
+        4)
+            ig_manual_remove
+            sleep 2
+            show_ingress_filter_menu
+            ;;
+        5)
+            ig_delete
+            sleep 2
+            show_ingress_filter_menu
+            ;;
+        0)
+            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+            sleep 1
+            show_ingress_filter_menu
+            ;;
+    esac
 }
 
 # --- Telegram notifications via the panel .env -------------------------------
@@ -592,7 +1018,7 @@ np_setup_tg() {
 }
 
 # Sets NP_STATUS_COLOR / NP_STATUS_TEXT for a plugin state.
-np_tb_status_strings() {
+np_status_strings() {
     local state="$1"
     NP_STATUS_COLOR="$COLOR_RED"
     NP_STATUS_TEXT="${LANG[NP_STATUS_UNKNOWN]}"
@@ -608,21 +1034,29 @@ np_tb_status_strings() {
 show_node_plugins_menu() {
     local state
     state=$(np_state)
-    np_tb_status_strings "$state"
+    np_status_strings "$state"
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NP_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[NP_TB_LABEL]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
+    state=$(ig_state)
+    np_status_strings "$state"
+    echo -e "${COLOR_YELLOW}2. ${LANG[IG_MENU_TITLE]}: ${NP_STATUS_COLOR}${NP_STATUS_TEXT}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    local last=1
+    local last=2
     reading "$(printf "${LANG[NP_SELECT_PLUGIN]}" "$last")" NP_OPTION
 
     case $NP_OPTION in
         1)
             show_torrent_blocker_menu
+            sleep 1
+            show_node_plugins_menu
+            ;;
+        2)
+            show_ingress_filter_menu
             sleep 1
             show_node_plugins_menu
             ;;
@@ -640,7 +1074,7 @@ show_node_plugins_menu() {
 show_torrent_blocker_menu() {
     local state
     state=$(np_state)
-    np_tb_status_strings "$state"
+    np_status_strings "$state"
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NP_TB_LABEL]}${COLOR_RESET}"
