@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.36"
+SCRIPT_VERSION="Dev 3.5.37"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -980,7 +980,6 @@ show_install_menu() {
     echo -e "${COLOR_YELLOW}4. ${LANG[INSTALL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[INSTALL_PANEL_ONLY]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[INSTALL_SUB_ONLY]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}7. ${LANG[INSTALL_XRAY_CHECKER]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -1198,20 +1197,6 @@ manage_install() {
                     ;;
             esac
             sleep 2
-            ;;
-        7)
-            # Monitoring role: docker + the xray_checker module, nothing else —
-            # a stand-alone box watching the panel subscription from outside.
-            if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-                install_packages || {
-                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
-                    exit 1
-                }
-            fi
-            load_xray_checker_module
-            xchk_install
-            sleep 2
-            remnawave_reverse
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"

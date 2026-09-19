@@ -1075,10 +1075,19 @@ show_xray_checker_menu() {
 }
 
 manage_xray_checker() {
-    if ! command -v docker >/dev/null 2>&1; then
+    # The single entry point: on a Docker-less box (a fresh monitoring VPS)
+    # it offers to bring the base components up first, absorbing what the
+    # removed install-menu role used to do.
+    if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+        local setup
         echo -e "${COLOR_YELLOW}${LANG[XCHK_NO_DOCKER]}${COLOR_RESET}"
-        sleep 2
-        return
+        if ! reading_yn "${LANG[XCHK_DOCKER_INSTALL]}" setup; then
+            return 0
+        fi
+        install_packages || {
+            echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+            return 1
+        }
     fi
     show_xray_checker_menu
 }
