@@ -81,6 +81,22 @@ xchk_env_get() {
     sed -n "s|^$1=||p" "$XCHK_PANEL_ENV" | head -n1
 }
 
+# Squads gate host visibility: on a panel with internal squads a user with
+# an empty activeInternalSquads sees no hosts at all (the panel serves the
+# "Check Internal Squads tab" placeholder), so the monitoring user joins
+# every squad that exists.
+xchk_assign_squads() {
+    local response squads squads_json
+    response=$(make_api_request "GET" "http://${XCHK_PANEL_HOST}/api/internal-squads?_=$(date +%s)" "$token")
+    squads=$(echo "$response" | jq -r '[.response.internalSquads[]?.uuid] | join(" ")' 2>/dev/null)
+    [ -z "$squads" ] && return 1
+    squads_json=$(printf '%s\n' $squads | jq -R . | jq -s .)
+    response=$(make_api_request "PATCH" "http://${XCHK_PANEL_HOST}/api/users" "$token" \
+        "$(jq -n --arg u "$XCHK_MONITOR_USER" --argjson s "$squads_json" \
+            '{username: $u, activeInternalSquads: $s}')")
+    echo "$response" | jq -e '.response.username' >/dev/null 2>&1
+}
+
 # --- Monitoring user -----------------------------------------------------------
 # A dedicated panel user whose subscription covers every enabled host — new
 # nodes appear in the checker on the next subscription refresh, no manual
@@ -106,6 +122,10 @@ xchk_ensure_monitor_user() {
     if [ -n "$sub_url" ]; then
         echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_USER_REUSED]}" "$XCHK_MONITOR_USER")${COLOR_RESET}"
         XCHK_PANEL_SUB_URL="$sub_url"
+        if [ "$(echo "$response" | jq -r '(.response.activeInternalSquads // []) | length' 2>/dev/null)" = "0" ]; then
+            step_do "${LANG[XCHK_SQUADS_ASSIGN]}"
+            xchk_assign_squads || echo -e "${COLOR_YELLOW}${LANG[XCHK_SQUADS_FAIL]}${COLOR_RESET}"
+        fi
         return 0
     fi
 
@@ -123,6 +143,8 @@ xchk_ensure_monitor_user() {
         return 1
     fi
     echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_USER_CREATED]}" "$XCHK_MONITOR_USER")${COLOR_RESET}"
+    step_do "${LANG[XCHK_SQUADS_ASSIGN]}"
+    xchk_assign_squads || echo -e "${COLOR_YELLOW}${LANG[XCHK_SQUADS_FAIL]}${COLOR_RESET}"
     XCHK_PANEL_SUB_URL="$sub_url"
     XCHK_MONITOR_USER_CREATED=1
     return 0
