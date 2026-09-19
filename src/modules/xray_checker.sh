@@ -1022,6 +1022,53 @@ xchk_uninstall() {
     step_ok "${LANG[XCHK_UNINSTALLED]}"
 }
 
+# Post-install bot wiring: the same dialog as at install time, then the
+# values land in the stack .env and the statuspage is recreated — compose
+# substitutes the .env on up. An empty token means removing the bot.
+xchk_env_set() {
+    local var="$1" val="$2"
+    local escaped="${val//&/\\&}"
+    sed -i "s|^$var=.*|$var=$escaped|" "$XCHK_DIR/.env"
+}
+
+xchk_setup_tg() {
+    if ! xchk_installed || ! xchk_with_statuspage; then
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_TG_NO_STATUSPAGE]}${COLOR_RESET}"
+        return 1
+    fi
+    if [ ! -w "$XCHK_DIR/.env" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_ENV_FAIL]}" "$XCHK_DIR/.env")${COLOR_RESET}"
+        return 1
+    fi
+
+    while ! xchk_ask_tg; do
+        local retry
+        reading_yn "${LANG[XCHK_TG_RETRY]}" retry || return 1
+    done
+
+    if [ -z "$XCHK_TG_TOKEN_VAL" ]; then
+        local confirm
+        if reading_yn "${LANG[XCHK_TG_REMOVE_CONFIRM]}" confirm; then
+            xchk_env_set XCHK_BOT_TOKEN ""
+            xchk_env_set XCHK_BOT_ADMIN_IDS ""
+            xchk_env_set XCHK_NOTIFY_CHAT_IDS ""
+            xchk_env_set XCHK_TG_PROXY ""
+        else
+            return 0
+        fi
+    else
+        xchk_env_set XCHK_BOT_TOKEN "$XCHK_TG_TOKEN_VAL"
+        xchk_env_set XCHK_BOT_ADMIN_IDS "$XCHK_TG_ADMINS_VAL"
+        xchk_env_set XCHK_NOTIFY_CHAT_IDS "$XCHK_TG_NOTIFY_VAL"
+        xchk_env_set XCHK_TG_PROXY "$XCHK_TG_PROXY_VAL"
+    fi
+
+    step_do "${LANG[XCHK_TG_APPLYING]}"
+    (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
+    spinner $! "${LANG[XCHK_TG_APPLYING]}"
+    step_ok "${LANG[XCHK_TG_APPLIED]}"
+}
+
 show_xray_checker_menu() {
     local mode_label domain
     if xchk_installed; then
@@ -1053,8 +1100,14 @@ show_xray_checker_menu() {
         echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
         echo -e ""
-        echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-        last=4
+        if xchk_with_statuspage; then
+            echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_TG]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}5. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
+            last=5
+        else
+            echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
+            last=4
+        fi
     else
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_INSTALL]}${COLOR_RESET}"
     fi
@@ -1070,7 +1123,13 @@ show_xray_checker_menu() {
             1) xchk_status; sleep 2; show_xray_checker_menu ;;
             2) xchk_restart; sleep 2; show_xray_checker_menu ;;
             3) xchk_update; sleep 2; show_xray_checker_menu ;;
-            4) xchk_uninstall; sleep 2; show_xray_checker_menu ;;
+            4) if xchk_with_statuspage; then
+                   xchk_setup_tg
+               else
+                   xchk_uninstall
+               fi
+               sleep 2; show_xray_checker_menu ;;
+            5) xchk_uninstall; sleep 2; show_xray_checker_menu ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}" ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                sleep 1
