@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.53"
+SCRIPT_VERSION="Dev 3.5.54"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -873,19 +873,18 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
     echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
     echo -e ""
-    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
-    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
+    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
+    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
-        echo -e "${COLOR_YELLOW}10. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}11. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
     else
-        echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+        echo -e "${COLOR_YELLOW}11. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
     fi
-    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
-    echo -e ""
-    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
@@ -1779,6 +1778,12 @@ case $OPTION in
         remnawave_reverse
         ;;
     7)
+        load_xray_checker_module
+        manage_xray_checker
+        sleep 2
+        remnawave_reverse
+        ;;
+    8)
         if [ -f ~/backup-restore.sh ]; then
             rw-backup
         else
@@ -1787,31 +1792,25 @@ case $OPTION in
         sleep 2
         remnawave_reverse
         ;;
-    8)
+    9)
         load_ipv6_module
         manage_ipv6
         sleep 2
         remnawave_reverse
         ;;
-    9)
+    10)
         load_certificates_module
         manage_certificates
         sleep 2
         remnawave_reverse
         ;;
-    10)
+    11)
         update_remnawave_reverse
         sleep 2
         remnawave_reverse
         ;;
-    11)
-        remove_script
-        ;;
     12)
-        load_xray_checker_module
-        manage_xray_checker
-        sleep 2
-        remnawave_reverse
+        remove_script
         ;;
     0)
         echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
