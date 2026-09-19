@@ -315,13 +315,14 @@ xchk_wire_nginx() {
     cp -p "$compose" "$backup"
     cp -p "$conf" "$conf_backup"
 
-    # Rollback restores both files; a re-up brings the container back on
-    # the pre-edit compose when the recreate already happened.
+    # Rollback restores both files; a re-up plus a graceful reload bring the
+    # running nginx back to the pre-edit configuration.
     xchk_nginx_rollback() {
         cp -p "$conf_backup" "$conf"
         cp -p "$backup" "$compose"
         rm -f "$backup" "$conf_backup"
         (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+        docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
     }
 
     XCHK_MOUNTS_ADDED=0
@@ -340,13 +341,24 @@ xchk_wire_nginx() {
         fi
     fi
 
-    # Site block, marker-wrapped for a clean uninstall.
+    # Site block, marker-wrapped for a clean uninstall. On a panel+node box
+    # TCP 443 belongs to Xray (Reality) and nginx serves behind it on a unix
+    # socket with proxy_protocol — there the block joins that socket and
+    # arrives via Reality's fallback, exactly like the panel's own domain.
+    # A pure panel install has nginx on 443 directly.
+    local listen_line="listen 443 ssl;"
+    local real_ip="\$remote_addr"
+    if grep -q "listen unix:/dev/shm/nginx.sock" "$conf"; then
+        listen_line="listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        real_ip="\$proxy_protocol_addr"
+    fi
+
     cat >> "$conf" <<EOL
 
 ${XCHK_MARK_BEGIN}
 server {
     server_name $domain;
-    listen 443 ssl;
+    $listen_line;
     http2 on;
 
     ssl_certificate "/etc/nginx/ssl/$cert_domain/fullchain.pem";
@@ -359,8 +371,8 @@ server {
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $real_ip;
+        proxy_set_header X-Forwarded-For $real_ip;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
@@ -370,7 +382,7 @@ ${XCHK_MARK_END}
 EOL
 
     # nginx -t inside the container validates the config and the mounted
-    # certs before anything is recreated; on failure both edits roll back.
+    # certs before anything is applied; on failure both edits roll back.
     if ! docker exec remnawave-nginx nginx -t >/dev/null 2>&1; then
         xchk_nginx_rollback
         echo -e "${COLOR_RED}${LANG[XCHK_NGINX_TEST_FAIL]}${COLOR_RESET}"
@@ -378,7 +390,10 @@ EOL
     fi
 
     step_do "${LANG[XCHK_APPLYING_WEBSERVER]}"
+    # compose recreates only on compose-level changes; the bind-mounted conf
+    # needs an explicit graceful reload to reach the running nginx.
     (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+    docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
     if ! xchk_container_up remnawave-nginx; then
         xchk_nginx_rollback
         echo -e "${COLOR_RED}${LANG[XCHK_WEB_APPLY_FAIL]}${COLOR_RESET}"
@@ -398,6 +413,7 @@ xchk_unwire_nginx() {
     if [ "$(xchk_state_get "mounts")" = "1" ] && [ -n "$cert_domain" ] && [ -f "$compose" ]; then
         xchk_remove_cert_mounts "$compose" "$cert_domain"
         (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+        docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
     elif [ -f "$conf" ]; then
         docker restart remnawave-nginx >/dev/null 2>&1
     fi
@@ -473,6 +489,13 @@ xchk_prepare_domain() {
         else
             XCHK_CERT_DOMAIN=""
             XCHK_MOUNTS_ADDED=0
+            # A panel+node caddy serves through a unix socket behind Xray —
+            # publishing an extra TLS site there is not supported yet.
+            if grep -q "bind unix/" "$dir/Caddyfile"; then
+                echo -e "${COLOR_YELLOW}${LANG[XCHK_CADDY_SOCKET]}${COLOR_RESET}"
+                echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
+                return 0
+            fi
             xchk_wire_caddy "$dir" "$domain_input" || return 1
         fi
         XCHK_DOMAIN="$domain_input"
