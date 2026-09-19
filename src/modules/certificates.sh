@@ -112,6 +112,8 @@ get_certificates() {
     local email_args=(--email "$LETSENCRYPT_EMAIL")
     [ -z "$LETSENCRYPT_EMAIL" ] && email_args=(--register-unsafely-without-email)
 
+    dns_saved_credentials_load
+
     case $CERT_METHOD in
         1)
             # Cloudflare API (DNS-01 support wildcard)

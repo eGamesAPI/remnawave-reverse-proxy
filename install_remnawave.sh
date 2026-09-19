@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.3.7"
+SCRIPT_VERSION="3.3.8"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -871,19 +871,20 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Node extensions hub
     echo -e ""
-    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
-    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
+    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
+    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
     echo -e ""
-    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
-    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
+    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
+    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
-        echo -e "${COLOR_YELLOW}10. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}11. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
     else
-        echo -e "${COLOR_YELLOW}10. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+        echo -e "${COLOR_YELLOW}11. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
     fi
-    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
+    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
@@ -1515,6 +1516,38 @@ extract_domain() {
     echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
 }
 
+# Seed Cloudflare/Gcore credentials from the certbot secrets an earlier
+# install left in ~/.secrets/certbot (certbot itself needs them there for
+# renewals). Without this, every later run — DNS records for a new domain,
+# extra certificates — re-asks for a token that is already on disk.
+dns_saved_credentials_load() {
+    local seeded=""
+    if [ -z "$CLOUDFLARE_API_KEY" ] && [ -r "$HOME/.secrets/certbot/cloudflare.ini" ]; then
+        local cf_token cf_key cf_email
+        cf_token=$(sed -n 's/^dns_cloudflare_api_token[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        cf_key=$(sed -n 's/^dns_cloudflare_api_key[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        cf_email=$(sed -n 's/^dns_cloudflare_email[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        if [ -n "$cf_token" ]; then
+            CLOUDFLARE_API_KEY="$cf_token"
+            seeded="Cloudflare"
+        elif [ -n "$cf_key" ]; then
+            CLOUDFLARE_API_KEY="$cf_key"
+            [ -n "$cf_email" ] && CLOUDFLARE_EMAIL="$cf_email"
+            seeded="Cloudflare"
+        fi
+    fi
+    if [ -z "$GCORE_API_KEY" ] && [ -r "$HOME/.secrets/certbot/gcore.ini" ]; then
+        local gc_token
+        gc_token=$(sed -n 's/^dns_gcore_apitoken[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/gcore.ini" | head -n1)
+        if [ -n "$gc_token" ]; then
+            GCORE_API_KEY="$gc_token"
+            seeded="${seeded:+$seeded + }Gcore"
+        fi
+    fi
+    [ -n "$seeded" ] && echo -e "${COLOR_GRAY}$(printf "${LANG[DNS_CREDS_REUSED]}" "$seeded")${COLOR_RESET}"
+    return 0
+}
+
 check_domain() {
     local domain="$1"
     local show_warning="${2:-true}"
@@ -1692,6 +1725,7 @@ load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
+load_xray_checker_module() { load_module "xray_checker" "modules" "${1:-false}"; }
 
 detect_broken_ipv6
 
@@ -1732,18 +1766,24 @@ case $OPTION in
         show_node_extensions_menu
         ;;
     5)
+        load_xray_checker_module
+        manage_xray_checker
+        sleep 2
+        remnawave_reverse
+        ;;
+    6)
         load_legiz_module
         manage_custom_legiz
         sleep 2
         remnawave_reverse
         ;;
-    6)
+    7)
         load_warp_module
         manage_warp_native
         sleep 2
         remnawave_reverse
         ;;
-    7)
+    8)
         if [ -f ~/backup-restore.sh ]; then
             rw-backup
         else
@@ -1752,24 +1792,24 @@ case $OPTION in
         sleep 2
         remnawave_reverse
         ;;
-    8)
+    9)
         load_ipv6_module
         manage_ipv6
         sleep 2
         remnawave_reverse
         ;;
-    9)
+    10)
         load_certificates_module
         manage_certificates
         sleep 2
         remnawave_reverse
         ;;
-    10)
+    11)
         update_remnawave_reverse
         sleep 2
         remnawave_reverse
         ;;
-    11)
+    12)
         remove_script
         ;;
     0)

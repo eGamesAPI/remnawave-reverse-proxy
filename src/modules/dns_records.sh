@@ -57,6 +57,8 @@ ensure_dns_record() {
         return 0
     fi
 
+    dns_saved_credentials_load
+
     if [ -n "$GCORE_API_KEY" ]; then
         ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip" && return 0
     elif [ -n "$CLOUDFLARE_API_KEY" ]; then
@@ -84,25 +86,58 @@ ensure_dns_record() {
 
 ensure_dns_record_cloudflare() {
     local domain="$1" base_domain="$2" server_ip="$3"
+    local auth_header zone_resp zone_id cf_err
 
-    if [ -z "$CLOUDFLARE_API_KEY" ]; then
-        reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
-    fi
-    local auth_header="Authorization: Bearer ${CLOUDFLARE_API_KEY}"
-    if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
-        reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
-        auth_header="X-Auth-Key: ${CLOUDFLARE_API_KEY}"
-    fi
+    # A rolled or revoked token must not poison the whole run: Cloudflare's
+    # auth failure is reported as such (not as a missing zone), the token
+    # is re-asked, and the attempt repeats.
+    local attempt
+    for attempt in 1 2 3; do
+        if [ -z "$CLOUDFLARE_API_KEY" ]; then
+            reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
+        fi
+        auth_header="Authorization: Bearer ${CLOUDFLARE_API_KEY}"
+        if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
+            if [ -z "$CLOUDFLARE_EMAIL" ]; then
+                reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+            fi
+            auth_header="X-Auth-Key: ${CLOUDFLARE_API_KEY}"
+        fi
 
-    local zone_id
-    zone_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones?name=$base_domain" \
-        -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
-        | jq -r '.result[0].id // empty' 2>/dev/null)
+        zone_resp=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones?name=$base_domain" \
+            -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json")
 
+        if echo "$zone_resp" | jq -e '.success == false' >/dev/null 2>&1; then
+            cf_err=$(echo "$zone_resp" | jq -r '.errors[0].message // .errors[0].code // "unknown"')
+            printf "${COLOR_RED}${LANG[DNS_TOKEN_REJECTED]}${COLOR_RESET}\n" "$cf_err"
+            CLOUDFLARE_API_KEY=""
+            CLOUDFLARE_EMAIL=""
+            continue
+        fi
+
+        zone_id=$(echo "$zone_resp" | jq -r '.result[0].id // empty' 2>/dev/null)
+        if [ -z "$zone_id" ]; then
+            printf "${COLOR_RED}${LANG[DNS_RECORD_ZONE_NOT_FOUND]}${COLOR_RESET}\n" "$base_domain"
+            return 1
+        fi
+        break
+    done
     if [ -z "$zone_id" ]; then
-        printf "${COLOR_RED}${LANG[DNS_RECORD_ZONE_NOT_FOUND]}${COLOR_RESET}\n" "$base_domain"
+        echo -e "${COLOR_RED}${LANG[DNS_TOKEN_REJECTED_FINAL]}${COLOR_RESET}"
         return 1
     fi
+
+    # The working token refreshes certbot's renewal credential too — after a
+    # token roll the old cloudflare.ini would fail the next wildcard renewal.
+    mkdir -p "$HOME/.secrets/certbot"
+    if [[ $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
+        printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_KEY" > "$HOME/.secrets/certbot/cloudflare.ini"
+    else
+        printf 'dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n' \
+            "$CLOUDFLARE_EMAIL" "$CLOUDFLARE_API_KEY" > "$HOME/.secrets/certbot/cloudflare.ini"
+    fi
+    chmod 600 "$HOME/.secrets/certbot/cloudflare.ini" 2>/dev/null
+    echo -e "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}"
 
     local record_id response
     record_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=A&name=$domain" \
