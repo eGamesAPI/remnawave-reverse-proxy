@@ -1067,13 +1067,24 @@ xchk_restart() {
 
 xchk_update() {
     step_do "${LANG[XCHK_UPDATING]}"
+    # compose pull exits 0 on already-latest images too, so the verdict
+    # comes from comparing the image ids before and after the pull.
+    local imgs_before imgs_after
+    imgs_before=$(docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+        | grep -E '^(kutovoys/xray-checker|ghcr\.io/mrvibecodic/xray-checker-statuspage|caddy):' | sort)
     (cd "$XCHK_DIR" && docker compose pull) >/dev/null 2>&1
     if [ $? -ne 0 ]; then
         echo -e "${COLOR_RED}$(printf "${LANG[XCHK_UPDATE_FAIL]}" "docker compose pull")${COLOR_RESET}"
         return 1
     fi
+    imgs_after=$(docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+        | grep -E '^(kutovoys/xray-checker|ghcr\.io/mrvibecodic/xray-checker-statuspage|caddy):' | sort)
+    if [ "$imgs_before" = "$imgs_after" ]; then
+        echo -e "${COLOR_GREEN}${LANG[XCHK_UP_TO_DATE]}${COLOR_RESET}"
+        return 0
+    fi
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    spinner $! "${LANG[XCHK_UPDATING]}"
     step_ok "${LANG[XCHK_UPDATED]}"
 }
 
