@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.54"
+SCRIPT_VERSION="Dev 3.5.55"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -871,9 +871,9 @@ show_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Node extensions hub
     echo -e ""
-    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
-    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
     echo -e "${COLOR_YELLOW}8. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
     echo -e ""
     echo -e "${COLOR_YELLOW}9. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
@@ -1766,20 +1766,20 @@ case $OPTION in
         show_node_extensions_menu
         ;;
     5)
+        load_xray_checker_module
+        manage_xray_checker
+        sleep 2
+        remnawave_reverse
+        ;;
+    6)
         load_legiz_module
         manage_custom_legiz
         sleep 2
         remnawave_reverse
         ;;
-    6)
+    7)
         load_warp_module
         manage_warp_native
-        sleep 2
-        remnawave_reverse
-        ;;
-    7)
-        load_xray_checker_module
-        manage_xray_checker
         sleep 2
         remnawave_reverse
         ;;
