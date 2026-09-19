@@ -851,3 +851,6 @@ LANG[XCHK_STATUS_LOCAL]="Публичной страницы нет — localhos
 LANG[XCHK_STATUS_LOGS_HEAD]="Последние строки xray-checker:"
 LANG[XCHK_CADDY_SOCKET]="Этот caddy обслуживает панель через unix-сокет за Xray (панель + нода) — публикация статус-домена для такой схемы пока не поддерживается."
 LANG[DNS_CREDS_REUSED]="Использую сохранённый токен %s из ~/.secrets/certbot."
+LANG[DNS_TOKEN_REJECTED]="Cloudflare отклонил токен (%s). Введите действующий — API-токен или глобальный ключ:"
+LANG[DNS_TOKEN_REJECTED_FINAL]="Токен Cloudflare так и не принят — попробуйте позже или создайте новый в панели Cloudflare."
+LANG[DNS_TOKEN_REFRESHED]="Действующий токен сохранён в ~/.secrets/certbot/cloudflare.ini — продления сертификатов будут работать."

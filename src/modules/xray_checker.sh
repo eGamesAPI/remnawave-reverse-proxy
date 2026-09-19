@@ -381,12 +381,22 @@ server {
 ${XCHK_MARK_END}
 EOL
 
-    # nginx -t inside the container validates the config and the mounted
-    # certs before anything is applied; on failure both edits roll back.
-    if ! docker exec remnawave-nginx nginx -t >/dev/null 2>&1; then
-        xchk_nginx_rollback
-        echo -e "${COLOR_RED}${LANG[XCHK_NGINX_TEST_FAIL]}${COLOR_RESET}"
-        return 1
+    # nginx -t validates syntax and certificate paths before anything is
+    # applied. One caveat on a live panel+node box: the running master
+    # already holds /dev/shm/nginx.sock, and a config test re-listening it
+    # fails with EADDRINUSE — by then the whole config was already parsed,
+    # so that specific conflict with ourselves is expected and passes;
+    # every other failure is real and rolls both edits back.
+    local test_out test_rc=0
+    test_out=$(docker exec remnawave-nginx nginx -t 2>&1) || test_rc=$?
+    if [ "$test_rc" -ne 0 ]; then
+        if ! printf '%s' "$test_out" | grep -q "unix:/dev/shm/nginx.sock" \
+            || ! printf '%s' "$test_out" | grep -q "Address already in use"; then
+            xchk_nginx_rollback
+            echo -e "${COLOR_RED}${LANG[XCHK_NGINX_TEST_FAIL]}${COLOR_RESET}"
+            printf '%s\n' "$test_out" | tail -n 5 | sed 's/^/  /'
+            return 1
+        fi
     fi
 
     step_do "${LANG[XCHK_APPLYING_WEBSERVER]}"
