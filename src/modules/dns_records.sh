@@ -57,6 +57,8 @@ ensure_dns_record() {
         return 0
     fi
 
+    dns_saved_credentials_load
+
     if [ -n "$GCORE_API_KEY" ]; then
         ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip" && return 0
     elif [ -n "$CLOUDFLARE_API_KEY" ]; then

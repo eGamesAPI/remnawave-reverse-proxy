@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.23"
+SCRIPT_VERSION="Dev 3.5.24"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1530,6 +1530,38 @@ install_packages() {
 extract_domain() {
     local SUBDOMAIN=$1
     echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
+}
+
+# Seed Cloudflare/Gcore credentials from the certbot secrets an earlier
+# install left in ~/.secrets/certbot (certbot itself needs them there for
+# renewals). Without this, every later run — DNS records for a new domain,
+# extra certificates — re-asks for a token that is already on disk.
+dns_saved_credentials_load() {
+    local seeded=""
+    if [ -z "$CLOUDFLARE_API_KEY" ] && [ -r "$HOME/.secrets/certbot/cloudflare.ini" ]; then
+        local cf_token cf_key cf_email
+        cf_token=$(sed -n 's/^dns_cloudflare_api_token[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        cf_key=$(sed -n 's/^dns_cloudflare_api_key[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        cf_email=$(sed -n 's/^dns_cloudflare_email[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/cloudflare.ini" | head -n1)
+        if [ -n "$cf_token" ]; then
+            CLOUDFLARE_API_KEY="$cf_token"
+            seeded="Cloudflare"
+        elif [ -n "$cf_key" ]; then
+            CLOUDFLARE_API_KEY="$cf_key"
+            [ -n "$cf_email" ] && CLOUDFLARE_EMAIL="$cf_email"
+            seeded="Cloudflare"
+        fi
+    fi
+    if [ -z "$GCORE_API_KEY" ] && [ -r "$HOME/.secrets/certbot/gcore.ini" ]; then
+        local gc_token
+        gc_token=$(sed -n 's/^dns_gcore_apitoken[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/gcore.ini" | head -n1)
+        if [ -n "$gc_token" ]; then
+            GCORE_API_KEY="$gc_token"
+            seeded="${seeded:+$seeded + }Gcore"
+        fi
+    fi
+    [ -n "$seeded" ] && echo -e "${COLOR_GRAY}$(printf "${LANG[DNS_CREDS_REUSED]}" "$seeded")${COLOR_RESET}"
+    return 0
 }
 
 check_domain() {
