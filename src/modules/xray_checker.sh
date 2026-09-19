@@ -745,8 +745,8 @@ xchk_install() {
     echo -e "${COLOR_GREEN}${LANG[XCHK_INSTALL_TITLE]}${COLOR_RESET}"
     echo -e ""
 
-    # 1) bundle or checker-only
-    local mode
+    # 1) mode: with a public page or solo; the page itself is picked next.
+    local mode page="none"
     echo -e "${COLOR_GREEN}${LANG[XCHK_MODE_PROMPT_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MODE_BUNDLE]}${COLOR_RESET}"
@@ -762,7 +762,31 @@ xchk_install() {
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
         esac
     done
+
     if [ "$mode" = "bundle" ]; then
+        # 1a) whose page: the statuspage container or the checker's own UI.
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[XCHK_PAGE_TITLE]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_PAGE_MRVIBE]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[XCHK_PAGE_MRVIBE_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_PAGE_KUTOVOYS]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[XCHK_PAGE_KUTOVOYS_DESC]}${COLOR_RESET}"
+        echo -e ""
+        local page_pick
+        while true; do
+            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" page_pick
+            case "$page_pick" in
+                1) page="mrvibe"; break ;;
+                # kutovoys' page lives inside the checker itself — the stack
+                # stays checker-only, the UI just gets published with auth.
+                2) page="kutovoys"; mode="checker"; break ;;
+                *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
+            esac
+        done
+    fi
+
+    if [ "$page" = "mrvibe" ]; then
         echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS_BUNDLE]}${COLOR_RESET}"
     else
         echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS_CHECKER]}${COLOR_RESET}"
@@ -861,25 +885,26 @@ xchk_install() {
         esac
     done
 
-    # 5) public domain: the statuspage in a bundle, the checker's own web
-    # UI (basic auth with a generated password) in checker-only installs.
+    # 5) public domain — only for the modes that have a page: the
+    # statuspage in a bundle, the checker's own web UI for kutovoys' page.
     XCHK_SIDECAR=0
     XCHK_DOMAIN=""
     XCHK_UI_USER=""
     XCHK_UI_PASS=""
-    local page_backend="8080" page_kind="page"
-    if [ "$mode" = "checker" ]; then
-        page_backend="2112"
-        page_kind="ui"
-    fi
-    echo -e ""
-    xchk_prepare_domain "$page_backend" "$page_kind" || return 1
-    if [ "$mode" = "checker" ] && [ -n "$XCHK_DOMAIN" ]; then
-        XCHK_UI_USER="checker"
-        XCHK_UI_PASS=$(generate_password)
-    fi
-    if [ "$mode" = "checker" ] && [ -z "$XCHK_DOMAIN" ]; then
+    if [ "$page" = "none" ]; then
         echo -e "${COLOR_YELLOW}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
+    else
+        local page_backend="8080" page_kind="page"
+        if [ "$page" = "kutovoys" ]; then
+            page_backend="2112"
+            page_kind="ui"
+        fi
+        echo -e ""
+        xchk_prepare_domain "$page_backend" "$page_kind" || return 1
+        if [ "$page" = "kutovoys" ] && [ -n "$XCHK_DOMAIN" ]; then
+            XCHK_UI_USER="checker"
+            XCHK_UI_PASS=$(generate_password)
+        fi
     fi
 
     # 6) write + start
