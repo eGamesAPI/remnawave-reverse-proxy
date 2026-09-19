@@ -41,6 +41,13 @@ xchk_state_clear() {
     rm -f "$XCHK_STATE_FILE"
 }
 
+# Alnum-only password for the published web UI: it is typed by hand in a
+# browser, and quoting specials safely through compose env lists is not
+# worth the trouble.
+xchk_gen_password() {
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20
+}
+
 xchk_installed() {
     [ -f "$XCHK_DIR/docker-compose.yml" ]
 }
@@ -647,13 +654,13 @@ EOL
 
     # Checker-only with a published UI: the built-in basic auth guards it —
     # the web UI lists every proxy, it must not sit on the open internet.
-    # The lines land inside the checker's environment list, which is still
-    # the tail of the file here.
+    # The password is alnum-only and written unquoted: YAML list-form env
+    # values keep literal quotes, which silently broke login before.
     if [ "$mode" = "checker" ] && [ -n "${XCHK_UI_PASS:-}" ]; then
         cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
       - METRICS_PROTECTED=true
       - METRICS_USERNAME=${XCHK_UI_USER}
-      - METRICS_PASSWORD="${XCHK_UI_PASS}"
+      - METRICS_PASSWORD=${XCHK_UI_PASS}
 EOL
     fi
 
@@ -909,7 +916,7 @@ xchk_install() {
         xchk_prepare_domain "$page_backend" "$page_kind" || return 1
         if [ "$page" = "kutovoys" ] && [ -n "$XCHK_DOMAIN" ]; then
             XCHK_UI_USER="checker"
-            XCHK_UI_PASS=$(generate_password)
+            XCHK_UI_PASS=$(xchk_gen_password)
         fi
     fi
 
