@@ -849,7 +849,9 @@ xchk_install() {
     if [ -n "$panel_sub_url" ]; then
         sub_url="$panel_sub_url"
     else
-        local url_re='^https?://[A-Za-z0-9.:_~/?#%@&=+,-]+$'
+        # A real host is required after the scheme: the previous loose class
+        # let hostless URLs like https:///token slip through.
+        local url_re='^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]+)?(/[A-Za-z0-9._~/?#%@&=+,-]*)?$'
         while true; do
             reading "${LANG[XCHK_SUB_URL_PROMPT]}" sub_url || return 0
             if [[ "$sub_url" =~ $url_re ]]; then
