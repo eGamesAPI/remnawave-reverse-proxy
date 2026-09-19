@@ -538,6 +538,15 @@ xchk_prepare_domain() {
 xchk_write_stack() {
     local mode="$1" sub_url="$2" interval="$3" method="$4"
 
+    # In bundle mode the checker reads the statuspage's /sub feed, and the
+    # real subscription goes to the statuspage itself as its env fallback:
+    # /sub answers 404 "subscription not configured" until either a bot-fed
+    # subscription or that fallback exists, and the checker treats the 404
+    # as fatal. With the fallback set, the checker boots from the very
+    # first start; bot-fed subscriptions later take priority over it.
+    local checker_sub="$sub_url"
+    [ "$mode" = "bundle" ] && checker_sub="http://127.0.0.1:8081/sub"
+
     mkdir -p "$XCHK_DIR"
 
     local tz
@@ -568,7 +577,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      - SUBSCRIPTION_URL=\${XCHK_SUBSCRIPTION_URL}
+      - SUBSCRIPTION_URL=$checker_sub
       - SUBSCRIPTION_UPDATE=true
       - SUBSCRIPTION_UPDATE_INTERVAL=300
       - PROXY_CHECK_INTERVAL=\${XCHK_CHECK_INTERVAL}
@@ -601,6 +610,7 @@ EOL
       - TLS_MODE=off
       - INTERNAL_PORT=8081
       - PROXY_CHECK_INTERVAL=\${XCHK_CHECK_INTERVAL}
+      - SUBSCRIPTION_URL=\${XCHK_SUBSCRIPTION_URL}
       - BOT_TOKEN=\${XCHK_BOT_TOKEN}
       - BOT_ADMIN_IDS=\${XCHK_BOT_ADMIN_IDS}
       - NOTIFY_CHAT_IDS=\${XCHK_NOTIFY_CHAT_IDS}
@@ -692,6 +702,11 @@ xchk_install() {
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
         esac
     done
+    if [ "$mode" = "bundle" ]; then
+        echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS_BUNDLE]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS_CHECKER]}${COLOR_RESET}"
+    fi
 
     # 2) subscription source
     local panel_sub_url=""
@@ -782,15 +797,13 @@ xchk_install() {
     fi
 
     # 6) write + start
-    # In bundle mode the checker must read the statuspage's /sub feed, not
-    # the panel subscription — the bot owns the list from here on.
-    local checker_sub_url="$sub_url"
-    [ "$mode" = "bundle" ] && checker_sub_url="http://127.0.0.1:8081/sub"
-
-    xchk_write_stack "$mode" "$checker_sub_url" "$interval" "$method" || return 1
+    xchk_write_stack "$mode" "$sub_url" "$interval" "$method" || return 1
 
     step_do "${LANG[XCHK_PULLING]}"
-    (cd "$XCHK_DIR" && docker compose pull) >/dev/null 2>&1
+    (cd "$XCHK_DIR" && docker compose pull) >/dev/null 2>&1 &
+    local pull_pid=$!
+    spinner "$pull_pid" "${LANG[XCHK_PULLING]}"
+    wait "$pull_pid"
     if [ $? -ne 0 ]; then
         echo -e "${COLOR_RED}${LANG[XCHK_PULL_FAIL]}${COLOR_RESET}"
         return 1
@@ -798,7 +811,7 @@ xchk_install() {
 
     step_do "${LANG[XCHK_STARTING]}"
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    spinner $! "${LANG[XCHK_STARTING]}"
 
     # The stack exists from here on — record the state before any health
     # verdict, so uninstall can always undo the webserver edits even when
@@ -807,29 +820,40 @@ xchk_install() {
 
     # Checker and page get separate verdicts: a slow page must not fail the
     # whole install — the checker (the monitoring itself) may already be
-    # fully functional.
-    local i checker_ok=false page_ok=false
-    for i in $(seq 1 60); do
-        sleep 2
-        if ! $checker_ok && curl -s -o /dev/null --max-time 3 http://127.0.0.1:2112/metrics 2>/dev/null; then
-            checker_ok=true
-        fi
-        if [ "$mode" = "bundle" ]; then
-            if ! $page_ok && curl -s -o /dev/null --max-time 3 http://127.0.0.1:8080 2>/dev/null; then
-                page_ok=true
+    # fully functional. The wait runs behind a spinner so the install does
+    # not look dead for the full window.
+    local health_pid health_rc=0
+    (
+        i_checker_ok=false
+        i_page_ok=false
+        for i_iter in $(seq 1 60); do
+            sleep 2
+            if ! $i_checker_ok && curl -s -o /dev/null --max-time 3 http://127.0.0.1:2112/metrics 2>/dev/null; then
+                i_checker_ok=true
             fi
-            $checker_ok && $page_ok && break
-        else
-            $checker_ok && break
-        fi
-    done
-    if ! $checker_ok; then
+            if [ "$mode" = "bundle" ]; then
+                if ! $i_page_ok && curl -s -o /dev/null --max-time 3 http://127.0.0.1:8080 2>/dev/null; then
+                    i_page_ok=true
+                fi
+                $i_checker_ok && $i_page_ok && break
+            else
+                $i_checker_ok && break
+            fi
+        done
+        $i_checker_ok || exit 1
+        { [ "$mode" = "bundle" ] && ! $i_page_ok; } && exit 2
+        exit 0
+    ) &
+    health_pid=$!
+    spinner "$health_pid" "${LANG[XCHK_HEALTH_WAITING]}"
+    wait "$health_pid" || health_rc=$?
+    if [ "$health_rc" -eq 1 ]; then
         echo -e "${COLOR_RED}${LANG[XCHK_HEALTH_FAIL]}${COLOR_RESET}"
         docker logs --tail 20 xray-checker 2>&1 | sed 's/^/  /'
         return 1
     fi
     step_ok "${LANG[XCHK_HEALTH_OK]}"
-    if [ "$mode" = "bundle" ] && ! $page_ok; then
+    if [ "$health_rc" -eq 2 ]; then
         echo -e "${COLOR_YELLOW}${LANG[XCHK_HEALTH_PAGE_SLOW]}${COLOR_RESET}"
         docker logs --tail 20 xray-checker-statuspage 2>&1 | sed 's/^/  /'
     fi
@@ -899,7 +923,8 @@ xchk_status() {
 
 xchk_restart() {
     step_do "${LANG[XCHK_RESTARTING]}"
-    (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1
+    (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
+    spinner $! "${LANG[XCHK_RESTARTING]}"
     xchk_container_up xray-checker \
         && step_ok "${LANG[XCHK_RESTARTED]}" \
         || echo -e "${COLOR_RED}${LANG[XCHK_HEALTH_FAIL]}${COLOR_RESET}"
@@ -942,14 +967,6 @@ xchk_uninstall() {
     step_ok "${LANG[XCHK_UNINSTALLED]}"
 }
 
-xchk_about() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}=== ${LANG[XCHK_MENU_ABOUT]} ===${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_GRAY}${LANG[XCHK_ABOUT]}${COLOR_RESET}"
-    echo -e ""
-}
-
 show_xray_checker_menu() {
     local mode_label domain
     if xchk_installed; then
@@ -968,19 +985,16 @@ show_xray_checker_menu() {
     echo -e " ${status_color}${LANG[XCHK_MENU_TITLE]}: ${status_text}${COLOR_RESET}"
     echo -e ""
 
-    local last=2
+    local last=1
     if xchk_installed; then
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_STATUS]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}5. ${LANG[XCHK_MENU_ABOUT]}${COLOR_RESET}"
-        last=5
+        last=4
     else
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_INSTALL]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_ABOUT]}${COLOR_RESET}"
-        last=2
     fi
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
@@ -995,7 +1009,6 @@ show_xray_checker_menu() {
             2) xchk_restart; sleep 2; show_xray_checker_menu ;;
             3) xchk_update; sleep 2; show_xray_checker_menu ;;
             4) xchk_uninstall; sleep 2; show_xray_checker_menu ;;
-            5) xchk_about; sleep 1; show_xray_checker_menu ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}" ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                sleep 1
@@ -1004,7 +1017,6 @@ show_xray_checker_menu() {
     else
         case $xchk_option in
             1) xchk_install; sleep 2; show_xray_checker_menu ;;
-            2) xchk_about; sleep 1; show_xray_checker_menu ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}" ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                sleep 1
