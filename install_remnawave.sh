@@ -885,6 +885,8 @@ show_menu() {
     fi
     echo -e "${COLOR_YELLOW}11. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
+    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
+    echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
     echo -e ""
@@ -978,6 +980,7 @@ show_install_menu() {
     echo -e "${COLOR_YELLOW}4. ${LANG[INSTALL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[INSTALL_PANEL_ONLY]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}6. ${LANG[INSTALL_SUB_ONLY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}7. ${LANG[INSTALL_XRAY_CHECKER]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -1195,6 +1198,20 @@ manage_install() {
                     ;;
             esac
             sleep 2
+            ;;
+        7)
+            # Monitoring role: docker + the xray_checker module, nothing else —
+            # a stand-alone box watching the panel subscription from outside.
+            if [ ! -f "${DIR_REMNAWAVE}install_packages" ] || ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+                install_packages || {
+                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}"
+                    exit 1
+                }
+            fi
+            load_xray_checker_module
+            xchk_install
+            sleep 2
+            remnawave_reverse
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -1692,6 +1709,7 @@ load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
+load_xray_checker_module() { load_module "xray_checker" "modules" "${1:-false}"; }
 
 detect_broken_ipv6
 
@@ -1771,6 +1789,12 @@ case $OPTION in
         ;;
     11)
         remove_script
+        ;;
+    12)
+        load_xray_checker_module
+        manage_xray_checker
+        sleep 2
+        remnawave_reverse
         ;;
     0)
         echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
