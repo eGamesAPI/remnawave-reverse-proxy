@@ -455,10 +455,22 @@ xchk_wire_caddy() {
     local dir="$1" domain="$2"
     local caddyfile="$dir/Caddyfile"
 
+    # Caddy manages its own certificates via ACME on :80 (renewals live in
+    # caddy_data) — no cert mounts are involved. On a panel+node box it
+    # serves behind Xray on a unix socket and the status site joins that
+    # socket exactly like the panel's own block; on a pure panel install
+    # caddy owns 443 directly and the bind line is omitted.
+    local bind_line=""
+    if grep -q "bind unix/" "$caddyfile"; then
+        bind_line="    bind unix/{\$CADDY_SOCKET_PATH}"
+    fi
+
     cat >> "$caddyfile" <<EOL
 
 ${XCHK_MARK_BEGIN}
 https://$domain {
+${bind_line}
+    auto_https disable_redirects
     encode
     handle {
         reverse_proxy 127.0.0.1:8080 {
@@ -521,13 +533,6 @@ xchk_prepare_domain() {
         else
             XCHK_CERT_DOMAIN=""
             XCHK_MOUNTS_ADDED=0
-            # A panel+node caddy serves through a unix socket behind Xray —
-            # publishing an extra TLS site there is not supported yet.
-            if grep -q "bind unix/" "$dir/Caddyfile"; then
-                echo -e "${COLOR_YELLOW}${LANG[XCHK_CADDY_SOCKET]}${COLOR_RESET}"
-                echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
-                return 0
-            fi
             xchk_wire_caddy "$dir" "$domain_input" || return 1
         fi
         XCHK_DOMAIN="$domain_input"
