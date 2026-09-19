@@ -465,12 +465,15 @@ xchk_wire_caddy() {
         bind_line="    bind unix/{\$CADDY_SOCKET_PATH}"
     fi
 
+    # NOTE: no auto_https directive here — it is a global-options-only
+    # setting; inside a site block caddy refuses the whole config and
+    # crash-loops, taking the panel down with it. The box's own global
+    # auto_https already covers every site.
     cat >> "$caddyfile" <<EOL
 
 ${XCHK_MARK_BEGIN}
 https://$domain {
 ${bind_line}
-    auto_https disable_redirects
     encode
     handle {
         reverse_proxy 127.0.0.1:8080 {
@@ -484,13 +487,23 @@ EOL
 
     step_do "${LANG[XCHK_APPLYING_WEBSERVER]}"
     docker restart remnawave-caddy >/dev/null 2>&1
+    # A config caddy rejects dies a few seconds into its restart loop — a
+    # single immediate Up check passes right before that. Re-check after a
+    # pause before calling the apply successful.
+    sleep 6
     if ! xchk_container_up remnawave-caddy; then
-        sed -i "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$caddyfile"
-        docker restart remnawave-caddy >/dev/null 2>&1
+        xchk_caddy_rollback "$caddyfile"
         echo -e "${COLOR_RED}${LANG[XCHK_WEB_APPLY_FAIL]}${COLOR_RESET}"
         return 1
     fi
     return 0
+}
+
+# Restore the Caddyfile without our block and restart caddy on it.
+xchk_caddy_rollback() {
+    local caddyfile="$1"
+    sed -i "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$caddyfile"
+    docker restart remnawave-caddy >/dev/null 2>&1
 }
 
 xchk_unwire_caddy() {
