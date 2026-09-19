@@ -149,6 +149,34 @@ xchk_tg_test() {
     printf '%s' "$XCHK_TG_RESPONSE" | grep -q '"ok":true'
 }
 
+# Best-effort message to the first admin chat: a bot may only write into a
+# chat the user has opened first, so a failure here is a hint, not an error.
+xchk_tg_send_test() {
+    local chat_id="$1"
+    local proxy_args=()
+    [ -n "$XCHK_TG_PROXY_VAL" ] && proxy_args=(--proxy "$XCHK_TG_PROXY_VAL")
+    XCHK_TG_RESPONSE=$(curl -s -m 20 "${proxy_args[@]}" \
+        "https://api.telegram.org/bot${XCHK_TG_TOKEN_VAL}/sendMessage" \
+        --data-urlencode "chat_id=${chat_id}" \
+        --data-urlencode "text=✅ ${LANG[XCHK_TG_TEST_TEXT]}" 2>/dev/null)
+    XCHK_TG_RC=$?
+    printf '%s' "$XCHK_TG_RESPONSE" | grep -q '"ok":true'
+}
+
+xchk_tg_confirm_send() {
+    local first_admin="${XCHK_TG_ADMINS_VAL%%,*}"
+    echo -e "${COLOR_YELLOW}${LANG[XCHK_TG_SENDING]}${COLOR_RESET}"
+    if xchk_tg_send_test "$first_admin"; then
+        echo -e "${COLOR_GREEN}${LANG[XCHK_TG_OK]}${COLOR_RESET}"
+    else
+        # getMe already proved the token works — an unsent message means the
+        # admin has not started the chat with the bot yet.
+        echo -e "${COLOR_GREEN}${LANG[XCHK_TG_OK]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_TG_START_HINT]}${COLOR_RESET}"
+    fi
+    return 0
+}
+
 # Bot token + admin ids (and optional alert chats). Sets XCHK_TG_TOKEN_VAL,
 # XCHK_TG_ADMINS_VAL, XCHK_TG_NOTIFY_VAL, XCHK_TG_PROXY_VAL.
 xchk_ask_tg() {
@@ -180,9 +208,9 @@ xchk_ask_tg() {
     XCHK_TG_ADMINS_VAL="$admins_input"
     XCHK_TG_NOTIFY_VAL="$notify_input"
 
-    echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[XCHK_TG_CHECKING]}${COLOR_RESET}"
     if xchk_tg_test; then
-        echo -e "${COLOR_GREEN}${LANG[XCHK_TG_OK]}${COLOR_RESET}"
+        xchk_tg_confirm_send
         return 0
     fi
 
@@ -196,9 +224,9 @@ xchk_ask_tg() {
         reading "${LANG[CERT_TG_PROXY_URL]}" proxy_url || proxy_url=""
         if [ -n "$proxy_url" ] && [[ "$proxy_url" =~ $proxy_re ]]; then
             XCHK_TG_PROXY_VAL="$proxy_url"
-            echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${LANG[XCHK_TG_CHECKING]}${COLOR_RESET}"
             if xchk_tg_test; then
-                echo -e "${COLOR_GREEN}${LANG[XCHK_TG_OK]}${COLOR_RESET}"
+                xchk_tg_confirm_send
                 return 0
             fi
         fi
