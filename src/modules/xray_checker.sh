@@ -750,9 +750,7 @@ xchk_install() {
     echo -e "${COLOR_GREEN}${LANG[XCHK_MODE_PROMPT_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MODE_BUNDLE]}${COLOR_RESET}"
-    echo -e "    ${COLOR_GRAY}${LANG[XCHK_MODE_BUNDLE_DESC]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MODE_CHECKER]}${COLOR_RESET}"
-    echo -e "    ${COLOR_GRAY}${LANG[XCHK_MODE_CHECKER_DESC]}${COLOR_RESET}"
     echo -e ""
     while true; do
         reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" mode
