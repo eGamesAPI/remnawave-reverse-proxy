@@ -521,15 +521,17 @@ xchk_unwire_caddy() {
 # XCHK_CERT_DOMAIN, XCHK_MOUNTS_ADDED. The backend port follows the mode:
 # the statuspage in a bundle, the checker's own web UI (2112) otherwise.
 xchk_prepare_domain() {
-    local backend="${1:-8080}"
+    local backend="${1:-8080}" kind="${2:-page}"
     XCHK_DOMAIN=""
     XCHK_SIDECAR=0
     XCHK_SIDECAR_BACKEND="$backend"
     XCHK_WS_KIND="none"
     XCHK_WS_DIR=""
 
+    local prompt_key="XCHK_DOMAIN_PROMPT"
+    [ "$kind" = "ui" ] && prompt_key="XCHK_DOMAIN_PROMPT_CHECKER"
     local domain_input
-    reading "${LANG[XCHK_DOMAIN_PROMPT]}" domain_input || return 0
+    reading "${LANG[$prompt_key]}" domain_input || return 0
     [ -z "$domain_input" ] || [ "$domain_input" = "0" ] && {
         echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
         return 0
@@ -865,12 +867,13 @@ xchk_install() {
     XCHK_DOMAIN=""
     XCHK_UI_USER=""
     XCHK_UI_PASS=""
-    local page_backend="8080"
+    local page_backend="8080" page_kind="page"
     if [ "$mode" = "checker" ]; then
         page_backend="2112"
+        page_kind="ui"
     fi
     echo -e ""
-    xchk_prepare_domain "$page_backend" || return 1
+    xchk_prepare_domain "$page_backend" "$page_kind" || return 1
     if [ "$mode" = "checker" ] && [ -n "$XCHK_DOMAIN" ]; then
         XCHK_UI_USER="checker"
         XCHK_UI_PASS=$(generate_password)
