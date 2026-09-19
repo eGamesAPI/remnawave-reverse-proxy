@@ -346,10 +346,10 @@ xchk_wire_nginx() {
     # socket with proxy_protocol — there the block joins that socket and
     # arrives via Reality's fallback, exactly like the panel's own domain.
     # A pure panel install has nginx on 443 directly.
-    local listen_line="listen 443 ssl;"
+    local listen_line="listen 443 ssl"
     local real_ip="\$remote_addr"
     if grep -q "listen unix:/dev/shm/nginx.sock" "$conf"; then
-        listen_line="listen unix:/dev/shm/nginx.sock ssl proxy_protocol;"
+        listen_line="listen unix:/dev/shm/nginx.sock ssl proxy_protocol"
         real_ip="\$proxy_protocol_addr"
     fi
 
