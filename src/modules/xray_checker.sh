@@ -530,17 +530,25 @@ xchk_prepare_domain() {
 
     local prompt_key="XCHK_DOMAIN_PROMPT"
     [ "$kind" = "ui" ] && prompt_key="XCHK_DOMAIN_PROMPT_CHECKER"
-    local domain_input
-    reading "${LANG[$prompt_key]}" domain_input || return 0
-    [ -z "$domain_input" ] || [ "$domain_input" = "0" ] && {
-        echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
-        return 0
-    }
-    local domain_re='^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$'
-    if ! [[ "$domain_input" =~ $domain_re ]]; then
+    local domain_input domain_re='^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+    # Pasted URLs are normalized (scheme, path, trailing dot, case) and a
+    # bad answer re-asks — it must not abort the whole install.
+    while true; do
+        reading "${LANG[$prompt_key]}" domain_input || return 0
+        if [ -z "$domain_input" ] || [ "$domain_input" = "0" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
+            return 0
+        fi
+        domain_input="${domain_input#http://}"
+        domain_input="${domain_input#https://}"
+        domain_input="${domain_input%%/*}"
+        domain_input="${domain_input%.}"
+        domain_input="${domain_input,,}"
+        if [[ "$domain_input" =~ $domain_re ]]; then
+            break
+        fi
         echo -e "${COLOR_RED}${LANG[XCHK_DOMAIN_INVALID]}${COLOR_RESET}"
-        return 1
-    fi
+    done
 
     load_dns_records_module
     ensure_dns_record "$domain_input" || true
