@@ -1005,6 +1005,13 @@ show_xray_checker_menu() {
     echo -e "${COLOR_GREEN}${LANG[XCHK_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e " ${status_color}${LANG[XCHK_MENU_TITLE]}: ${status_text}${COLOR_RESET}"
+    # Authors ride along in the menu itself — the About entry is gone, and
+    # the credit must survive whatever subset is installed.
+    if xchk_with_statuspage; then
+        echo -e " ${COLOR_GRAY}${LANG[XCHK_CREDITS_BUNDLE]}${COLOR_RESET}"
+    elif xchk_installed; then
+        echo -e " ${COLOR_GRAY}${LANG[XCHK_CREDITS_CHECKER]}${COLOR_RESET}"
+    fi
     echo -e ""
 
     local last=1
