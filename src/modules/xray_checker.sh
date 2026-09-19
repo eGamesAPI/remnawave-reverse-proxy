@@ -758,7 +758,7 @@ xchk_install() {
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[XCHK_INSTALL_TITLE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[XCHK_SEPARATE_BOX_NOTE]}${COLOR_RESET}"
+    echo -e "${COLOR_RED}${LANG[XCHK_SEPARATE_BOX_NOTE]}${COLOR_RESET}"
     echo -e ""
 
     # 1) mode: with a public page or solo; the page itself is picked next.
