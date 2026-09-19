@@ -788,18 +788,33 @@ xchk_install() {
         interval="$interval_input"
     fi
 
-    local method
+    local method method_same_box=""
+    # The ip method requires the proxy to CHANGE the exit IP — on a box that
+    # also runs the node the exit is this very server, so every check would
+    # fail by definition. Status checks fit both layouts.
+    if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
+       { [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; }; then
+        method_same_box=1
+    fi
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[XCHK_METHOD_TITLE]}${COLOR_RESET}"
+    if [ -n "$method_same_box" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_METHOD_SAMEBOX_NOTE]}${COLOR_RESET}"
+    fi
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_METHOD_IP]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_METHOD_STATUS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_METHOD_DOWNLOAD]}${COLOR_RESET}"
     echo -e ""
+    local method_default=1
+    [ -n "$method_same_box" ] && method_default=2
     while true; do
         reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "3")" method
+        [ -z "$method" ] && method=$method_default
         case "$method" in
-            1) method="ip"; break ;;
+            1) method="ip"
+               [ -n "$method_same_box" ] && echo -e "${COLOR_YELLOW}${LANG[XCHK_METHOD_SAMEBOX_WARN]}${COLOR_RESET}"
+               break ;;
             2) method="status"; break ;;
             3) method="download"
                echo -e "${COLOR_YELLOW}${LANG[XCHK_METHOD_DOWNLOAD_WARN]}${COLOR_RESET}"
