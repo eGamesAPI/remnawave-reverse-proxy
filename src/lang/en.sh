@@ -829,6 +829,7 @@ LANG[XCHK_PULL_FAIL]="Failed to pull images. The checker lives on Docker Hub (ku
 LANG[XCHK_STARTING]="Starting the stack..."
 LANG[XCHK_HEALTH_OK]="The checker responds on 127.0.0.1:2112."
 LANG[XCHK_HEALTH_FAIL]="Containers did not answer in time. Logs: docker logs xray-checker"
+LANG[XCHK_HEALTH_PAGE_SLOW]="The status page did not answer in time — it may simply be booting slower than usual. Recent logs below; if the page never comes up — docker logs xray-checker-statuspage."
 LANG[XCHK_DONE_TITLE]="Xray Checker is ready"
 LANG[XCHK_DONE_PUBLIC]="Status page:"
 LANG[XCHK_DONE_SUB_NOTE]="Send the bot the \"%s\" user's subscription (/menu → Subscriptions):"

@@ -548,6 +548,12 @@ services:
 EOL
 
     if [ "$mode" = "bundle" ]; then
+        # depends_on mirrors the upstream example: the checker's subscription
+        # source is the statuspage's /sub feed, so it starts after the page.
+        cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
+    depends_on:
+      - xray-checker-statuspage
+EOL
         cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
 
   xray-checker-statuspage:
@@ -761,9 +767,16 @@ xchk_install() {
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
     spinner $! "${LANG[WAITING]}"
 
-    # 7) health check
+    # The stack exists from here on — record the state before any health
+    # verdict, so uninstall can always undo the webserver edits even when
+    # a container later turns out to be slow or broken.
+    xchk_state_set "$mode" "$XCHK_DOMAIN" "${XCHK_CERT_DOMAIN:-}" "${XCHK_MOUNTS_ADDED:-0}" "$XCHK_WS_KIND"
+
+    # Checker and page get separate verdicts: a slow page must not fail the
+    # whole install — the checker (the monitoring itself) may already be
+    # fully functional.
     local i checker_ok=false page_ok=false
-    for i in $(seq 1 30); do
+    for i in $(seq 1 60); do
         sleep 2
         if ! $checker_ok && curl -s -o /dev/null --max-time 3 http://127.0.0.1:2112/metrics 2>/dev/null; then
             checker_ok=true
@@ -779,11 +792,14 @@ xchk_install() {
     done
     if ! $checker_ok; then
         echo -e "${COLOR_RED}${LANG[XCHK_HEALTH_FAIL]}${COLOR_RESET}"
+        docker logs --tail 20 xray-checker 2>&1 | sed 's/^/  /'
         return 1
     fi
     step_ok "${LANG[XCHK_HEALTH_OK]}"
-
-    xchk_state_set "$mode" "$XCHK_DOMAIN" "${XCHK_CERT_DOMAIN:-}" "${XCHK_MOUNTS_ADDED:-0}" "$XCHK_WS_KIND"
+    if [ "$mode" = "bundle" ] && ! $page_ok; then
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_HEALTH_PAGE_SLOW]}${COLOR_RESET}"
+        docker logs --tail 20 xray-checker-statuspage 2>&1 | sed 's/^/  /'
+    fi
 
     # 8) final banner
     echo -e ""

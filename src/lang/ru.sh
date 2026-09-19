@@ -829,6 +829,7 @@ LANG[XCHK_PULL_FAIL]="Не удалось скачать образы. Чеке�
 LANG[XCHK_STARTING]="Запускаю стек..."
 LANG[XCHK_HEALTH_OK]="Чекер отвечает на 127.0.0.1:2112."
 LANG[XCHK_HEALTH_FAIL]="Контейнеры не ответили за отведённое время. Логи: docker logs xray-checker"
+LANG[XCHK_HEALTH_PAGE_SLOW]="Статус-страница не ответила за отведённое время — возможно, просто стартует дольше обычного. Последние логи ниже; если страница так и не появится — docker logs xray-checker-statuspage."
 LANG[XCHK_DONE_TITLE]="Xray Checker готов"
 LANG[XCHK_DONE_PUBLIC]="Статус-страница:"
 LANG[XCHK_DONE_SUB_NOTE]="Отправьте боту подписку юзера «%s» (/menu → Подписки):"
