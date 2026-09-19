@@ -292,7 +292,7 @@ xchk_remove_cert_mounts() {
 # Issue (or reuse) a certificate and add the site block to the live nginx.
 # Sets XCHK_CERT_DOMAIN and XCHK_MOUNTS_ADDED.
 xchk_wire_nginx() {
-    local dir="$1" domain="$2"
+    local dir="$1" domain="$2" backend="${3:-8080}"
     local compose="$dir/docker-compose.yml" conf="$dir/nginx.conf"
     load_certificates_module
 
@@ -389,7 +389,7 @@ server {
 
     location / {
         proxy_http_version 1.1;
-        proxy_pass http://127.0.0.1:8080;
+        proxy_pass http://127.0.0.1:$backend;
         proxy_set_header Host \$host;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -452,7 +452,7 @@ xchk_unwire_nginx() {
 }
 
 xchk_wire_caddy() {
-    local dir="$1" domain="$2"
+    local dir="$1" domain="$2" backend="${3:-8080}"
     local caddyfile="$dir/Caddyfile"
 
     # Caddy manages its own certificates via ACME on :80 (renewals live in
@@ -476,7 +476,7 @@ https://$domain {
 ${bind_line}
     encode
     handle {
-        reverse_proxy 127.0.0.1:8080 {
+        reverse_proxy 127.0.0.1:$backend {
             header_up X-Real-IP {remote}
             header_up Host {host}
         }
@@ -516,9 +516,15 @@ xchk_unwire_caddy() {
 
 # Ask for the status domain (optional) and wire TLS. Sets XCHK_DOMAIN,
 # XCHK_SIDECAR, XCHK_WS_KIND, XCHK_WS_DIR, XCHK_CERT_DOMAIN, XCHK_MOUNTS_ADDED.
+# Ask for the status domain (optional) and wire TLS. Sets XCHK_DOMAIN,
+# XCHK_SIDECAR, XCHK_SIDECAR_BACKEND, XCHK_WS_KIND, XCHK_WS_DIR,
+# XCHK_CERT_DOMAIN, XCHK_MOUNTS_ADDED. The backend port follows the mode:
+# the statuspage in a bundle, the checker's own web UI (2112) otherwise.
 xchk_prepare_domain() {
+    local backend="${1:-8080}"
     XCHK_DOMAIN=""
     XCHK_SIDECAR=0
+    XCHK_SIDECAR_BACKEND="$backend"
     XCHK_WS_KIND="none"
     XCHK_WS_DIR=""
 
@@ -542,11 +548,11 @@ xchk_prepare_domain() {
         kind="${ws%% *}"
         dir="${ws#* }"
         if [ "$kind" = "nginx" ]; then
-            xchk_wire_nginx "$dir" "$domain_input" || return 1
+            xchk_wire_nginx "$dir" "$domain_input" "$backend" || return 1
         else
             XCHK_CERT_DOMAIN=""
             XCHK_MOUNTS_ADDED=0
-            xchk_wire_caddy "$dir" "$domain_input" || return 1
+            xchk_wire_caddy "$dir" "$domain_input" "$backend" || return 1
         fi
         XCHK_DOMAIN="$domain_input"
         XCHK_WS_KIND="$kind"
@@ -629,6 +635,18 @@ services:
       - LOG_LEVEL=info
 EOL
 
+    # Checker-only with a published UI: the built-in basic auth guards it —
+    # the web UI lists every proxy, it must not sit on the open internet.
+    # The lines land inside the checker's environment list, which is still
+    # the tail of the file here.
+    if [ "$mode" = "checker" ] && [ -n "${XCHK_UI_PASS:-}" ]; then
+        cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
+      - METRICS_PROTECTED=true
+      - METRICS_USERNAME=${XCHK_UI_USER}
+      - METRICS_PASSWORD="${XCHK_UI_PASS}"
+EOL
+    fi
+
     if [ "$mode" = "bundle" ]; then
         # depends_on mirrors the upstream example: the checker's subscription
         # source is the statuspage's /sub feed, so it starts after the page.
@@ -677,7 +695,7 @@ EOL
 EOL
         cat > "$XCHK_DIR/Caddyfile" <<EOL
 $XCHK_DOMAIN {
-    reverse_proxy 127.0.0.1:8080
+    reverse_proxy 127.0.0.1:${XCHK_SIDECAR_BACKEND:-8080}
 }
 EOL
     fi
@@ -841,13 +859,23 @@ xchk_install() {
         esac
     done
 
-    # 5) status domain (bundle only — the page is the public part)
+    # 5) public domain: the statuspage in a bundle, the checker's own web
+    # UI (basic auth with a generated password) in checker-only installs.
     XCHK_SIDECAR=0
     XCHK_DOMAIN=""
-    if [ "$mode" = "bundle" ]; then
-        echo -e ""
-        xchk_prepare_domain || return 1
-    else
+    XCHK_UI_USER=""
+    XCHK_UI_PASS=""
+    local page_backend="8080"
+    if [ "$mode" = "checker" ]; then
+        page_backend="2112"
+    fi
+    echo -e ""
+    xchk_prepare_domain "$page_backend" || return 1
+    if [ "$mode" = "checker" ] && [ -n "$XCHK_DOMAIN" ]; then
+        XCHK_UI_USER="checker"
+        XCHK_UI_PASS=$(generate_password)
+    fi
+    if [ "$mode" = "checker" ] && [ -z "$XCHK_DOMAIN" ]; then
         echo -e "${COLOR_YELLOW}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
     fi
 
@@ -934,7 +962,13 @@ xchk_install() {
             echo -e "${COLOR_YELLOW}${LANG[XCHK_DONE_TG_NOTE]}${COLOR_RESET}"
         fi
     else
-        echo -e "${COLOR_YELLOW}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
+        if [ -n "$XCHK_DOMAIN" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[XCHK_DONE_CHECKER_UI]}${COLOR_RESET}"
+            echo -e "${COLOR_WHITE}https://${XCHK_DOMAIN}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[XCHK_UI_CREDS]}" "$XCHK_UI_USER" "$XCHK_UI_PASS")${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
+        fi
     fi
     echo -e ""
     echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS]}${COLOR_RESET}"
@@ -968,6 +1002,11 @@ xchk_status() {
         fi
     elif [ "$mode" = "checker" ]; then
         echo -e " ${LANG[XCHK_STATUS_MODE]}: ${LANG[XCHK_MODE_CHECKER]}"
+        if [ -n "$domain" ]; then
+            echo -e " ${LANG[XCHK_DONE_CHECKER_UI]} ${COLOR_WHITE}https://$domain${COLOR_RESET}"
+        else
+            echo -e " ${COLOR_GRAY}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
+        fi
     fi
 
     echo -e ""
