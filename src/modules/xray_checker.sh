@@ -123,10 +123,16 @@ xchk_ensure_monitor_user() {
         return 1
     fi
 
-    local response sub_url
+    local response sub_url url_re='^https?://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?'
     response=$(make_api_request "GET" "http://${XCHK_PANEL_HOST}/api/users/by-username/${XCHK_MONITOR_USER}?_=$(date +%s)" "$token")
     sub_url=$(echo "$response" | jq -r '.response.subscriptionUrl // empty' 2>/dev/null)
     if [ -n "$sub_url" ]; then
+        if ! [[ "$sub_url" =~ $url_re ]]; then
+            # A panel without the subscription page returns a hostless URL
+            # (https:///<token>) — worthless to the checker.
+            echo -e "${COLOR_RED}$(printf "${LANG[XCHK_SUB_URL_INVALID_PANEL]}" "$sub_url")${COLOR_RESET}"
+            return 1
+        fi
         echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_USER_REUSED]}" "$XCHK_MONITOR_USER")${COLOR_RESET}"
         XCHK_PANEL_SUB_URL="$sub_url"
         if [ "$(echo "$response" | jq -r '(.response.activeInternalSquads // []) | length' 2>/dev/null)" = "0" ]; then
@@ -147,6 +153,10 @@ xchk_ensure_monitor_user() {
     sub_url=$(echo "$response" | jq -r '.response.subscriptionUrl // empty' 2>/dev/null)
     if [ -z "$sub_url" ]; then
         echo -e "${COLOR_RED}$(printf "${LANG[XCHK_USER_FAIL]}" "$response")${COLOR_RESET}"
+        return 1
+    fi
+    if ! [[ "$sub_url" =~ $url_re ]]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_SUB_URL_INVALID_PANEL]}" "$sub_url")${COLOR_RESET}"
         return 1
     fi
     echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_USER_CREATED]}" "$XCHK_MONITOR_USER")${COLOR_RESET}"
@@ -806,9 +816,13 @@ xchk_install() {
         echo -e "${COLOR_GRAY}${LANG[XCHK_CREDITS_CHECKER]}${COLOR_RESET}"
     fi
 
-    # 2) subscription source
+    # 2) subscription source. Auto needs both a local panel and its
+    # subscription page — without the sub service the panel hands out a
+    # hostless URL (https:///<token>) that nothing can fetch.
     local panel_sub_url=""
-    if panel_is_installed; then
+    if panel_is_installed \
+        && [ -f /opt/remnawave/docker-compose.yml ] \
+        && grep -qE '^[[:space:]]*remnawave-subscription-page:' /opt/remnawave/docker-compose.yml; then
         local sub_choice
         echo -e ""
         echo -e "${COLOR_GREEN}${LANG[XCHK_SUB_SOURCE_TITLE]}${COLOR_RESET}"
@@ -827,6 +841,8 @@ xchk_install() {
             xchk_ensure_monitor_user || return 1
             panel_sub_url="$XCHK_PANEL_SUB_URL"
         fi
+    elif panel_is_installed; then
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_NO_SUB_PAGE]}${COLOR_RESET}"
     fi
 
     local sub_url
