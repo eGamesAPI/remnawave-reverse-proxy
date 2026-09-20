@@ -787,52 +787,68 @@ panel_access_nginx_validate() {
     return 0
 }
 
+# Single-file bind mounts follow the inode: sed -i swaps the file behind
+# the container's back (temp file + rename), and the running nginx keeps
+# reading the old bytes through its mount — the edit "succeeds" while
+# nothing changes. Rewriting in place (cat >) keeps the inode, so the
+# reload genuinely picks the new config up.
+panel_access_write() { # target tmp
+    local target="$1" tmp="$2"
+    cat "$tmp" > "$target"
+    rm -f "$tmp"
+}
+
 panel_access_apply_nginx() {
-    local dir="$1" conf="$dir/nginx.conf" backup="${1}/nginx.conf.8443bak"
-    cp -p "$conf" "$backup"
+    local dir="$1" conf="$dir/nginx.conf" tmp="${1}/nginx.conf.8443tmp"
+    cp -p "$conf" "${conf}.8443bak"
 
     # A stale listen from a previous run goes first, ours lands right after
     # the panel's server_name — inside the same server block.
-    sed -i '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf"
-    sed -i "/server_name ${PANEL_DOMAIN};/a \    listen 8443 ssl;" "$conf"
+    sed '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf" > "$tmp"
+    sed -i "/server_name ${PANEL_DOMAIN};/a \    listen 8443 ssl;" "$tmp"
+    panel_access_write "$conf" "$tmp"
 
     if ! panel_access_nginx_validate "$dir"; then
-        cp -p "$backup" "$conf"
+        cat "${conf}.8443bak" > "$conf"
         docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
-        rm -f "$backup"
+        rm -f "${conf}.8443bak"
         echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
         return 1
     fi
 
     (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
     docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
-    rm -f "$backup"
+    rm -f "${conf}.8443bak"
     return 0
 }
 
 # The caddy door reuses the panel site itself: the address moves to :8443
 # and a TCP bind joins the unix one, so the site keeps answering on the
 # socket (the normal path through Xray) while also listening on 8443.
+# Caddy has no reload without its admin API (disabled here), so the door
+# costs one restart — it re-resolves the bind mount, in-place writes or
+# not.
 panel_access_apply_caddy() {
-    local dir="$1" caddyfile="$dir/Caddyfile" backup="${1}/Caddyfile.8443bak"
-    cp -p "$caddyfile" "$backup"
+    local dir="$1" caddyfile="$dir/Caddyfile" tmp="${1}/Caddyfile.8443tmp"
+    cp -p "$caddyfile" "${caddyfile}.8443bak"
 
-    sed -i "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|" "$caddyfile"
+    sed "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|" "$caddyfile" > "$tmp"
     sed -i "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/ { /^    bind unix/{ a\    bind 0.0.0.0
-}; }" "$caddyfile"
+}; }" "$tmp"
+    panel_access_write "$caddyfile" "$tmp"
 
-    (cd "$dir" && docker compose up -d remnawave-caddy) >/dev/null 2>&1
+    docker restart remnawave-caddy >/dev/null 2>&1
     # A config caddy rejects dies a few seconds into its restart loop — an
     # immediate check would pass right before that.
     sleep 6
     if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
-        cp -p "$backup" "$caddyfile"
-        (cd "$dir" && docker compose up -d remnawave-caddy) >/dev/null 2>&1
-        rm -f "$backup"
+        cat "${caddyfile}.8443bak" > "$caddyfile"
+        docker restart remnawave-caddy >/dev/null 2>&1
+        rm -f "${caddyfile}.8443bak"
         echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
         return 1
     fi
-    rm -f "$backup"
+    rm -f "${caddyfile}.8443bak"
     return 0
 }
 
@@ -952,40 +968,42 @@ close_panel_access() {
 
     if [ "$webserver" = "nginx" ]; then
         if grep -q "listen 8443 ssl;" "$dir/nginx.conf"; then
-            local backup="$dir/nginx.conf.8443bak"
-            cp -p "$dir/nginx.conf" "$backup"
-            sed -i '\|^[[:space:]]*listen 8443 ssl;$|d' "$dir/nginx.conf"
+            local conf="$dir/nginx.conf" tmp="$dir/nginx.conf.8443tmp"
+            cp -p "$conf" "${conf}.8443bak"
+            sed '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf" > "$tmp"
+            panel_access_write "$conf" "$tmp"
             if ! panel_access_nginx_validate "$dir"; then
-                cp -p "$backup" "$dir/nginx.conf"
+                cat "${conf}.8443bak" > "$conf"
                 docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
-                rm -f "$backup"
+                rm -f "${conf}.8443bak"
                 echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
                 return 1
             fi
             (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
             docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
-            rm -f "$backup"
+            rm -f "${conf}.8443bak"
         else
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
         fi
     else
         if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
-            local backup="$dir/Caddyfile.8443bak"
-            cp -p "$dir/Caddyfile" "$backup"
-            sed -i "s|https://{\$PANEL_DOMAIN}:8443 {|https://{\$PANEL_DOMAIN} {|" "$dir/Caddyfile"
+            local caddyfile="$dir/Caddyfile" tmp="$dir/Caddyfile.8443tmp"
+            cp -p "$caddyfile" "${caddyfile}.8443bak"
+            sed "s|https://{\$PANEL_DOMAIN}:8443 {|https://{\$PANEL_DOMAIN} {|" "$caddyfile" > "$tmp"
             # Only the TCP bind added with the door goes — the http->https
             # redirect block carries a bind 0.0.0.0 of its own.
-            sed -i "/https:\/\/{\$PANEL_DOMAIN} {/,/^}/ { /^    bind 0.0.0.0$/d }" "$dir/Caddyfile"
-            (cd "$dir" && docker compose up -d remnawave-caddy) >/dev/null 2>&1
+            sed -i "/https:\/\/{\$PANEL_DOMAIN} {/,/^}/ { /^    bind 0.0.0.0$/d }" "$tmp"
+            panel_access_write "$caddyfile" "$tmp"
+            docker restart remnawave-caddy >/dev/null 2>&1
             sleep 6
             if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
-                cp -p "$backup" "$dir/Caddyfile"
-                (cd "$dir" && docker compose up -d remnawave-caddy) >/dev/null 2>&1
-                rm -f "$backup"
+                cat "${caddyfile}.8443bak" > "$caddyfile"
+                docker restart remnawave-caddy >/dev/null 2>&1
+                rm -f "${caddyfile}.8443bak"
                 echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
                 return 1
             fi
-            rm -f "$backup"
+            rm -f "${caddyfile}.8443bak"
         else
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
         fi

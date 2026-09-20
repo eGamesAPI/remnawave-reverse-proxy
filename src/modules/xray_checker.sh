@@ -483,7 +483,13 @@ EOL
 xchk_unwire_nginx() {
     local dir="$1"
     local compose="$dir/docker-compose.yml" conf="$dir/nginx.conf"
-    [ -f "$conf" ] && sed -i "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$conf"
+    # The marker block goes through an inode-preserving rewrite: the conf
+    # is bind-mounted into nginx as a single file, and sed -i's rename
+    # would leave the container reading the old bytes through its mount.
+    if [ -f "$conf" ]; then
+        sed "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$conf" > "${conf}.xchktmp" \
+            && cat "${conf}.xchktmp" > "$conf" && rm -f "${conf}.xchktmp"
+    fi
     local cert_domain
     cert_domain=$(xchk_state_get "cert_domain")
     if [ "$(xchk_state_get "mounts")" = "1" ] && [ -n "$cert_domain" ] && [ -f "$compose" ]; then
