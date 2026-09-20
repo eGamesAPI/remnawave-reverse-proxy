@@ -852,7 +852,6 @@ open_panel_access() {
 
     if [ "$auth_mode" != "cookie" ]; then
         panel_link="https://${PANEL_DOMAIN}:8443"
-        echo -e "${COLOR_GRAY}${LANG[PORT_8443_PORTAL_NOTE]}${COLOR_RESET}"
     elif [ -n "$cookie_pair" ]; then
         panel_link="https://${PANEL_DOMAIN}:8443/auth/login?${cookie_pair}"
     else
@@ -861,6 +860,9 @@ open_panel_access() {
 
     echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
+    if [ "$auth_mode" != "cookie" ]; then
+        echo -e "${COLOR_GRAY}${LANG[PORT_8443_PORTAL_NOTE]}${COLOR_RESET}"
+    fi
     echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
     return 0
 }
