@@ -142,7 +142,7 @@ EOL
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
             ;;
-        2)
+        4)
             # ACME HTTP-01 (without wildcard)
             local nginx_was_running=false
             if docker ps --filter "name=^/remnawave-nginx$" --format '{{.Names}}' | grep -qx "remnawave-nginx"; then
@@ -174,7 +174,7 @@ EOL
                 return "$certbot_status"
             fi
             ;;
-        3)
+        2)
             # Gcore DNS-01 (wildcard)
 
             if ! certbot plugins 2>/dev/null | grep -q "dns-gcore"; then
@@ -220,7 +220,7 @@ EOL
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
             ;;
-        4)
+        3)
             # Bunny DNS-01 — one wildcard lineage per zone (base + *.base),
             # mirroring Cloudflare and Gcore. The zone must live on Bunny
             # DNS; this API does not manage the A records themselves.
@@ -392,16 +392,16 @@ update_current_certificates() {
         local domain
         domain=$(basename "$domain_dir")
 
-        local cert_method="2" # 2 = ACME HTTP-01
+        local cert_method="4" # 4 = ACME HTTP-01
         local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
 
         if [ -f "$renewal_conf" ]; then
             if grep -q "dns_cloudflare" "$renewal_conf"; then
                 cert_method="1" # Cloudflare DNS-01
             elif grep -q "dns-gcore" "$renewal_conf"; then
-                cert_method="3" # Gcore DNS-01
+                cert_method="2" # Gcore DNS-01
             elif grep -Eq "dns[-_]bunny" "$renewal_conf"; then
-                cert_method="4" # Bunny DNS-01
+                cert_method="3" # Bunny DNS-01
             fi
         else
             # No renewal conf = a manually uploaded certificate: certbot
@@ -462,7 +462,7 @@ EOL
                 fi
                 chmod 600 "$cf_credentials_file"
             fi
-        elif [ "$cert_method" == "3" ]; then
+        elif [ "$cert_method" == "2" ]; then
             # Gcore
             local gcore_credentials_file
             gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
@@ -478,7 +478,7 @@ dns_gcore_apitoken = $GCORE_API_KEY
 EOL
                 chmod 600 "$gcore_credentials_file"
             fi
-        elif [ "$cert_method" == "4" ]; then
+        elif [ "$cert_method" == "3" ]; then
             # Bunny
             local bunny_credentials_file
             bunny_credentials_file=$(grep -E "dns[-_]bunny[-_]credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
@@ -497,7 +497,7 @@ EOL
         fi
 
         if [ "$days_left" -le "$renew_threshold" ]; then
-            if [ "$cert_method" == "2" ]; then
+            if [ "$cert_method" == "4" ]; then
                 ufw allow 80/tcp > /dev/null 2>&1 && ufw reload > /dev/null 2>&1
             fi
 
@@ -507,7 +507,7 @@ EOL
             wait $cert_pid
             local certbot_exit_code=$?
 
-            if [ "$cert_method" == "2" ]; then
+            if [ "$cert_method" == "4" ]; then
                 ufw delete allow 80/tcp > /dev/null 2>&1 && ufw reload > /dev/null 2>&1
             fi
 
@@ -563,11 +563,17 @@ generate_new_certificates() {
     echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_CF_DESC]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_GCORE_DESC]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_BUNNY_DESC]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_MANUAL_DESC]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -597,17 +603,17 @@ generate_new_certificates() {
         # 5 = own certificate: upload and verify, no certbot involved
         manual_certificate_flow "$NEW_DOMAIN" || return 1
         setup_cert_telegram_notifications
-    elif [ "$CERT_METHOD" == "4" ]; then
-        # 4 = Bunny DNS-01 — wildcard
-        get_certificates "$NEW_DOMAIN" "4" "$LETSENCRYPT_EMAIL"
-    elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
-        # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
+    elif [ "$CERT_METHOD" == "3" ]; then
+        # 3 = Bunny DNS-01 — wildcard
+        get_certificates "$NEW_DOMAIN" "3" "$LETSENCRYPT_EMAIL"
+    elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "2" ]; then
+        # 1 = CF DNS-01, 2 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
         get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
-    elif [ "$CERT_METHOD" == "2" ]; then
-        # 2 = ACME HTTP-01
+    elif [ "$CERT_METHOD" == "4" ]; then
+        # 4 = ACME HTTP-01
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_CERTS]} $NEW_DOMAIN...${COLOR_RESET}"
-        get_certificates "$NEW_DOMAIN" "2" "$LETSENCRYPT_EMAIL"
+        get_certificates "$NEW_DOMAIN" "4" "$LETSENCRYPT_EMAIL"
     else
         echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
         return 1
@@ -617,7 +623,7 @@ generate_new_certificates() {
         # Wire the renewal hooks right away: without the pre/post hooks a
         # standalone cert cannot renew unattended while nginx holds port 80
         local lineage_domain="$NEW_DOMAIN"
-        if [ "$CERT_METHOD" = "1" ] || [ "$CERT_METHOD" = "3" ]; then
+        if [ "$CERT_METHOD" = "1" ] || [ "$CERT_METHOD" = "2" ]; then
             lineage_domain=$(extract_domain "$NEW_DOMAIN")
         fi
         local renewal_conf="/etc/letsencrypt/renewal/$lineage_domain.conf"
@@ -782,11 +788,17 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_CF_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_GCORE_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_BUNNY_DESC]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[CERT_MANUAL_DESC]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -796,9 +808,9 @@ handle_certificates() {
         # it (Enter accepts, the choice stays editable for ACME fans).
         local cert_default=""
         if [ -n "$BUNNY_API_KEY" ]; then
-            cert_default="4"
-        elif [ -n "$GCORE_API_KEY" ]; then
             cert_default="3"
+        elif [ -n "$GCORE_API_KEY" ]; then
+            cert_default="2"
         elif [ -n "$CLOUDFLARE_API_KEY" ]; then
             cert_default="1"
         fi
@@ -844,10 +856,10 @@ handle_certificates() {
 
             if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$existing_conf" 2>/dev/null; then
                 # Opening port 80 is required if any managed certificate uses HTTP-01.
-                cert_method="2"
+                cert_method="4"
                 break
             elif grep -q "dns-gcore" "$existing_conf" 2>/dev/null; then
-                cert_method="3"
+                cert_method="2"
             fi
         done
     fi
@@ -905,7 +917,7 @@ handle_certificates() {
     # by file, so without a restart it keeps serving the old inode until
     # it eventually expires.
     local renew_hook="docker restart remnawave-nginx remnawave-caddy 2>/dev/null || true"
-    if [ "$cert_method" == "2" ]; then
+    if [ "$cert_method" == "4" ]; then
         cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\"; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
     else
         cron_command="/usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\""
