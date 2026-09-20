@@ -6,22 +6,29 @@ tinyauth_setup() {
     local base_domain="$1"
     shift
 
+    # The name is re-asked on any problem — a bad format or a collision with
+    # a domain the stack already uses — a typo here must not kill the whole
+    # install.
+    local forbidden collision
     while true; do
         reading "$(printf "${LANG[ENTER_TINYAUTH_NAME]}" "$base_domain")" TINYAUTH_NAME
-        if [[ "$TINYAUTH_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]]; then
-            break
+        if ! [[ "$TINYAUTH_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]]; then
+            echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+            continue
         fi
-        echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
-    done
-
-    TINYAUTH_DOMAIN="${TINYAUTH_NAME}.${base_domain}"
-
-    local forbidden
-    for forbidden in "$@"; do
-        if [ -n "$forbidden" ] && [ "$TINYAUTH_DOMAIN" = "$forbidden" ]; then
+        TINYAUTH_DOMAIN="${TINYAUTH_NAME}.${base_domain}"
+        collision=""
+        for forbidden in "$@"; do
+            if [ -n "$forbidden" ] && [ "$TINYAUTH_DOMAIN" = "$forbidden" ]; then
+                collision="$forbidden"
+                break
+            fi
+        done
+        if [ -n "$collision" ]; then
             echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
-            exit 1
+            continue
         fi
+        break
     done
 
     load_dns_records_module
