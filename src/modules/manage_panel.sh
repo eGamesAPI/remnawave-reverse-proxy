@@ -33,7 +33,11 @@ show_component_status() {
         fi
     fi
 
-    if [ -f /opt/subscription/docker-compose.yml ]; then
+    # The subscription page lives wherever its installer put it: a service
+    # inside the panel compose (panel and panel+node layouts) or its own
+    # /opt/subscription stack (standalone install).
+    if [ -f /opt/subscription/docker-compose.yml ] \
+        || { [ -f /opt/remnawave/docker-compose.yml ] && grep -qE '^[[:space:]]*remnawave-subscription-page:' /opt/remnawave/docker-compose.yml; }; then
         if echo "$containers" | grep -qx remnawave-subscription-page; then
             echo -e " ${LANG[COMP_SUB_PAGE]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
         else
