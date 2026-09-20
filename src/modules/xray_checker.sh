@@ -588,9 +588,14 @@ xchk_prepare_domain() {
     fi
 
     # No shared webserver: a stand-alone box can host its own caddy sidecar
-    # with automatic TLS — needs 80/443 free.
+    # with automatic TLS — needs 80/443 free. When they are taken by a
+    # webserver this module does not manage (an own nginx/caddy, a hosting
+    # panel default), name the culprits instead of a bare "no public domain":
+    # the silent variant reads as a script bug, not as a port conflict.
     if xchk_port_busy 80 || xchk_port_busy 443; then
-        echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_PORT_HELD]}${COLOR_RESET}"
+        ss -tlnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' | sed 's/^/  /'
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_PORT_HELD_HINT]}${COLOR_RESET}"
         return 0
     fi
     local use_sidecar
