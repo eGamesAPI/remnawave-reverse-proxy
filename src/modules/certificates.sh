@@ -261,7 +261,15 @@ EOL
             # subzones like vpn.example.com. The suggestion keeps the
             # third-level parent when one exists.
             local bunny_base bunny_suggest="$BASE_DOMAIN"
-            [[ "$DOMAIN" == *.*.* ]] && bunny_suggest="${DOMAIN#*.}"
+            local bunny_labels
+            bunny_labels=$(awk -F. '{print NF}' <<< "$DOMAIN")
+            # With 4+ labels a delegated subzone is the likelier base than
+            # the registrable domain (panel.vpn.example.com →
+            # vpn.example.com); com.ru-style zones are already handled by
+            # the suffix-aware BASE_DOMAIN and must not be trimmed further.
+            if [ "$bunny_labels" -ge 4 ]; then
+                bunny_suggest="${DOMAIN#*.}"
+            fi
             while true; do
                 reading "$(printf "${LANG[BUNNY_WILDCARD_BASE]}" "$bunny_suggest")" bunny_base
                 bunny_base="${bunny_base:-$bunny_suggest}"
