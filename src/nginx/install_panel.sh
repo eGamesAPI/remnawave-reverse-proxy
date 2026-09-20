@@ -287,33 +287,17 @@ installation_panel() {
         domains_to_check["$TINYAUTH_DOMAIN"]=1
     fi
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" || return 1
 
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$PANEL_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
+    # The certificate directory is the lineage that actually covers each
+    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
+    # the issuance method
+    PANEL_CERT_DOMAIN=$(resolve_certificate_domain "$PANEL_DOMAIN") || return 1
+    if [ "$PANEL_WITH_SUB" != "false" ]; then
+        SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
     fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        PANEL_CERT_DOMAIN="$(extract_domain "$PANEL_DOMAIN")"
-        if [ "$PANEL_WITH_SUB" != "false" ]; then
-            SUB_CERT_DOMAIN="$(extract_domain "$SUB_DOMAIN")"
-        fi
-        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-            TINYAUTH_CERT_DOMAIN="$(extract_domain "$TINYAUTH_DOMAIN")"
-        fi
-    else
-        PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
-        if [ "$PANEL_WITH_SUB" != "false" ]; then
-            SUB_CERT_DOMAIN="$SUB_DOMAIN"
-        fi
-        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-            TINYAUTH_CERT_DOMAIN="$TINYAUTH_DOMAIN"
-        fi
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        TINYAUTH_CERT_DOMAIN=$(resolve_certificate_domain "$TINYAUTH_DOMAIN") || return 1
     fi
 
     if [ "$PANEL_WITH_SUB" != "false" ]; then

@@ -290,34 +290,16 @@ installation() {
         domains_to_check["$TINYAUTH_DOMAIN"]=1
     fi
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" || return 1
 
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$PANEL_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
-    fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        local base_domain=$(extract_domain "$PANEL_DOMAIN")
-        local sub_base_domain=$(extract_domain "$SUB_DOMAIN")
-        local node_base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        PANEL_CERT_DOMAIN="$base_domain"
-        SUB_CERT_DOMAIN="$sub_base_domain"
-        NODE_CERT_DOMAIN="$node_base_domain"
-        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-            TINYAUTH_CERT_DOMAIN="$(extract_domain "$TINYAUTH_DOMAIN")"
-        fi
-    else
-        PANEL_CERT_DOMAIN="$PANEL_DOMAIN"
-        SUB_CERT_DOMAIN="$SUB_DOMAIN"
-        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
-        if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
-            TINYAUTH_CERT_DOMAIN="$TINYAUTH_DOMAIN"
-        fi
+    # The certificate directory is the lineage that actually covers each
+    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
+    # the issuance method
+    PANEL_CERT_DOMAIN=$(resolve_certificate_domain "$PANEL_DOMAIN") || return 1
+    SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
+    NODE_CERT_DOMAIN=$(resolve_certificate_domain "$SELFSTEAL_DOMAIN") || return 1
+    if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
+        TINYAUTH_CERT_DOMAIN=$(resolve_certificate_domain "$TINYAUTH_DOMAIN") || return 1
     fi
 
     cat >> /opt/remnawave/docker-compose.yml <<EOL

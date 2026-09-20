@@ -87,23 +87,12 @@ installation_node() {
     declare -A domains_to_check
     domains_to_check["$SELFSTEAL_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/remnanode"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/remnanode" || return 1
 
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
-    fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        local base_domain=$(extract_domain "$SELFSTEAL_DOMAIN")
-        NODE_CERT_DOMAIN="$base_domain"
-    else
-        NODE_CERT_DOMAIN="$SELFSTEAL_DOMAIN"
-    fi
+    # The certificate directory is the lineage that actually covers the
+    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
+    # the issuance method
+    NODE_CERT_DOMAIN=$(resolve_certificate_domain "$SELFSTEAL_DOMAIN") || return 1
 
     cat >> /opt/remnanode/docker-compose.yml <<EOL
       - /dev/shm:/dev/shm:rw
