@@ -1453,21 +1453,28 @@ xchk_publish() {
 }
 
 show_xray_checker_menu() {
-    local mode_label domain
+    local mode_label xchk_dom
     if xchk_installed; then
         if xchk_container_up xray-checker; then
             status_color="$COLOR_GREEN"; status_text="${LANG[XCHK_RUNNING]}"
         else
             status_color="$COLOR_RED"; status_text="${LANG[XCHK_STOPPED]}"
         fi
+        xchk_dom=$(xchk_state_get "domain")
     else
         status_color="$COLOR_GRAY"; status_text="${LANG[XCHK_NOT_INSTALLED]}"
+        xchk_dom=""
     fi
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[XCHK_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e " ${status_color}${LANG[XCHK_MENU_TITLE]}: ${status_text}${COLOR_RESET}"
+    # The current public address rides in the header: it explains why the
+    # publish entry is absent once a domain exists.
+    if [ -n "$xchk_dom" ]; then
+        echo -e " ${LANG[XCHK_STATUS_DOMAIN]}: ${COLOR_WHITE}https://$xchk_dom${COLOR_RESET}"
+    fi
     # Authors ride along in the menu itself — the About entry is gone, and
     # the credit must survive whatever subset is installed.
     if xchk_with_statuspage; then
@@ -1477,21 +1484,30 @@ show_xray_checker_menu() {
     fi
     echo -e ""
 
+    # The publish entry exists only while the page is local-only; the rest
+    # renumber accordingly. Absent entries fall back to 99 — 0 would
+    # collide with the exit arm of the case below.
     local last=1
     if xchk_installed; then
+        local n=2
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_STATUS]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_PUBLISH]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
+        if [ -z "$xchk_dom" ]; then
+            echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_PUBLISH]}${COLOR_RESET}"
+            n=3
+        fi
+        local opt_restart=$n opt_update=$((n + 1)) opt_tg=99
+        n=$((n + 2))
+        echo -e "${COLOR_YELLOW}${opt_restart}. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${opt_update}. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
         echo -e ""
         if xchk_with_statuspage; then
-            echo -e "${COLOR_YELLOW}5. ${LANG[XCHK_MENU_TG]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}6. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-            last=6
-        else
-            echo -e "${COLOR_YELLOW}5. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-            last=5
+            opt_tg=$n
+            n=$((n + 1))
+            echo -e "${COLOR_YELLOW}${opt_tg}. ${LANG[XCHK_MENU_TG]}${COLOR_RESET}"
         fi
+        local opt_uninstall=$n
+        last=$n
+        echo -e "${COLOR_YELLOW}${opt_uninstall}. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_INSTALL]}${COLOR_RESET}"
     fi
@@ -1505,16 +1521,16 @@ show_xray_checker_menu() {
     if xchk_installed; then
         case $xchk_option in
             1) xchk_status; sleep 2; show_xray_checker_menu ;;
-            2) xchk_publish; sleep 2; show_xray_checker_menu ;;
-            3) xchk_restart; sleep 2; show_xray_checker_menu ;;
-            4) xchk_update; sleep 2; show_xray_checker_menu ;;
-            5) if xchk_with_statuspage; then
-                   xchk_setup_tg
+            2) if [ -z "$xchk_dom" ]; then
+                   xchk_publish
                else
-                   xchk_uninstall
+                   printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                fi
                sleep 2; show_xray_checker_menu ;;
-            6) xchk_uninstall; sleep 2; show_xray_checker_menu ;;
+            "$opt_restart") xchk_restart; sleep 2; show_xray_checker_menu ;;
+            "$opt_update") xchk_update; sleep 2; show_xray_checker_menu ;;
+            "$opt_tg") xchk_setup_tg; sleep 2; show_xray_checker_menu ;;
+            "$opt_uninstall") xchk_uninstall; sleep 2; show_xray_checker_menu ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}" ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                sleep 1
