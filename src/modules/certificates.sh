@@ -220,6 +220,72 @@ EOL
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
             ;;
+        5)
+            # Bunny DNS-01 — one wildcard lineage per zone (base + *.base),
+            # mirroring Cloudflare and Gcore. The zone must live on Bunny
+            # DNS; this API does not manage the A records themselves.
+
+            if ! certbot plugins 2>/dev/null | grep -q "dns-bunny"; then
+                echo -e "${COLOR_YELLOW}${LANG[BUNNY_PLUGIN_INSTALLING]}${COLOR_RESET}"
+
+                if python3 -m pip install --help 2>&1 | grep -q "break-system-packages"; then
+                    python3 -m pip install --break-system-packages certbot-dns-bunny >/dev/null 2>&1
+                else
+                python3 -m pip install certbot-dns-bunny >/dev/null 2>&1
+                fi
+
+                if certbot plugins 2>/dev/null | grep -q "dns-bunny"; then
+                    echo -e "${COLOR_GREEN}${LANG[BUNNY_PLUGIN_INSTALLED]}${COLOR_RESET}"
+                else
+                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_BUNNY_PLUGIN]}${COLOR_RESET}"
+                    return 1
+                fi
+            else
+                echo -e "${COLOR_GREEN}${LANG[BUNNY_PLUGIN_AVAILABLE]}${COLOR_RESET}"
+            fi
+
+            # The key may already be seeded — dns_saved_credentials_load
+            # reads it back from bunny.ini after the first run
+            if [ -z "$BUNNY_API_KEY" ]; then
+                reading "${LANG[ENTER_BUNNY_TOKEN]}" BUNNY_API_KEY
+            fi
+
+            mkdir -p ~/.secrets/certbot
+            cat > ~/.secrets/certbot/bunny.ini <<EOL
+dns_bunny_api_key = $BUNNY_API_KEY
+EOL
+            chmod 600 ~/.secrets/certbot/bunny.ini
+
+            # The wildcard base is asked explicitly: deriving it from the
+            # last two labels breaks co.uk-style zones and delegated
+            # subzones like vpn.example.com. The suggestion keeps the
+            # third-level parent when one exists.
+            local bunny_base bunny_suggest="$BASE_DOMAIN"
+            [[ "$DOMAIN" == *.*.* ]] && bunny_suggest="${DOMAIN#*.}"
+            while true; do
+                reading "$(printf "${LANG[BUNNY_WILDCARD_BASE]}" "$bunny_suggest")" bunny_base
+                bunny_base="${bunny_base:-$bunny_suggest}"
+                bunny_base="${bunny_base#\*.}"
+                if [[ "$bunny_base" =~ ^[a-zA-Z0-9.-]+$ ]] \
+                    && cert_covers_domain "$DOMAIN" "$bunny_base"$'\n'"*.$bunny_base"; then
+                    break
+                fi
+                echo -e "${COLOR_RED}${LANG[BUNNY_WILDCARD_INVALID]}${COLOR_RESET}"
+            done
+
+            certbot certonly \
+                --authenticator dns-bunny \
+                --dns-bunny-credentials ~/.secrets/certbot/bunny.ini \
+                --dns-bunny-propagation-seconds 120 \
+                --cert-name "$bunny_base" \
+                -d "$bunny_base" \
+                -d "*.$bunny_base" \
+                "${email_args[@]}" \
+                --agree-tos \
+                --non-interactive \
+                --key-type ecdsa \
+                --elliptic-curve secp384r1
+            ;;
         *)
             echo -e "${COLOR_RED}${LANG[INVALID_CERT_METHOD]}${COLOR_RESET}"
             return 1
@@ -326,6 +392,8 @@ update_current_certificates() {
                 cert_method="1" # Cloudflare DNS-01
             elif grep -q "dns-gcore" "$renewal_conf"; then
                 cert_method="3" # Gcore DNS-01
+            elif grep -Eq "dns[-_]bunny" "$renewal_conf"; then
+                cert_method="5" # Bunny DNS-01
             fi
         else
             # No renewal conf = a manually uploaded certificate: certbot
@@ -402,6 +470,22 @@ dns_gcore_apitoken = $GCORE_API_KEY
 EOL
                 chmod 600 "$gcore_credentials_file"
             fi
+        elif [ "$cert_method" == "5" ]; then
+            # Bunny
+            local bunny_credentials_file
+            bunny_credentials_file=$(grep -E "dns[-_]bunny[-_]credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            if [ -n "$bunny_credentials_file" ] && [ ! -s "$bunny_credentials_file" ]; then
+                echo -e "${COLOR_RED}${LANG[CERT_BUNNY_FILE_NOT_FOUND]}${COLOR_RESET}"
+                if [ -z "$BUNNY_API_KEY" ]; then
+                    reading "${COLOR_YELLOW}${LANG[ENTER_BUNNY_TOKEN]}${COLOR_RESET}" BUNNY_API_KEY
+                fi
+
+                mkdir -p "$(dirname "$bunny_credentials_file")"
+                cat > "$bunny_credentials_file" <<EOL
+dns_bunny_api_key = $BUNNY_API_KEY
+EOL
+                chmod 600 "$bunny_credentials_file"
+            fi
         fi
 
         if [ "$days_left" -le "$renew_threshold" ]; then
@@ -474,6 +558,7 @@ generate_new_certificates() {
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -485,7 +570,7 @@ generate_new_certificates() {
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                 return 0
                 ;;
-            1|2|3|4)
+            1|2|3|4|5)
                 break
                 ;;
             *)
@@ -495,7 +580,7 @@ generate_new_certificates() {
     done
 
     local LETSENCRYPT_EMAIL=""
-    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ]; then
+    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ] || [ "$CERT_METHOD" == "5" ]; then
         reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
     fi
 
@@ -503,6 +588,9 @@ generate_new_certificates() {
         # 4 = own certificate: upload and verify, no certbot involved
         manual_certificate_flow "$NEW_DOMAIN" || return 1
         setup_cert_telegram_notifications
+    elif [ "$CERT_METHOD" == "5" ]; then
+        # 5 = Bunny DNS-01 — wildcard
+        get_certificates "$NEW_DOMAIN" "5" "$LETSENCRYPT_EMAIL"
     elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
         # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
@@ -688,6 +776,7 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}5. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -696,7 +785,9 @@ handle_certificates() {
         # at that provider, so its method is the sensible default: prefill
         # it (Enter accepts, the choice stays editable for ACME fans).
         local cert_default=""
-        if [ -n "$GCORE_API_KEY" ]; then
+        if [ -n "$BUNNY_API_KEY" ]; then
+            cert_default="5"
+        elif [ -n "$GCORE_API_KEY" ]; then
             cert_default="3"
         elif [ -n "$CLOUDFLARE_API_KEY" ]; then
             cert_default="1"
@@ -721,7 +812,7 @@ handle_certificates() {
                 1|4)
                     break
                     ;;
-                2|3)
+                2|3|5)
                     reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
                     break
                     ;;

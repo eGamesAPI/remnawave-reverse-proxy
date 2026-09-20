@@ -1544,6 +1544,14 @@ dns_saved_credentials_load() {
             seeded="${seeded:+$seeded + }Gcore"
         fi
     fi
+    if [ -z "$BUNNY_API_KEY" ] && [ -r "$HOME/.secrets/certbot/bunny.ini" ]; then
+        local bunny_token
+        bunny_token=$(sed -n 's/^dns_bunny_api_key[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/bunny.ini" | head -n1)
+        if [ -n "$bunny_token" ]; then
+            BUNNY_API_KEY="$bunny_token"
+            seeded="${seeded:+$seeded + }Bunny"
+        fi
+    fi
     [ -n "$seeded" ] && echo -e "${COLOR_GRAY}$(printf "${LANG[DNS_CREDS_REUSED]}" "$seeded")${COLOR_RESET}"
     return 0
 }
