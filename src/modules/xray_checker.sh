@@ -336,12 +336,12 @@ xchk_obtain_cert() {
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}5. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
     echo -e ""
     while true; do
         reading "${LANG[CERT_METHOD_CHOOSE]}" method
         case "$method" in
-            1|2|3|5) break ;;
+            1|2|3|4) break ;;
             *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
         esac
     done

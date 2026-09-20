@@ -220,7 +220,7 @@ EOL
                 --key-type ecdsa \
                 --elliptic-curve secp384r1
             ;;
-        5)
+        4)
             # Bunny DNS-01 — one wildcard lineage per zone (base + *.base),
             # mirroring Cloudflare and Gcore. The zone must live on Bunny
             # DNS; this API does not manage the A records themselves.
@@ -401,7 +401,7 @@ update_current_certificates() {
             elif grep -q "dns-gcore" "$renewal_conf"; then
                 cert_method="3" # Gcore DNS-01
             elif grep -Eq "dns[-_]bunny" "$renewal_conf"; then
-                cert_method="5" # Bunny DNS-01
+                cert_method="4" # Bunny DNS-01
             fi
         else
             # No renewal conf = a manually uploaded certificate: certbot
@@ -478,7 +478,7 @@ dns_gcore_apitoken = $GCORE_API_KEY
 EOL
                 chmod 600 "$gcore_credentials_file"
             fi
-        elif [ "$cert_method" == "5" ]; then
+        elif [ "$cert_method" == "4" ]; then
             # Bunny
             local bunny_credentials_file
             bunny_credentials_file=$(grep -E "dns[-_]bunny[-_]credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
@@ -565,8 +565,9 @@ generate_new_certificates() {
     echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}5. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
@@ -588,17 +589,17 @@ generate_new_certificates() {
     done
 
     local LETSENCRYPT_EMAIL=""
-    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ] || [ "$CERT_METHOD" == "5" ]; then
+    if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ] || [ "$CERT_METHOD" == "4" ]; then
         reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
     fi
 
-    if [ "$CERT_METHOD" == "4" ]; then
-        # 4 = own certificate: upload and verify, no certbot involved
+    if [ "$CERT_METHOD" == "5" ]; then
+        # 5 = own certificate: upload and verify, no certbot involved
         manual_certificate_flow "$NEW_DOMAIN" || return 1
         setup_cert_telegram_notifications
-    elif [ "$CERT_METHOD" == "5" ]; then
-        # 5 = Bunny DNS-01 — wildcard
-        get_certificates "$NEW_DOMAIN" "5" "$LETSENCRYPT_EMAIL"
+    elif [ "$CERT_METHOD" == "4" ]; then
+        # 4 = Bunny DNS-01 — wildcard
+        get_certificates "$NEW_DOMAIN" "4" "$LETSENCRYPT_EMAIL"
     elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "3" ]; then
         # 1 = CF DNS-01, 3 = Gcore DNS-01 — wildcard
         echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
@@ -783,8 +784,9 @@ handle_certificates() {
         echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}5. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
@@ -794,7 +796,7 @@ handle_certificates() {
         # it (Enter accepts, the choice stays editable for ACME fans).
         local cert_default=""
         if [ -n "$BUNNY_API_KEY" ]; then
-            cert_default="5"
+            cert_default="4"
         elif [ -n "$GCORE_API_KEY" ]; then
             cert_default="3"
         elif [ -n "$CLOUDFLARE_API_KEY" ]; then
@@ -817,10 +819,10 @@ handle_certificates() {
                     echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
                     exit 1
                     ;;
-                1|4)
+                1|5)
                     break
                     ;;
-                2|3|5)
+                2|3|4)
                     reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
                     break
                     ;;
@@ -852,7 +854,7 @@ handle_certificates() {
 
     declare -A cert_domains_added
 
-    if [ "$need_certificates" = true ] && [ "$cert_method" = "4" ]; then
+    if [ "$need_certificates" = true ] && [ "$cert_method" = "5" ]; then
         # Own certificates: the user uploads each missing domain; a
         # single wildcard upload covers the rest of the domains
         for domain in "${!domains_to_check_ref[@]}"; do
@@ -866,7 +868,7 @@ handle_certificates() {
         setup_cert_telegram_notifications
     fi
 
-    if [ "$need_certificates" = true ] && [ "$cert_method" != "4" ]; then
+    if [ "$need_certificates" = true ] && [ "$cert_method" != "5" ]; then
         for domain in "${!domains_to_check_ref[@]}"; do
             # Skip what is already covered: for wildcard methods the first
             # subdomain of a zone issues the shared certificate and the rest
