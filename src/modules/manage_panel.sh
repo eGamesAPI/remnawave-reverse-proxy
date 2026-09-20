@@ -1,10 +1,66 @@
 #!/bin/bash
 # Module: Manage Panel
 
+# What runs on this box, at a glance: one line per installed component,
+# nothing for what is absent — the rule the extensions hub follows. A
+# single docker ps snapshot feeds every state check, no docker call per
+# line; the flavor in parentheses tells nginx and caddy installs apart.
+show_component_status() {
+    local containers
+    containers=$(docker ps --format '{{.Names}}' 2>/dev/null)
+
+    if panel_is_installed; then
+        local flavor=""
+        if grep -qE '^[[:space:]]*remnawave-nginx:' /opt/remnawave/docker-compose.yml; then
+            flavor=" (nginx)"
+        elif grep -qE '^[[:space:]]*remnawave-caddy:' /opt/remnawave/docker-compose.yml; then
+            flavor=" (caddy)"
+        fi
+        if echo "$containers" | grep -qx remnawave; then
+            echo -e " ${LANG[COMP_PANEL]}$flavor: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_PANEL]}$flavor: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+
+        # The login page is part of the panel stack, so it shows only when
+        # the panel was installed with it.
+        if grep -qE '^[[:space:]]*tinyauth:' /opt/remnawave/docker-compose.yml; then
+            if echo "$containers" | grep -qx tinyauth; then
+                echo -e " ${LANG[COMP_TINYAUTH]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+            else
+                echo -e " ${LANG[COMP_TINYAUTH]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+            fi
+        fi
+    fi
+
+    if [ -f /opt/subscription/docker-compose.yml ]; then
+        if echo "$containers" | grep -qx remnawave-subscription-page; then
+            echo -e " ${LANG[COMP_SUB_PAGE]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_SUB_PAGE]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+    fi
+
+    if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
+       { [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; }; then
+        if echo "$containers" | grep -qx remnanode; then
+            echo -e " ${LANG[COMP_NODE]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_NODE]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+    fi
+}
+
 show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
+    local status_block
+    status_block=$(show_component_status)
+    if [ -n "$status_block" ]; then
+        echo -e "$status_block"
+        echo -e ""
+    fi
     show_panel_upgrade_notice nohint
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
