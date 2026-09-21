@@ -772,15 +772,24 @@ handle_certificates() {
         echo -e "${COLOR_WHITE}- $domain${COLOR_RESET}"
     done
 
+    # One line per certificate, not per domain: with a wildcard every domain
+    # resolves to the same lineage, and per-domain lines just repeat the path.
+    declare -A lineage_domains=()
+    local lineage
     for domain in "${!domains_to_check_ref[@]}"; do
-        if ! check_certificates "$domain"; then
+        if ! lineage=$(resolve_certificate_domain "$domain"); then
+            echo -e "${COLOR_RED}${LANG[CERT_NOT_FOUND]} $domain${COLOR_RESET}"
             need_certificates=true
         else
+            lineage_domains["$lineage"]="${lineage_domains["$lineage"]:+${lineage_domains[$lineage]} }$domain"
             days_left=$(check_cert_expiry "$domain")
             if [ $? -eq 0 ] && [ "$days_left" -lt "$min_days_left" ]; then
                 min_days_left=$days_left
             fi
         fi
+    done
+    for lineage in "${!lineage_domains[@]}"; do
+        echo -e "${COLOR_GREEN}${LANG[CERT_FOUND]}$lineage (${lineage_domains[$lineage]})${COLOR_RESET}"
     done
 
     if [ "$need_certificates" = true ]; then
