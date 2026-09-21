@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.3.9"
+SCRIPT_VERSION="3.4.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -1511,9 +1511,100 @@ install_packages() {
     clear
 }
 
+# Two-label public suffixes (com.ru, co.uk, ...) curated from the Public
+# Suffix List: the registrations that matter plus the less obvious ones.
+# extract_domain returns the registrable base — one label deeper when the
+# last two labels form a known suffix. A missing entry only falls back to
+# the plain two-label behaviour; a redundant one merely narrows the base,
+# which every consumer (wildcard issuance, DNS zone lookup) still controls
+# — so err on including.
+declare -A PUBLIC_SUFFIXES=(
+    # RU / CIS
+    [com.ru]=1 [net.ru]=1 [org.ru]=1 [pp.ru]=1 [msk.ru]=1 [spb.ru]=1
+    [com.ua]=1 [net.ua]=1 [org.ua]=1 [in.ua]=1
+    [kiev.ua]=1 [kharkov.ua]=1 [kharkiv.ua]=1 [odessa.ua]=1 [odesa.ua]=1 [lviv.ua]=1 [dnipropetrovsk.ua]=1
+    [co.kz]=1 [com.kz]=1 [net.kz]=1 [org.kz]=1 [edu.kz]=1 [gov.kz]=1
+    [com.kg]=1 [net.kg]=1 [org.kg]=1 [edu.kg]=1 [gov.kg]=1
+    [com.uz]=1 [co.uz]=1 [net.uz]=1 [org.uz]=1
+    [com.az]=1 [net.az]=1 [org.az]=1
+    [co.rs]=1 [org.rs]=1 [in.rs]=1 [ac.rs]=1 [edu.rs]=1
+    # Europe
+    [co.uk]=1 [org.uk]=1 [me.uk]=1 [net.uk]=1 [ac.uk]=1 [gov.uk]=1 [ltd.uk]=1 [plc.uk]=1 [sch.uk]=1
+    [co.at]=1 [or.at]=1 [ac.at]=1
+    [com.es]=1 [net.es]=1 [org.es]=1 [nom.es]=1 [edu.es]=1 [gob.es]=1
+    [com.pt]=1 [net.pt]=1 [org.pt]=1 [edu.pt]=1
+    [com.pl]=1 [net.pl]=1 [org.pl]=1 [edu.pl]=1 [gov.pl]=1 [info.pl]=1 [biz.pl]=1
+    [com.gr]=1 [net.gr]=1 [org.gr]=1 [edu.gr]=1 [gov.gr]=1
+    [com.ro]=1 [org.ro]=1 [nom.ro]=1
+    [com.cy]=1 [net.cy]=1 [org.cy]=1
+    [com.mk]=1 [net.mk]=1 [org.mk]=1
+    [co.il]=1 [net.il]=1 [org.il]=1 [ac.il]=1 [gov.il]=1 [muni.il]=1 [idf.il]=1
+    # Asia
+    [co.jp]=1 [ne.jp]=1 [or.jp]=1 [ac.jp]=1 [ad.jp]=1 [ed.jp]=1 [go.jp]=1 [gr.jp]=1 [lg.jp]=1
+    [com.cn]=1 [net.cn]=1 [org.cn]=1 [gov.cn]=1 [edu.cn]=1 [ac.cn]=1
+    [com.tw]=1 [org.tw]=1 [net.tw]=1 [edu.tw]=1 [gov.tw]=1 [idv.tw]=1
+    [com.hk]=1 [net.hk]=1 [org.hk]=1 [edu.hk]=1 [gov.hk]=1 [idv.hk]=1
+    [co.kr]=1 [or.kr]=1 [ne.kr]=1 [re.kr]=1 [pe.kr]=1
+    [co.in]=1 [net.in]=1 [org.in]=1 [firm.in]=1 [gen.in]=1 [ind.in]=1 [ac.in]=1 [edu.in]=1 [res.in]=1 [gov.in]=1
+    [com.sg]=1 [net.sg]=1 [org.sg]=1 [edu.sg]=1 [gov.sg]=1 [per.sg]=1
+    [com.my]=1 [net.my]=1 [org.my]=1 [edu.my]=1 [gov.my]=1 [name.my]=1
+    [co.th]=1 [in.th]=1 [or.th]=1 [ac.th]=1 [go.th]=1 [net.th]=1
+    [com.tr]=1 [net.tr]=1 [org.tr]=1 [edu.tr]=1 [gov.tr]=1
+    [com.pk]=1 [net.pk]=1 [org.pk]=1 [edu.pk]=1 [gov.pk]=1
+    [com.vn]=1 [net.vn]=1 [org.vn]=1 [edu.vn]=1 [gov.vn]=1
+    [com.ph]=1 [net.ph]=1 [org.ph]=1
+    [co.id]=1 [or.id]=1 [web.id]=1 [net.id]=1 [ac.id]=1 [sch.id]=1 [go.id]=1 [my.id]=1 [biz.id]=1
+    [com.sa]=1 [net.sa]=1 [org.sa]=1 [edu.sa]=1 [gov.sa]=1
+    [com.ae]=1 [net.ae]=1 [org.ae]=1 [ac.ae]=1 [gov.ae]=1
+    [com.qa]=1 [net.qa]=1 [org.qa]=1 [edu.qa]=1 [gov.qa]=1
+    [com.om]=1 [net.om]=1 [org.om]=1
+    [com.lb]=1 [net.lb]=1 [org.lb]=1
+    [com.ir]=1 [co.ir]=1 [net.ir]=1 [org.ir]=1
+    # Americas
+    [com.br]=1 [net.br]=1 [org.br]=1 [gov.br]=1 [edu.br]=1
+    [com.mx]=1 [net.mx]=1 [org.mx]=1 [edu.mx]=1 [gob.mx]=1
+    [com.ar]=1 [net.ar]=1 [org.ar]=1 [gob.ar]=1 [edu.ar]=1
+    [com.co]=1 [net.co]=1 [org.co]=1 [edu.co]=1 [gov.co]=1 [nom.co]=1
+    [com.pe]=1 [net.pe]=1 [org.pe]=1 [edu.pe]=1 [gob.pe]=1
+    [com.ec]=1 [net.ec]=1 [org.ec]=1 [edu.ec]=1 [gob.ec]=1
+    [com.ve]=1 [co.ve]=1 [net.ve]=1 [org.ve]=1
+    [com.uy]=1 [net.uy]=1 [org.uy]=1
+    [com.py]=1 [net.py]=1 [org.py]=1
+    [com.bo]=1 [net.bo]=1 [org.bo]=1
+    [com.do]=1 [net.do]=1 [org.do]=1 [edu.do]=1 [gob.do]=1
+    [com.gt]=1 [net.gt]=1 [org.gt]=1
+    # Africa & Oceania
+    [co.za]=1 [net.za]=1 [org.za]=1 [web.za]=1 [ac.za]=1 [gov.za]=1
+    [com.ng]=1 [net.ng]=1 [org.ng]=1 [edu.ng]=1 [gov.ng]=1
+    [co.ke]=1 [or.ke]=1 [ne.ke]=1 [me.ke]=1
+    [co.tz]=1 [or.tz]=1 [ne.tz]=1
+    [co.ug]=1 [or.ug]=1 [ne.ug]=1
+    [com.eg]=1 [net.eg]=1 [org.eg]=1 [edu.eg]=1 [gov.eg]=1
+    [com.ma]=1 [net.ma]=1 [org.ma]=1 [ac.ma]=1 [gov.ma]=1
+    [com.dz]=1 [net.dz]=1 [org.dz]=1 [edu.dz]=1 [gov.dz]=1
+    [com.ly]=1 [net.ly]=1 [org.ly]=1
+    [com.jo]=1 [net.jo]=1 [org.jo]=1
+    [com.au]=1 [net.au]=1 [org.au]=1 [edu.au]=1 [gov.au]=1 [asn.au]=1 [id.au]=1
+    [co.nz]=1 [net.nz]=1 [org.nz]=1 [govt.nz]=1 [ac.nz]=1 [school.nz]=1
+)
+
+# Registrable base of a domain: the last two labels, one label deeper when
+# those two form a known public suffix — panel.example.com.ru →
+# example.com.ru, panel.example.com → example.com.
 extract_domain() {
-    local SUBDOMAIN=$1
-    echo "$SUBDOMAIN" | awk -F'.' '{if (NF > 2) {print $(NF-1)"."$NF} else {print $0}}'
+    local domain="${1,,}"
+    # Immune to a caller's IFS: the split below needs the spaces produced by
+    # the substitution, whatever separator the caller happens to run with.
+    local IFS=$' \t\n'
+    local parts=(${domain//./ })
+    local count=${#parts[@]}
+    if [ "$count" -ge 3 ] && [ -n "${PUBLIC_SUFFIXES[${parts[count-2]}.${parts[count-1]}]+x}" ]; then
+        echo "${parts[count-3]}.${parts[count-2]}.${parts[count-1]}"
+    elif [ "$count" -ge 2 ]; then
+        echo "${parts[count-2]}.${parts[count-1]}"
+    else
+        echo "$domain"
+    fi
 }
 
 # Seed Cloudflare/Gcore credentials from the certbot secrets an earlier
@@ -1542,6 +1633,14 @@ dns_saved_credentials_load() {
         if [ -n "$gc_token" ]; then
             GCORE_API_KEY="$gc_token"
             seeded="${seeded:+$seeded + }Gcore"
+        fi
+    fi
+    if [ -z "$BUNNY_API_KEY" ] && [ -r "$HOME/.secrets/certbot/bunny.ini" ]; then
+        local bunny_token
+        bunny_token=$(sed -n 's/^dns_bunny_api_key[[:space:]]*=[[:space:]]*//p' "$HOME/.secrets/certbot/bunny.ini" | head -n1)
+        if [ -n "$bunny_token" ]; then
+            BUNNY_API_KEY="$bunny_token"
+            seeded="${seeded:+$seeded + }Bunny"
         fi
     fi
     [ -n "$seeded" ] && echo -e "${COLOR_GRAY}$(printf "${LANG[DNS_CREDS_REUSED]}" "$seeded")${COLOR_RESET}"
@@ -1589,8 +1688,9 @@ check_domain() {
     fi
 
     local ip_in_cloudflare=false
-    local IFS='.'
-    read -r a b c d <<<"$domain_ip"
+    # Command-scoped IFS: a function-wide `local IFS='.'` leaks into callees
+    # (ensure_dns_record) and breaks extract_domain's word split.
+    IFS='.' read -r a b c d <<<"$domain_ip"
     local domain_ip_int=$(( (a << 24) + (b << 16) + (c << 8) + d ))
 
     if [ ${#cf_array[@]} -gt 0 ]; then
@@ -1600,7 +1700,7 @@ check_domain() {
             fi
             local network=$(echo "$cidr" | cut -d'/' -f1)
             local mask=$(echo "$cidr" | cut -d'/' -f2)
-            read -r a b c d <<<"$network"
+            IFS='.' read -r a b c d <<<"$network"
             local network_int=$(( (a << 24) + (b << 16) + (c << 8) + d ))
             local mask_bits=$(( 32 - mask ))
             local range_size=$(( 1 << mask_bits ))
@@ -1625,8 +1725,17 @@ check_domain() {
     # not allowed (Reality selfsteal): offer to create or fix it through
     # the DNS API instead of showing a bare warning.
     if [ "$show_warning" = true ]; then
-        if load_dns_records_module && ensure_dns_record "$domain" "$allow_cf_proxy"; then
-            return 0
+        local dns_flow_ran=false
+        if load_dns_records_module; then
+            dns_flow_ran=true
+            ensure_dns_record "$domain" "$allow_cf_proxy" && return 0
+        fi
+
+        if [ "$dns_flow_ran" = true ]; then
+            # The DNS flow has already printed its specific error; the
+            # mismatch diagnosis below would only repeat it. Keep the choice.
+            reading_yn "${LANG[CONFIRM_PROMPT]}" confirm || return 2
+            return 1
         fi
 
         # The user skipped the fix — keep the original confirm choice.

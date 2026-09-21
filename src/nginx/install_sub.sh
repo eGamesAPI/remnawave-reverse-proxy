@@ -112,22 +112,12 @@ installation_sub() {
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription"
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" || return 1
 
-    if [ -z "$CERT_METHOD" ]; then
-        local base_domain=$(extract_domain "$SUB_DOMAIN")
-        if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-            CERT_METHOD="1"
-        else
-            CERT_METHOD="2"
-        fi
-    fi
-
-    if [ "$CERT_METHOD" == "1" ]; then
-        SUB_CERT_DOMAIN="$(extract_domain "$SUB_DOMAIN")"
-    else
-        SUB_CERT_DOMAIN="$SUB_DOMAIN"
-    fi
+    # The certificate directory is the lineage that actually covers the
+    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
+    # the issuance method
+    SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
 
     cat >> /opt/subscription/docker-compose.yml <<EOL
 

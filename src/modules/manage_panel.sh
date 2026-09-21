@@ -1,25 +1,91 @@
 #!/bin/bash
 # Module: Manage Panel
 
+# What runs on this box, at a glance: one line per installed component,
+# nothing for what is absent — the rule the extensions hub follows. A
+# single docker ps snapshot feeds every state check, no docker call per
+# line; the flavor in parentheses tells nginx and caddy installs apart.
+show_component_status() {
+    local containers
+    containers=$(docker ps --format '{{.Names}}' 2>/dev/null)
+
+    if panel_is_installed; then
+        local flavor=""
+        if grep -qE '^[[:space:]]*remnawave-nginx:' /opt/remnawave/docker-compose.yml; then
+            flavor=" (nginx)"
+        elif grep -qE '^[[:space:]]*remnawave-caddy:' /opt/remnawave/docker-compose.yml; then
+            flavor=" (caddy)"
+        fi
+        if echo "$containers" | grep -qx remnawave; then
+            echo -e " ${LANG[COMP_PANEL]}$flavor: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_PANEL]}$flavor: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+
+        # The login page is part of the panel stack, so it shows only when
+        # the panel was installed with it.
+        if grep -qE '^[[:space:]]*tinyauth:' /opt/remnawave/docker-compose.yml; then
+            if echo "$containers" | grep -qx tinyauth; then
+                echo -e " ${LANG[COMP_TINYAUTH]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+            else
+                echo -e " ${LANG[COMP_TINYAUTH]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+            fi
+        fi
+    fi
+
+    # The subscription page lives wherever its installer put it: a service
+    # inside the panel compose (panel and panel+node layouts) or its own
+    # /opt/subscription stack (standalone install).
+    if [ -f /opt/subscription/docker-compose.yml ] \
+        || { [ -f /opt/remnawave/docker-compose.yml ] && grep -qE '^[[:space:]]*remnawave-subscription-page:' /opt/remnawave/docker-compose.yml; }; then
+        if echo "$containers" | grep -qx remnawave-subscription-page; then
+            echo -e " ${LANG[COMP_SUB_PAGE]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_SUB_PAGE]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+    fi
+
+    if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
+       { [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; }; then
+        if echo "$containers" | grep -qx remnanode; then
+            echo -e " ${LANG[COMP_NODE]}: ${COLOR_GREEN}${LANG[COMP_STATE_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[COMP_NODE]}: ${COLOR_RED}${LANG[COMP_STATE_STOPPED]}${COLOR_RESET}"
+        fi
+    fi
+}
+
 show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[MENU_3]}${COLOR_RESET}"
     echo -e ""
+    local status_block
+    status_block=$(show_component_status)
+    if [ -n "$status_block" ]; then
+        echo -e "$status_block"
+        echo -e ""
+    fi
     show_panel_upgrade_notice nohint
     echo -e "${COLOR_YELLOW}1. ${LANG[START_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[STOP_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[UPDATE_PANEL_NODE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}4. ${LANG[VIEW_LOGS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}5. ${LANG[REMNAWAVE_CLI]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}6. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
 
-    # Both extra entries act on a panel, so a node-only box sees neither and its
-    # menu stays exactly what it was. The upgrade entry additionally appears only
-    # while there is something to upgrade, and the entry below it takes the freed
-    # number rather than leaving a hole in the list.
-    local last=6
+    # The extra entries act on their own layout, so any other box never
+    # sees them: the 8443 access exists only where Xray owns 443 and the
+    # panel hides behind the selfsteal flow (panel + node), the two panel
+    # entries need a panel. The numbering closes over the gaps.
+    local last=5
+    local opt_access="__none__"
     local opt_upgrade="__none__"
     local opt_minclientver="__none__"
+
+    if [ -f /opt/remnawave/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnawave/docker-compose.yml; then
+        last=$((last + 1))
+        opt_access=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[ACCESS_PANEL]}${COLOR_RESET}"
+    fi
 
     if panel_is_installed; then
         if panel_needs_v3_migration; then
@@ -65,6 +131,11 @@ show_manage_panel_menu() {
             show_manage_panel_menu
             ;;
         6)
+            manage_panel_access
+            sleep 2
+            show_manage_panel_menu
+            ;;
+        "$opt_access")
             manage_panel_access
             sleep 2
             show_manage_panel_menu
@@ -675,6 +746,112 @@ manage_panel_access() {
     manage_panel_access
 }
 
+# The emergency door for panel+node boxes: Xray owns 443 there, and when the
+# Reality path misbehaves the panel stays reachable straight over TCP 8443.
+# The normal listeners keep serving while the door is open — nginx gains an
+# extra listen line inside the panel's own server block (so the whole auth
+# chain, cookie gate or tinyauth, guards the port too), caddy gains an extra
+# bind next to its unix socket.
+panel_access_port_busy() {
+    ss -tln 2>/dev/null | awk -v p=":8443" '$4 ~ p"$" { found = 1 } END { exit !found }'
+}
+
+# The real panel domain — the compose carries only the ${PANEL_DOMAIN}
+# placeholder, the value lives in .env.
+panel_access_domain() {
+    local dir="$1" domain=""
+    [ -f "$dir/.env" ] && domain=$(sed -n "s/^PANEL_DOMAIN=//p" "$dir/.env" | head -n1 | tr -d '"'"'"'')
+    if [ -z "$domain" ]; then
+        domain=$(grep "PANEL_DOMAIN=" "$dir/docker-compose.yml" 2>/dev/null | head -n 1 | sed 's/.*PANEL_DOMAIN=//; s/[[:space:]]*$//')
+    fi
+    [ -n "$domain" ] && [ "$domain" != '${PANEL_DOMAIN}' ] || return 1
+    echo "$domain"
+}
+
+# Validate the edited nginx config inside the running container. A live
+# master already holds the unix socket, so its EADDRINUSE in `nginx -t` is
+# the config being checked against ourselves — every other failure is real.
+panel_access_nginx_validate() {
+    local dir="$1" test_out test_rc=0
+    if ! docker ps --format '{{.Names}}' | grep -qx remnawave-nginx; then
+        (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+    fi
+    test_out=$(docker exec remnawave-nginx nginx -t 2>&1) || test_rc=$?
+    if [ "$test_rc" -ne 0 ]; then
+        if ! printf '%s' "$test_out" | grep -q "unix:/dev/shm/nginx.sock" \
+            || ! printf '%s' "$test_out" | grep -q "Address already in use"; then
+            printf '%s\n' "$test_out" | tail -n 3 | sed 's/^/  /'
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Single-file bind mounts follow the inode: sed -i swaps the file behind
+# the container's back (temp file + rename), and the running nginx keeps
+# reading the old bytes through its mount — the edit "succeeds" while
+# nothing changes. Rewriting in place (cat >) keeps the inode, so the
+# reload genuinely picks the new config up.
+panel_access_write() { # target tmp
+    local target="$1" tmp="$2"
+    cat "$tmp" > "$target"
+    rm -f "$tmp"
+}
+
+panel_access_apply_nginx() {
+    local dir="$1" conf="$dir/nginx.conf" tmp="${1}/nginx.conf.8443tmp"
+    cp -p "$conf" "${conf}.8443bak"
+
+    # A stale listen from a previous run goes first, ours lands right after
+    # the panel's server_name — inside the same server block.
+    sed '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf" > "$tmp"
+    sed -i "/server_name ${PANEL_DOMAIN};/a \    listen 8443 ssl;" "$tmp"
+    panel_access_write "$conf" "$tmp"
+
+    if ! panel_access_nginx_validate "$dir"; then
+        cat "${conf}.8443bak" > "$conf"
+        docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+        rm -f "${conf}.8443bak"
+        echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
+        return 1
+    fi
+
+    (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+    docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+    rm -f "${conf}.8443bak"
+    return 0
+}
+
+# The caddy door reuses the panel site itself: the address moves to :8443
+# and a TCP bind joins the unix one, so the site keeps answering on the
+# socket (the normal path through Xray) while also listening on 8443.
+# Caddy has no reload without its admin API (disabled here), so the door
+# costs one restart — it re-resolves the bind mount, in-place writes or
+# not.
+panel_access_apply_caddy() {
+    local dir="$1" caddyfile="$dir/Caddyfile" tmp="${1}/Caddyfile.8443tmp"
+    cp -p "$caddyfile" "${caddyfile}.8443bak"
+
+    sed "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|" "$caddyfile" > "$tmp"
+    sed -i "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/ { /^    bind unix/{ a\    bind 0.0.0.0
+}; }" "$tmp"
+    panel_access_write "$caddyfile" "$tmp"
+
+    docker restart remnawave-caddy >/dev/null 2>&1
+    # A config caddy rejects dies a few seconds into its restart loop — an
+    # immediate check would pass right before that.
+    sleep 6
+    if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
+        cat "${caddyfile}.8443bak" > "$caddyfile"
+        docker restart remnawave-caddy >/dev/null 2>&1
+        rm -f "${caddyfile}.8443bak"
+        echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
+        return 1
+    fi
+    rm -f "${caddyfile}.8443bak"
+    return 0
+}
+
 open_panel_access() {
     local dir=""
     if [ -d "/opt/remnawave" ]; then
@@ -683,124 +860,87 @@ open_panel_access() {
         dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
-
     local webserver=""
-    if [ -f "nginx.conf" ]; then
+    if [ -f "$dir/nginx.conf" ]; then
         webserver="nginx"
-    elif [ -f "Caddyfile" ]; then
+    elif [ -f "$dir/Caddyfile" ]; then
         webserver="caddy"
     else
         echo -e "${COLOR_RED}${LANG[CONFIG_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
+        return 1
+    fi
+
+    if ! PANEL_DOMAIN=$(panel_access_domain "$dir"); then
+        echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if command -v ss >/dev/null 2>&1 && panel_access_port_busy; then
+        echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+        return 1
     fi
 
     if [ "$webserver" = "nginx" ]; then
-        PANEL_DOMAIN=$(grep -B 20 "proxy_pass http://remnawave" "$dir/nginx.conf" | grep "server_name" | grep -v "server_name _" | awk '{print $2}' | sed 's/;//' | head -n 1)
-
-        cookie_line=$(grep -A 2 "map \$http_cookie \$auth_cookie" "$dir/nginx.conf" | grep "~*\w\+.*=")
-        cookies_random1=$(echo "$cookie_line" | grep -oP '~*\K\w+(?==)')
-        cookies_random2=$(echo "$cookie_line" | grep -oP '=\K\w+(?=")')
-
-        if [ -z "$PANEL_DOMAIN" ] || [ -z "$cookies_random1" ] || [ -z "$cookies_random2" ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
-            exit 1
-        fi
-
-        if command -v ss >/dev/null 2>&1; then
-            if ss -tuln | grep -q ":8443"; then
-                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-                exit 1
-            fi
-        elif command -v netstat >/dev/null 2>&1; then
-            if netstat -tuln | grep -q ":8443"; then
-                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-                exit 1
-            fi
+        if grep -q "listen 8443 ssl;" "$dir/nginx.conf"; then
+            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
         else
-            echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
-            exit 1
+            panel_access_apply_nginx "$dir" || return 1
         fi
-
-        sed -i "/server_name $PANEL_DOMAIN;/,/}/{/^[[:space:]]*$/d; s/listen 8443 ssl;//}" "$dir/nginx.conf"
-        sed -i "/server_name $PANEL_DOMAIN;/a \    listen 8443 ssl;" "$dir/nginx.conf"
-        if [ $? -ne 0 ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_MODIFY_FAILED]}${COLOR_RESET}"
-            exit 1
-        fi
-
-        docker compose down remnawave-nginx > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-
-        docker compose up -d remnawave-nginx > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-
-        ufw allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
-        ufw reload > /dev/null 2>&1
-        sleep 1
-
-        local panel_link="https://${PANEL_DOMAIN}:8443/auth/login?${cookies_random1}=${cookies_random2}"
-        echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
-        echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
-        echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
-    elif [ "$webserver" = "caddy" ]; then
-        PANEL_DOMAIN=$(grep 'PANEL_DOMAIN=' "$dir/docker-compose.yml" | head -n 1 | sed 's/.*PANEL_DOMAIN=//; s/[[:space:]]*$//')
-
-        if [ -z "$PANEL_DOMAIN" ]; then
-            echo -e "${COLOR_RED}${LANG[CADDY_CONF_ERROR]}${COLOR_RESET}"
-            exit 1
-        fi
-
+    else
         if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
-            return 0
-        fi
-
-        if command -v ss >/dev/null 2>&1; then
-            if ss -tuln | grep -q ":8443"; then
-                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-                exit 1
-            fi
-        elif command -v netstat >/dev/null 2>&1; then
-            if netstat -tuln | grep -q ":8443"; then
-                echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-                exit 1
-            fi
         else
-            echo -e "${COLOR_RED}${LANG[NO_PORT_CHECK_TOOLS]}${COLOR_RESET}"
-            exit 1
+            panel_access_apply_caddy "$dir" || return 1
         fi
-
-        sed -i "s|redir https://{\$PANEL_DOMAIN}{uri} permanent|redir https://{\$PANEL_DOMAIN}:8443{uri} permanent|g" "$dir/Caddyfile"
-
-        sed -i "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|g" "$dir/Caddyfile"
-        sed -i "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/ { /bind unix\/{\$CADDY_SOCKET_PATH}/d }" "$dir/Caddyfile"
-
-        docker compose down remnawave-caddy > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-
-        docker compose up -d remnawave-caddy > /dev/null 2>&1 &
-        spinner $! "${LANG[WAITING]}"
-
-        ufw allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
-        ufw reload > /dev/null 2>&1
-        sleep 1
-
-        local cookie_line=$(grep 'header +Set-Cookie' "$dir/Caddyfile" | head -n 1)
-        local cookies_random1=$(echo "$cookie_line" | grep -oP 'Set-Cookie "\K[^=]+')
-        local cookies_random2=$(echo "$cookie_line" | grep -oP 'Set-Cookie "[^=]+=\K[^;]+')
-
-        local panel_link="https://${PANEL_DOMAIN}:8443/auth/login"
-        if [ -n "$cookies_random1" ] && [ -n "$cookies_random2" ]; then
-            panel_link="${panel_link}?${cookies_random1}=${cookies_random2}"
-        fi
-        echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
-        echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
-        echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
     fi
+
+    ufw allow 8443/tcp >/dev/null 2>&1
+    ufw reload >/dev/null 2>&1
+
+    # The link follows the auth mode: with a portal (tinyauth or caddy
+    # security) the plain address is enough — the portal takes it from
+    # there; the cookie gate needs its magic pair in the query string.
+    local auth_mode="cookie" panel_link cookie_pair=""
+    if [ "$webserver" = "nginx" ]; then
+        if grep -q "auth_request /tinyauth_check" "$dir/nginx.conf"; then
+            auth_mode="tinyauth"
+        else
+            local cookie_line c1 c2
+            cookie_line=$(grep -A 2 "map \$http_cookie \$auth_cookie" "$dir/nginx.conf" | grep "~*\w\+.*=" | head -n1)
+            c1=$(echo "$cookie_line" | grep -oP '~*\K\w+(?==)')
+            c2=$(echo "$cookie_line" | grep -oP '=\K\w+(?=")')
+            [ -n "$c1" ] && [ -n "$c2" ] && cookie_pair="${c1}=${c2}"
+        fi
+    else
+        if grep -q "authentication portal" "$dir/Caddyfile"; then
+            auth_mode="portal"
+        else
+            local cookie_line c1 c2
+            cookie_line=$(grep 'header +Set-Cookie' "$dir/Caddyfile" | head -n 1)
+            c1=$(echo "$cookie_line" | grep -oP 'Set-Cookie "\K[^=]+')
+            c2=$(echo "$cookie_line" | grep -oP 'Set-Cookie "[^=]+=\K[^;]+')
+            [ -n "$c1" ] && [ -n "$c2" ] && cookie_pair="${c1}=${c2}"
+        fi
+    fi
+
+    if [ "$auth_mode" != "cookie" ]; then
+        panel_link="https://${PANEL_DOMAIN}:8443"
+    elif [ -n "$cookie_pair" ]; then
+        panel_link="https://${PANEL_DOMAIN}:8443/auth/login?${cookie_pair}"
+    else
+        panel_link="https://${PANEL_DOMAIN}:8443"
+    fi
+
+    echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
+    echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
+    if [ "$auth_mode" != "cookie" ]; then
+        echo -e "${COLOR_GRAY}${LANG[PORT_8443_PORTAL_NOTE]}${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
+    return 0
 }
 
 close_panel_access() {
@@ -811,90 +951,74 @@ close_panel_access() {
         dir="/opt/remnanode"
     else
         echo -e "${COLOR_RED}${LANG[DIR_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
-
-    cd "$dir" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}"; exit 1; }
 
     echo -e "${COLOR_YELLOW}${LANG[PORT_8443_CLOSE]}${COLOR_RESET}"
 
     local webserver=""
-    if [ -f "nginx.conf" ]; then
+    if [ -f "$dir/nginx.conf" ]; then
         webserver="nginx"
-    elif [ -f "Caddyfile" ]; then
+    elif [ -f "$dir/Caddyfile" ]; then
         webserver="caddy"
     else
         echo -e "${COLOR_RED}${LANG[CONFIG_NOT_FOUND]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     if [ "$webserver" = "nginx" ]; then
-        PANEL_DOMAIN=$(grep -B 20 "proxy_pass http://remnawave" "$dir/nginx.conf" | grep "server_name" | grep -v "server_name _" | awk '{print $2}' | sed 's/;//' | head -n 1)
-
-        if [ -z "$PANEL_DOMAIN" ]; then
-            echo -e "${COLOR_RED}${LANG[NGINX_CONF_ERROR]}${COLOR_RESET}"
-            exit 1
-        fi
-
-        if grep -A 10 "server_name $PANEL_DOMAIN;" "$dir/nginx.conf" | grep -q "listen 8443 ssl;"; then
-            sed -i "/server_name $PANEL_DOMAIN;/,/}/{/^[[:space:]]*$/d; s/listen 8443 ssl;//}" "$dir/nginx.conf"
-            if [ $? -ne 0 ]; then
-                echo -e "${COLOR_RED}${LANG[NGINX_CONF_MODIFY_FAILED]}${COLOR_RESET}"
-                exit 1
+        if grep -q "listen 8443 ssl;" "$dir/nginx.conf"; then
+            local conf="$dir/nginx.conf" tmp="$dir/nginx.conf.8443tmp"
+            cp -p "$conf" "${conf}.8443bak"
+            sed '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf" > "$tmp"
+            panel_access_write "$conf" "$tmp"
+            if ! panel_access_nginx_validate "$dir"; then
+                cat "${conf}.8443bak" > "$conf"
+                docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+                rm -f "${conf}.8443bak"
+                echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
+                return 1
             fi
-
-            docker compose down remnawave-nginx > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
-            docker compose up -d remnawave-nginx > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
+            (cd "$dir" && docker compose up -d remnawave-nginx) >/dev/null 2>&1
+            docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
+            rm -f "${conf}.8443bak"
         else
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
         fi
-
-        if ufw status | grep -q "8443.*ALLOW"; then
-            ufw delete allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
-            ufw reload > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                echo -e "${COLOR_RED}${LANG[UFW_RELOAD_FAILED]}${COLOR_RESET}"
-                exit 1
-            fi
-            echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
-        else
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CLOSED]}${COLOR_RESET}"
-        fi
-    elif [ "$webserver" = "caddy" ]; then
-        PANEL_DOMAIN=$(grep 'PANEL_DOMAIN=' "$dir/docker-compose.yml" | head -n 1 | sed 's/.*PANEL_DOMAIN=//; s/[[:space:]]*$//')
-
-        if [ -z "$PANEL_DOMAIN" ]; then
-            echo -e "${COLOR_RED}${LANG[CADDY_CONF_ERROR]}${COLOR_RESET}"
-            exit 1
-        fi
-
+    else
         if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
-            sed -i "s|https://{\$PANEL_DOMAIN}:8443 {|https://{\$PANEL_DOMAIN} {|g" "$dir/Caddyfile"
-
-            sed -i "/https:\/\/{\$PANEL_DOMAIN} {/a \    bind unix/{\$CADDY_SOCKET_PATH}" "$dir/Caddyfile"
-
-            sed -i "s|redir https://{\$PANEL_DOMAIN}:8443{uri} permanent|redir https://{\$PANEL_DOMAIN}{uri} permanent|g" "$dir/Caddyfile"
-
-            docker compose down remnawave-caddy > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
-            docker compose up -d remnawave-caddy > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
+            local caddyfile="$dir/Caddyfile" tmp="$dir/Caddyfile.8443tmp"
+            cp -p "$caddyfile" "${caddyfile}.8443bak"
+            sed "s|https://{\$PANEL_DOMAIN}:8443 {|https://{\$PANEL_DOMAIN} {|" "$caddyfile" > "$tmp"
+            # Only the TCP bind added with the door goes — the http->https
+            # redirect block carries a bind 0.0.0.0 of its own.
+            sed -i "/https:\/\/{\$PANEL_DOMAIN} {/,/^}/ { /^    bind 0.0.0.0$/d }" "$tmp"
+            panel_access_write "$caddyfile" "$tmp"
+            docker restart remnawave-caddy >/dev/null 2>&1
+            sleep 6
+            if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
+                cat "${caddyfile}.8443bak" > "$caddyfile"
+                docker restart remnawave-caddy >/dev/null 2>&1
+                rm -f "${caddyfile}.8443bak"
+                echo -e "${COLOR_RED}${LANG[PORT_8443_REJECTED]}${COLOR_RESET}"
+                return 1
+            fi
+            rm -f "${caddyfile}.8443bak"
         else
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
-        fi
-
-        if ufw status | grep -q "8443.*ALLOW"; then
-            ufw delete allow from 0.0.0.0/0 to any port 8443 proto tcp > /dev/null 2>&1
-            ufw reload > /dev/null 2>&1
-            if [ $? -ne 0 ]; then
-                echo -e "${COLOR_RED}${LANG[UFW_RELOAD_FAILED]}${COLOR_RESET}"
-                exit 1
-            fi
-            echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
-        else
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CLOSED]}${COLOR_RESET}"
         fi
     fi
+
+    if ufw status 2>/dev/null | grep -q "8443"; then
+        ufw delete allow 8443/tcp >/dev/null 2>&1
+        ufw reload >/dev/null 2>&1
+        if [ $? -ne 0 ]; then
+            echo -e "${COLOR_RED}${LANG[UFW_RELOAD_FAILED]}${COLOR_RESET}"
+            return 1
+        fi
+        echo -e "${COLOR_GREEN}${LANG[PORT_8443_CLOSED]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CLOSED]}${COLOR_RESET}"
+    fi
+    return 0
 }

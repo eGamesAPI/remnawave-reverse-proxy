@@ -15,6 +15,7 @@ XCHK_DIR="/opt/xray-checker"
 XCHK_CHECKER_IMAGE="kutovoys/xray-checker:latest"
 XCHK_STATUSPAGE_IMAGE="ghcr.io/mrvibecodic/xray-checker-statuspage:go-build"
 XCHK_SIDECAR_IMAGE="caddy:2"
+XCHK_SIDECAR_NGINX_IMAGE="nginx:1.30"
 XCHK_STATE_FILE="${DIR_REMNAWAVE}xray-checker.state"
 XCHK_MONITOR_USER="xray-checker"
 XCHK_PANEL_ENV="/opt/remnawave/.env"
@@ -86,6 +87,13 @@ xchk_port_busy() {
 xchk_env_get() {
     [ -r "$XCHK_PANEL_ENV" ] || return 1
     sed -n "s|^$1=||p" "$XCHK_PANEL_ENV" | head -n1
+}
+
+# Value from the stack's own .env — needed when the compose is regenerated
+# post-install, so the bot config and subscription URL survive the rewrite.
+xchk_stack_env_get() {
+    [ -r "$XCHK_DIR/.env" ] || return 1
+    sed -n "s|^$1=||p" "$XCHK_DIR/.env" | head -n1
 }
 
 # Squads gate host visibility: on a panel with internal squads a user with
@@ -306,45 +314,64 @@ xchk_remove_cert_mounts() {
     sed -i "\|/etc/letsencrypt/live/$cert_domain/|d" "$compose"
 }
 
+# Issue (or reuse) a certificate for the domain: an existing wildcard covers
+# it, otherwise the method menu (Cloudflare / ACME / Gcore) runs. Sets
+# XCHK_CERT_DOMAIN, and XCHK_CERT_FRESH=1 when certbot actually ran — the
+# sidecar rewrites renewal hooks only for a lineage it issued itself.
+xchk_obtain_cert() {
+    local domain="$1"
+    local base_domain
+    base_domain=$(extract_domain "$domain")
+    XCHK_CERT_FRESH=0
+    load_certificates_module
+    if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
+        XCHK_CERT_DOMAIN="$base_domain"
+        echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_CERT_WILDCARD]}" "$XCHK_CERT_DOMAIN")${COLOR_RESET}"
+        return 0
+    fi
+
+    local method email
+    echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_CF_DESC]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_GCORE_DESC]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_BUNNY_DESC]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
+    echo -e ""
+    while true; do
+        reading "${LANG[CERT_METHOD_CHOOSE]}" method
+        case "$method" in
+            1|2|3|4) break ;;
+            *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
+        esac
+    done
+    email=""
+    if [ "$method" = "2" ] || [ "$method" = "3" ]; then
+        reading "${LANG[EMAIL_PROMPT]}" email
+    fi
+    get_certificates "$domain" "$method" "$email" || return 1
+    check_certificates "$domain" >/dev/null 2>&1 || return 1
+    XCHK_CERT_DOMAIN="$domain"
+    if [ "$method" = "1" ] || [ "$method" = "3" ]; then
+        XCHK_CERT_DOMAIN="$base_domain"
+    fi
+    XCHK_CERT_FRESH=1
+    return 0
+}
+
 # Issue (or reuse) a certificate and add the site block to the live nginx.
 # Sets XCHK_CERT_DOMAIN and XCHK_MOUNTS_ADDED.
 xchk_wire_nginx() {
     local dir="$1" domain="$2" backend="${3:-8080}"
     local compose="$dir/docker-compose.yml" conf="$dir/nginx.conf"
-    load_certificates_module
 
-    local cert_domain="$domain"
-    local base_domain
-    base_domain=$(extract_domain "$domain")
-    if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-        cert_domain="$base_domain"
-        echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_CERT_WILDCARD]}" "$cert_domain")${COLOR_RESET}"
-    else
-        local method email
-        echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-        echo -e ""
-        while true; do
-            reading "${LANG[CERT_METHOD_CHOOSE]}" method
-            case "$method" in
-                1|2|3) break ;;
-                *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
-            esac
-        done
-        email=""
-        if [ "$method" = "2" ] || [ "$method" = "3" ]; then
-            reading "${LANG[EMAIL_PROMPT]}" email
-        fi
-        get_certificates "$domain" "$method" "$email" || return 1
-        check_certificates "$domain" >/dev/null 2>&1 || return 1
-        if [ "$method" = "1" ] || [ "$method" = "3" ]; then
-            cert_domain="$base_domain"
-        fi
-    fi
-    XCHK_CERT_DOMAIN="$cert_domain"
+    xchk_obtain_cert "$domain" || return 1
+    local cert_domain="$XCHK_CERT_DOMAIN"
 
     # compose edit with validation + rollback: a broken compose would take
     # the whole panel stack down on the next up. The conf gets its own
@@ -456,7 +483,13 @@ EOL
 xchk_unwire_nginx() {
     local dir="$1"
     local compose="$dir/docker-compose.yml" conf="$dir/nginx.conf"
-    [ -f "$conf" ] && sed -i "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$conf"
+    # The marker block goes through an inode-preserving rewrite: the conf
+    # is bind-mounted into nginx as a single file, and sed -i's rename
+    # would leave the container reading the old bytes through its mount.
+    if [ -f "$conf" ]; then
+        sed "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$conf" > "${conf}.xchktmp" \
+            && cat "${conf}.xchktmp" > "$conf" && rm -f "${conf}.xchktmp"
+    fi
     local cert_domain
     cert_domain=$(xchk_state_get "cert_domain")
     if [ "$(xchk_state_get "mounts")" = "1" ] && [ -n "$cert_domain" ] && [ -f "$compose" ]; then
@@ -531,6 +564,48 @@ xchk_unwire_caddy() {
     docker restart remnawave-caddy >/dev/null 2>&1
 }
 
+# Renewal hooks for a certificate the nginx sidecar owns: certbot must stop
+# the sidecar for a standalone challenge (it holds :80) and restart it after
+# any renewal — the certs are bind-mounted by file, so without a restart the
+# container keeps serving the old inode. Mirrors the panel's
+# configure_certbot_renewal_hooks, pointed at this module's container.
+xchk_sidecar_cert_hooks() {
+    local cert_domain="$1"
+    local renewal_conf="/etc/letsencrypt/renewal/$cert_domain.conf"
+    [ -f "$renewal_conf" ] || return 0
+    sed -i -E '/^(pre_hook|post_hook|renew_hook|deploy_hook) = /d' "$renewal_conf"
+    if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$renewal_conf"; then
+        printf 'pre_hook = /usr/bin/docker stop xray-checker-nginx\n' >> "$renewal_conf"
+        printf 'post_hook = /usr/bin/docker start xray-checker-nginx\n' >> "$renewal_conf"
+    else
+        printf 'deploy_hook = /usr/bin/docker restart xray-checker-nginx\n' >> "$renewal_conf"
+    fi
+}
+
+# A stand-alone box has no panel cron for certbot: install the same weekly
+# renew rule, with the sidecar containers riding along in the deploy hook.
+xchk_ensure_renew_cron() {
+    crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew" && return 0
+    local hook='docker restart remnawave-nginx remnawave-caddy xray-checker-nginx xray-checker-caddy 2>/dev/null || true'
+    add_cron_rule "0 5 * * 0 /usr/bin/certbot renew --quiet --deploy-hook \"$hook\""
+}
+
+# Wait out the container's start window (caddy takes a few seconds for its
+# first ACME run) and report its verdict; on failure the caller drops the
+# domain from state so the page can be published again once it's fixed.
+xchk_sidecar_check() {
+    local kind="${1:-caddy}"
+    local container="xray-checker-caddy"
+    [ "$kind" = "nginx" ] && container="xray-checker-nginx"
+    sleep 6
+    if xchk_container_up "$container"; then
+        return 0
+    fi
+    echo -e "${COLOR_RED}$(printf "${LANG[XCHK_SIDECAR_FAIL]}" "$container")${COLOR_RESET}"
+    docker logs --tail 15 "$container" 2>&1 | sed 's/^/  /'
+    return 1
+}
+
 # Ask for the status domain (optional) and wire TLS. Sets XCHK_DOMAIN,
 # XCHK_SIDECAR, XCHK_WS_KIND, XCHK_WS_DIR, XCHK_CERT_DOMAIN, XCHK_MOUNTS_ADDED.
 # Ask for the status domain (optional) and wire TLS. Sets XCHK_DOMAIN,
@@ -587,27 +662,51 @@ xchk_prepare_domain() {
         return 0
     fi
 
-    # No shared webserver: a stand-alone box can host its own caddy sidecar
-    # with automatic TLS — needs 80/443 free. When they are taken by a
-    # webserver this module does not manage (an own nginx/caddy, a hosting
-    # panel default), name the culprits instead of a bare "no public domain":
-    # the silent variant reads as a script bug, not as a port conflict.
+    # No shared webserver: a stand-alone box hosts its own sidecar with TLS —
+    # nginx with a Let's Encrypt cert (issued right here, like for the panel)
+    # or caddy with fully automatic TLS. Needs 80/443 free either way.
     if xchk_port_busy 80 || xchk_port_busy 443; then
         echo -e "${COLOR_YELLOW}${LANG[XCHK_PORT_HELD]}${COLOR_RESET}"
         ss -tlnp 2>/dev/null | awk '$4 ~ /:(80|443)$/' | sed 's/^/  /'
         echo -e "${COLOR_YELLOW}${LANG[XCHK_PORT_HELD_HINT]}${COLOR_RESET}"
         return 0
     fi
-    local use_sidecar
-    if reading_yn "$(printf "${LANG[XCHK_SIDECAR_CONFIRM]}" "$domain_input")" use_sidecar; then
-        XCHK_DOMAIN="$domain_input"
-        XCHK_SIDECAR=1
-        XCHK_WS_KIND="sidecar"
-        ufw allow 80/tcp comment 'ACME' >/dev/null 2>&1
-        ufw allow 443/tcp comment 'HTTPS' >/dev/null 2>&1
-    else
+    local sidecar_kind=""
+    while true; do
+        echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_SIDECAR_TITLE]}" "$domain_input")${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_SIDECAR_NGINX]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[XCHK_SIDECAR_NGINX_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_SIDECAR_CADDY]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[XCHK_SIDECAR_CADDY_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}0. ${LANG[XCHK_SIDECAR_SKIP]}${COLOR_RESET}"
+        echo -e ""
+        local ws_pick
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" ws_pick
+        case "$ws_pick" in
+            # A failed issuance loops back to the choice — caddy needs no
+            # cert dance and is one keypress away.
+            1) xchk_obtain_cert "$domain_input" || continue
+               [ "$XCHK_CERT_FRESH" = "1" ] && xchk_sidecar_cert_hooks "$XCHK_CERT_DOMAIN"
+               xchk_ensure_renew_cron
+               sidecar_kind="nginx"
+               break ;;
+            2) sidecar_kind="caddy"
+               break ;;
+            0) break ;;
+            *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
+        esac
+    done
+    if [ -z "$sidecar_kind" ]; then
         echo -e "${COLOR_YELLOW}${LANG[XCHK_DOMAIN_NONE]}${COLOR_RESET}"
+        return 0
     fi
+    XCHK_DOMAIN="$domain_input"
+    XCHK_SIDECAR=1
+    XCHK_SIDECAR_KIND="$sidecar_kind"
+    XCHK_WS_KIND="sidecar-$sidecar_kind"
+    ufw allow 80/tcp comment 'ACME' >/dev/null 2>&1
+    ufw allow 443/tcp comment 'HTTPS' >/dev/null 2>&1
     return 0
 }
 
@@ -712,7 +811,57 @@ EOL
     fi
 
     if [ "$XCHK_SIDECAR" = "1" ] && [ -n "$XCHK_DOMAIN" ]; then
-        cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
+        if [ "${XCHK_SIDECAR_KIND:-caddy}" = "nginx" ]; then
+            # The sidecar owns 80/443 directly (a clean box, no Xray, no
+            # panel): 80 answers a redirect, 443 serves the issued cert and
+            # proxies the page. Cert renewal restarts the container — the
+            # mounts are per-file, the running nginx would keep the old
+            # inode otherwise.
+            local cert_domain="${XCHK_CERT_DOMAIN:-$XCHK_DOMAIN}"
+            cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
+
+  xray-checker-nginx:
+    image: ${XCHK_SIDECAR_NGINX_IMAGE}
+    container_name: xray-checker-nginx
+    hostname: xray-checker-nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt/live/$cert_domain/fullchain.pem:/etc/nginx/ssl/$cert_domain/fullchain.pem:ro
+      - /etc/letsencrypt/live/$cert_domain/privkey.pem:/etc/nginx/ssl/$cert_domain/privkey.pem:ro
+EOL
+            cat > "$XCHK_DIR/nginx.conf" <<EOL
+server {
+    listen 80;
+    server_name $XCHK_DOMAIN;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    server_name $XCHK_DOMAIN;
+    listen 443 ssl;
+    http2 on;
+
+    ssl_certificate "/etc/nginx/ssl/$cert_domain/fullchain.pem";
+    ssl_certificate_key "/etc/nginx/ssl/$cert_domain/privkey.pem";
+
+    location / {
+        proxy_http_version 1.1;
+        proxy_pass http://127.0.0.1:${XCHK_SIDECAR_BACKEND:-8080};
+        proxy_set_header Host \$host;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOL
+        else
+            cat >> "$XCHK_DIR/docker-compose.yml" <<EOL
 
   xray-checker-caddy:
     image: ${XCHK_SIDECAR_IMAGE}
@@ -725,11 +874,12 @@ EOL
       - xchk-caddy-data:/data
       - xchk-caddy-config:/config
 EOL
-        cat > "$XCHK_DIR/Caddyfile" <<EOL
+            cat > "$XCHK_DIR/Caddyfile" <<EOL
 $XCHK_DOMAIN {
     reverse_proxy 127.0.0.1:${XCHK_SIDECAR_BACKEND:-8080}
 }
 EOL
+        fi
     fi
 
     if grep -q "xchk-caddy-data" "$XCHK_DIR/docker-compose.yml"; then
@@ -925,6 +1075,7 @@ xchk_install() {
     # 5) public domain — only for the modes that have a page: the
     # statuspage in a bundle, the checker's own web UI for kutovoys' page.
     XCHK_SIDECAR=0
+    XCHK_SIDECAR_KIND="caddy"
     XCHK_DOMAIN=""
     XCHK_UI_USER=""
     XCHK_UI_PASS=""
@@ -1006,6 +1157,16 @@ xchk_install() {
         docker logs --tail 20 xray-checker-statuspage 2>&1 | sed 's/^/  /'
     fi
 
+    # A dead sidecar means the promised URL is not actually there: drop the
+    # domain from state so "publish" stays available once it's fixed. The
+    # banner below then shows the local-only variant.
+    if [ "$XCHK_SIDECAR" = "1" ] && [ -n "$XCHK_DOMAIN" ]; then
+        if ! xchk_sidecar_check "$XCHK_SIDECAR_KIND"; then
+            xchk_state_set "$mode" "" "${XCHK_CERT_DOMAIN:-}" "0" "$XCHK_WS_KIND"
+            XCHK_DOMAIN=""
+        fi
+    fi
+
     # 8) final banner
     echo -e ""
     echo -e "${COLOR_GREEN}=== ${LANG[XCHK_DONE_TITLE]} ===${COLOR_RESET}"
@@ -1071,6 +1232,18 @@ xchk_status() {
             echo -e " ${LANG[XCHK_DONE_CHECKER_UI]} ${COLOR_WHITE}https://$domain${COLOR_RESET}"
         else
             echo -e " ${COLOR_GRAY}${LANG[XCHK_METRICS_LOCAL]}${COLOR_RESET}"
+        fi
+    fi
+
+    local ws sidecar
+    ws=$(xchk_state_get "webserver")
+    if [[ "$ws" == sidecar-* ]]; then
+        sidecar="xray-checker-caddy"
+        [ "$ws" = "sidecar-nginx" ] && sidecar="xray-checker-nginx"
+        if xchk_container_up "$sidecar"; then
+            echo -e " ${LANG[XCHK_STATUS_WEBSERVER]} (${ws#sidecar-}): ${COLOR_GREEN}${LANG[XCHK_RUNNING]}${COLOR_RESET}"
+        else
+            echo -e " ${LANG[XCHK_STATUS_WEBSERVER]} (${ws#sidecar-}): ${COLOR_RED}${LANG[XCHK_STOPPED]}${COLOR_RESET}"
         fi
     fi
 
@@ -1184,22 +1357,135 @@ xchk_setup_tg() {
     step_ok "${LANG[XCHK_TG_APPLIED]}"
 }
 
+# Publish the public page on an already-installed local-only stack: the same
+# domain flow as at install time. The compose is regenerated from the stack's
+# own .env (bot config and subscription URL survive), which is also how the
+# sidecar caddy service and the checker UI's basic auth land in the running
+# stack — appending services to a live compose in place is not worth the
+# YAML surgery a full rewrite avoids.
+xchk_publish() {
+    if ! xchk_installed; then
+        return 0
+    fi
+    local mode domain
+    mode=$(xchk_state_get "mode")
+    domain=$(xchk_state_get "domain")
+    if [ -n "$domain" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XCHK_PUBLISH_ALREADY]}" "$domain")${COLOR_RESET}"
+        return 0
+    fi
+    if [ ! -r "$XCHK_DIR/.env" ] || [ ! -w "$XCHK_DIR/docker-compose.yml" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_ENV_FAIL]}" "$XCHK_DIR/.env")${COLOR_RESET}"
+        return 1
+    fi
+    # An unknown mode must not reach the compose rewrite: xchk_write_stack
+    # with an empty mode would drop the statuspage from the stack.
+    if [ "$mode" != "bundle" ] && [ "$mode" != "checker" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_ENV_FAIL]}" "$XCHK_STATE_FILE")${COLOR_RESET}"
+        return 1
+    fi
+
+    # Feed the rewrite the values the stack already runs with.
+    XCHK_TG_TOKEN_VAL=$(xchk_stack_env_get XCHK_BOT_TOKEN)
+    XCHK_TG_ADMINS_VAL=$(xchk_stack_env_get XCHK_BOT_ADMIN_IDS)
+    XCHK_TG_NOTIFY_VAL=$(xchk_stack_env_get XCHK_NOTIFY_CHAT_IDS)
+    XCHK_TG_PROXY_VAL=$(xchk_stack_env_get XCHK_TG_PROXY)
+    local sub_url interval method
+    sub_url=$(xchk_stack_env_get XCHK_SUBSCRIPTION_URL)
+    interval=$(xchk_stack_env_get XCHK_CHECK_INTERVAL)
+    method=$(xchk_stack_env_get XCHK_CHECK_METHOD)
+    if [ -z "$sub_url" ] || [ -z "$interval" ] || [ -z "$method" ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_ENV_FAIL]}" "$XCHK_DIR/.env")${COLOR_RESET}"
+        return 1
+    fi
+
+    XCHK_SIDECAR=0
+    XCHK_SIDECAR_KIND="caddy"
+    XCHK_DOMAIN=""
+    XCHK_UI_USER=""
+    XCHK_UI_PASS=""
+    # The backend follows the mode: the statuspage in a bundle, the checker's
+    # own web UI (2112) otherwise — publishing it adds basic auth, the UI
+    # lists every proxy and must not go on the open internet unprotected.
+    local backend="2112" kind="ui"
+    if [ "$mode" = "bundle" ]; then
+        backend="8080"
+        kind="page"
+    fi
+    echo -e ""
+    xchk_prepare_domain "$backend" "$kind" || return 1
+    if [ -z "$XCHK_DOMAIN" ]; then
+        return 0
+    fi
+    if [ "$mode" != "bundle" ]; then
+        XCHK_UI_USER="checker"
+        XCHK_UI_PASS=$(xchk_gen_password)
+    fi
+
+    xchk_write_stack "$mode" "$sub_url" "$interval" "$method" || return 1
+    if [ "$XCHK_SIDECAR" = "1" ]; then
+        local sidecar_service="xray-checker-caddy"
+        [ "$XCHK_SIDECAR_KIND" = "nginx" ] && sidecar_service="xray-checker-nginx"
+        step_do "${LANG[XCHK_PULLING]}"
+        (cd "$XCHK_DIR" && docker compose pull "$sidecar_service") >/dev/null 2>&1 &
+        local pull_pid=$!
+        spinner "$pull_pid" "${LANG[XCHK_PULLING]}"
+        wait "$pull_pid"
+        if [ $? -ne 0 ]; then
+            echo -e "${COLOR_RED}${LANG[XCHK_PULL_FAIL]}${COLOR_RESET}"
+            return 1
+        fi
+    fi
+    step_do "${LANG[XCHK_PUBLISH_APPLYING]}"
+    (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
+    spinner $! "${LANG[XCHK_PUBLISH_APPLYING]}"
+
+    # The stack exists already — record the new state regardless of the
+    # container verdict, same as at install time.
+    xchk_state_set "$mode" "$XCHK_DOMAIN" "${XCHK_CERT_DOMAIN:-}" "${XCHK_MOUNTS_ADDED:-0}" "$XCHK_WS_KIND"
+
+    if ! xchk_container_up xray-checker; then
+        echo -e "${COLOR_RED}${LANG[XCHK_PUBLISH_FAIL]}${COLOR_RESET}"
+        docker logs --tail 20 xray-checker 2>&1 | sed 's/^/  /'
+        return 1
+    fi
+    if [ "$XCHK_SIDECAR" = "1" ] && ! xchk_sidecar_check "$XCHK_SIDECAR_KIND"; then
+        # Not actually published — clear the domain so the menu action can
+        # be retried once the sidecar's problem is fixed.
+        xchk_state_set "$mode" "" "${XCHK_CERT_DOMAIN:-}" "0" "$XCHK_WS_KIND"
+        return 1
+    fi
+    step_ok "${LANG[XCHK_PUBLISH_OK]}"
+    echo -e "${COLOR_WHITE}https://${XCHK_DOMAIN}${COLOR_RESET}"
+    if [ "$mode" != "bundle" ] && [ -n "$XCHK_UI_PASS" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XCHK_UI_CREDS]}" "$XCHK_UI_USER" "$XCHK_UI_PASS")${COLOR_RESET}"
+    fi
+    return 0
+}
+
 show_xray_checker_menu() {
-    local mode_label domain
+    local mode_label xchk_dom
     if xchk_installed; then
         if xchk_container_up xray-checker; then
             status_color="$COLOR_GREEN"; status_text="${LANG[XCHK_RUNNING]}"
         else
             status_color="$COLOR_RED"; status_text="${LANG[XCHK_STOPPED]}"
         fi
+        xchk_dom=$(xchk_state_get "domain")
     else
         status_color="$COLOR_GRAY"; status_text="${LANG[XCHK_NOT_INSTALLED]}"
+        xchk_dom=""
     fi
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[XCHK_MENU_TITLE]}${COLOR_RESET}"
     echo -e ""
     echo -e " ${status_color}${LANG[XCHK_MENU_TITLE]}: ${status_text}${COLOR_RESET}"
+    # The current public address rides in the header: it explains why the
+    # publish entry is absent once a domain exists.
+    if [ -n "$xchk_dom" ]; then
+        echo -e " ${LANG[XCHK_STATUS_DOMAIN]}: ${COLOR_WHITE}https://$xchk_dom${COLOR_RESET}"
+    fi
     # Authors ride along in the menu itself — the About entry is gone, and
     # the credit must survive whatever subset is installed.
     if xchk_with_statuspage; then
@@ -1209,20 +1495,30 @@ show_xray_checker_menu() {
     fi
     echo -e ""
 
+    # The publish entry exists only while the page is local-only; the rest
+    # renumber accordingly. Absent entries fall back to 99 — 0 would
+    # collide with the exit arm of the case below.
     local last=1
     if xchk_installed; then
+        local n=2
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_STATUS]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
+        if [ -z "$xchk_dom" ]; then
+            echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_PUBLISH]}${COLOR_RESET}"
+            n=3
+        fi
+        local opt_restart=$n opt_update=$((n + 1)) opt_tg=99
+        n=$((n + 2))
+        echo -e "${COLOR_YELLOW}${opt_restart}. ${LANG[XCHK_MENU_RESTART]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${opt_update}. ${LANG[XCHK_MENU_UPDATE]}${COLOR_RESET}"
         echo -e ""
         if xchk_with_statuspage; then
-            echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_TG]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}5. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-            last=5
-        else
-            echo -e "${COLOR_YELLOW}4. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
-            last=4
+            opt_tg=$n
+            n=$((n + 1))
+            echo -e "${COLOR_YELLOW}${opt_tg}. ${LANG[XCHK_MENU_TG]}${COLOR_RESET}"
         fi
+        local opt_uninstall=$n
+        last=$n
+        echo -e "${COLOR_YELLOW}${opt_uninstall}. ${LANG[XCHK_MENU_UNINSTALL]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_INSTALL]}${COLOR_RESET}"
     fi
@@ -1236,15 +1532,16 @@ show_xray_checker_menu() {
     if xchk_installed; then
         case $xchk_option in
             1) xchk_status; sleep 2; show_xray_checker_menu ;;
-            2) xchk_restart; sleep 2; show_xray_checker_menu ;;
-            3) xchk_update; sleep 2; show_xray_checker_menu ;;
-            4) if xchk_with_statuspage; then
-                   xchk_setup_tg
+            2) if [ -z "$xchk_dom" ]; then
+                   xchk_publish
                else
-                   xchk_uninstall
+                   printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                fi
                sleep 2; show_xray_checker_menu ;;
-            5) xchk_uninstall; sleep 2; show_xray_checker_menu ;;
+            "$opt_restart") xchk_restart; sleep 2; show_xray_checker_menu ;;
+            "$opt_update") xchk_update; sleep 2; show_xray_checker_menu ;;
+            "$opt_tg") xchk_setup_tg; sleep 2; show_xray_checker_menu ;;
+            "$opt_uninstall") xchk_uninstall; sleep 2; show_xray_checker_menu ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}" ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
                sleep 1
