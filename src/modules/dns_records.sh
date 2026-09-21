@@ -59,15 +59,22 @@ ensure_dns_record() {
 
     dns_saved_credentials_load
 
+    # A failed auto attempt has already printed its specific error (zone not
+    # found, rejected token, HTTP failure); the generic missing-record line
+    # would only repeat it.
+    local auto_attempted=0
     if [ -n "$BUNNY_API_KEY" ]; then
+        auto_attempted=1
         ensure_dns_record_bunny "$domain" "$base_domain" "$server_ip" && return 0
     elif [ -n "$GCORE_API_KEY" ]; then
+        auto_attempted=1
         ensure_dns_record_gcore "$domain" "$base_domain" "$server_ip" && return 0
     elif [ -n "$CLOUDFLARE_API_KEY" ]; then
+        auto_attempted=1
         ensure_dns_record_cloudflare "$domain" "$base_domain" "$server_ip" && return 0
     fi
 
-    printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MISSING]}${COLOR_RESET}\n" "$domain"
+    [ "$auto_attempted" = 0 ] && printf "${COLOR_YELLOW}${LANG[DNS_RECORD_MISSING]}${COLOR_RESET}\n" "$domain"
 
     local choice
     while true; do
