@@ -164,6 +164,7 @@ ensure_dns_record_bunny() {
         --data "{\"Type\":0,\"Ttl\":120,\"Name\":\"$record_name\",\"Value\":\"$server_ip\"}")
 
     if [ "$http_code" = "201" ]; then
+        DNS_RECORD_PROVIDER=bunny
         printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
         rm -f /tmp/bunny-dns.out
         return 0
@@ -247,6 +248,7 @@ ensure_dns_record_cloudflare() {
             -H "$auth_header" -H "X-Auth-Email: ${CLOUDFLARE_EMAIL:-}" -H "Content-Type: application/json" \
             --data "{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$server_ip\",\"ttl\":120,\"proxied\":false}")
         if echo "$response" | jq -e '.success == true' > /dev/null 2>&1; then
+            DNS_RECORD_PROVIDER=cloudflare
             printf "${COLOR_GREEN}${LANG[DNS_RECORD_UPDATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
             return 0
         fi
@@ -259,12 +261,28 @@ ensure_dns_record_cloudflare() {
         --data "{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$server_ip\",\"ttl\":120,\"proxied\":false}")
 
     if echo "$response" | jq -e '.success == true' > /dev/null 2>&1; then
+        DNS_RECORD_PROVIDER=cloudflare
         printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
         return 0
     fi
 
     echo -e "${COLOR_RED}${LANG[DNS_RECORD_FAILED]}: $(echo "$response" | jq -r '.errors[0].message // "unknown error"')${COLOR_RESET}"
     return 1
+}
+
+# A working key must refresh certbot's renewal credential too — a rolled key
+# left in gcore.ini would fail the next wildcard renewal. Called only after
+# the API accepted a request, so an invalid key never overwrites a good ini;
+# written and announced only when the content actually changes.
+gcore_remember_key() {
+    local gcore_ini="$HOME/.secrets/certbot/gcore.ini" gcore_body
+    gcore_body=$(printf 'dns_gcore_apitoken = %s' "$GCORE_API_KEY")
+    if [ ! -f "$gcore_ini" ] || [ "$(cat "$gcore_ini")" != "$gcore_body" ]; then
+        mkdir -p "$HOME/.secrets/certbot"
+        printf '%s\n' "$gcore_body" > "$gcore_ini"
+        chmod 600 "$gcore_ini" 2>/dev/null
+        printf "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}\n" "$gcore_ini"
+    fi
 }
 
 ensure_dns_record_gcore() {
@@ -284,6 +302,8 @@ ensure_dns_record_gcore() {
             --data "$body")
 
         if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+            DNS_RECORD_PROVIDER=gcore
+            gcore_remember_key
             printf "${COLOR_GREEN}${LANG[DNS_RECORD_CREATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
             rm -f /tmp/gcore-dns.out
             return 0
@@ -295,6 +315,8 @@ ensure_dns_record_gcore() {
                 -H "Authorization: APIKey ${GCORE_API_KEY}" -H "Content-Type: application/json" \
                 --data "$body")
             if [ "$http_code" = "200" ] || [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+                DNS_RECORD_PROVIDER=gcore
+                gcore_remember_key
                 printf "${COLOR_GREEN}${LANG[DNS_RECORD_UPDATED]}${COLOR_RESET}\n" "$domain" "$server_ip"
                 rm -f /tmp/gcore-dns.out
                 return 0

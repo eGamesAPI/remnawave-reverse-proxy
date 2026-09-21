@@ -793,65 +793,82 @@ handle_certificates() {
     done
 
     if [ "$need_certificates" = true ]; then
-        echo -e ""
-        echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
-        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_CF_DESC]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
-        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_GCORE_DESC]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
-        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_BUNNY_DESC]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
-        echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
-        echo -e "    ${COLOR_GRAY}${LANG[CERT_MANUAL_DESC]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-        echo -e ""
-
-        # A token already entered for the DNS record means the zone lives
-        # at that provider, so its method is the sensible default: prefill
-        # it (Enter accepts, the choice stays editable for ACME fans).
-        local cert_default=""
-        if [ -n "$BUNNY_API_KEY" ]; then
-            cert_default="3"
-        elif [ -n "$GCORE_API_KEY" ]; then
-            cert_default="2"
-        elif [ -n "$CLOUDFLARE_API_KEY" ]; then
-            cert_default="1"
-        fi
-        if [ -n "$cert_default" ]; then
-            echo -e "${COLOR_GREEN}${LANG[CERT_METHOD_SUGGESTED]}${COLOR_RESET}"
+        # A record just created through a provider's API names the zone's
+        # home: issue the wildcard with that method instead of asking again.
+        # A pre-existing matched record leaves the provider unknown, and
+        # only that case shows the full menu (ACME included).
+        local auto_provider=""
+        case "${DNS_RECORD_PROVIDER:-}" in
+            cloudflare) auto_provider="Cloudflare"; cert_method=1 ;;
+            gcore)      auto_provider="Gcore";      cert_method=2 ;;
+            bunny)      auto_provider="Bunny.net";  cert_method=3 ;;
+        esac
+        if [ -n "$auto_provider" ]; then
+            printf "${COLOR_GREEN}${LANG[CERT_METHOD_AUTO]}${COLOR_RESET}\n" "$auto_provider"
             echo -e ""
-        fi
+            # DNS-API methods still need the registration email (Enter skips).
+            [ "$cert_method" != "1" ] && reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
+        else
+            echo -e ""
+            echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}1. ${LANG[CERT_METHOD_CF]}${COLOR_RESET}"
+            echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_CF_DESC]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}2. ${LANG[CERT_METHOD_GCORE]}${COLOR_RESET}"
+            echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_GCORE_DESC]}${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}3. ${LANG[CERT_METHOD_BUNNY]}${COLOR_RESET}"
+            echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_BUNNY_DESC]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}4. ${LANG[CERT_METHOD_ACME]}${COLOR_RESET}"
+            echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}5. ${LANG[CERT_MANUAL]}${COLOR_RESET}"
+            echo -e "    ${COLOR_GRAY}${LANG[CERT_MANUAL_DESC]}${COLOR_RESET}"
+            echo -e ""
+            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+            echo -e ""
 
-        while true; do
-            if [ -n "$cert_default" ]; then
-                read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method
-                cert_default=""
-            else
-                reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+            # A token already entered for the DNS record means the zone lives
+            # at that provider, so its method is the sensible default: prefill
+            # it (Enter accepts, the choice stays editable for ACME fans).
+            local cert_default=""
+            if [ -n "$BUNNY_API_KEY" ]; then
+                cert_default="3"
+            elif [ -n "$GCORE_API_KEY" ]; then
+                cert_default="2"
+            elif [ -n "$CLOUDFLARE_API_KEY" ]; then
+                cert_default="1"
             fi
-            case "$cert_method" in
-                0)
-                    echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                    exit 1
-                    ;;
-                1|5)
-                    break
-                    ;;
-                2|3|4)
-                    reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
-                    break
-                    ;;
-                *)
-                    echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
-                    ;;
-            esac
-        done
+            if [ -n "$cert_default" ]; then
+                echo -e "${COLOR_GREEN}${LANG[CERT_METHOD_SUGGESTED]}${COLOR_RESET}"
+                echo -e ""
+            fi
+
+            while true; do
+                if [ -n "$cert_default" ]; then
+                    read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method
+                    cert_default=""
+                else
+                    reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+                fi
+                case "$cert_method" in
+                    0)
+                        echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                        exit 1
+                        ;;
+                    1|5)
+                        break
+                        ;;
+                    2|3|4)
+                        reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
+                        break
+                        ;;
+                    *)
+                        echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
+                        ;;
+                esac
+            done
+        fi
     else
         echo -e "${COLOR_GREEN}${LANG[CERTS_SKIPPED]}${COLOR_RESET}"
         cert_method="1"

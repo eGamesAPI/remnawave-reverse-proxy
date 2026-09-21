@@ -415,6 +415,7 @@ LANG[CERT_METHOD_ACME_DESC]="Без API-ключа, по одному домен
 LANG[CERT_MANUAL_DESC]="Загрузите свой fullchain.pem и privkey.pem"
 LANG[CERT_METHOD_CHOOSE]="Выберите действие (0-5):"
 LANG[CERT_METHOD_SUGGESTED]="API-ключ уже введён, предложен метод этого DNS-провайдера (Enter - принять)."
+LANG[CERT_METHOD_AUTO]="A-записи только что созданы через %s API: wildcard выпускаю тем же методом."
 LANG[EMAIL_PROMPT]="Введите ваш email для Let's Encrypt (можно пропустить - Enter):"
 LANG[CERTS_SKIPPED]="Все сертификаты уже существуют. Пропускаем генерацию."
 LANG[CERT_GENERATION_FAILED]="Не удалось сгенерировать сертификаты. Проверьте введенные данные и настройки DNS."

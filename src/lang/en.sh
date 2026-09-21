@@ -415,6 +415,7 @@ LANG[DOCKER_MIRRORS_SKIP]="Could not update daemon.json, Docker Hub mirrors were
 LANG[MODULE_LOAD_FAILED]="Failed to load %s module"
 LANG[CERT_METHOD_CHOOSE]="Select action (0-5):"
 LANG[CERT_METHOD_SUGGESTED]="A token was already entered — its DNS provider method is suggested (press Enter to accept)."
+LANG[CERT_METHOD_AUTO]="A-records were just created via the %s API: issuing the wildcard with the same method."
 LANG[EMAIL_PROMPT]="Enter your Let's Encrypt email (or press Enter to skip):"
 LANG[CERTS_SKIPPED]="All certificates already exist. Skipping generation."
 LANG[CERT_GENERATION_FAILED]="Certificate generation failed. Please check your input and DNS settings."
