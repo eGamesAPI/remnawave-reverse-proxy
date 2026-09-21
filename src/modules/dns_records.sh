@@ -116,10 +116,16 @@ ensure_dns_record_bunny() {
 
     # The working key refreshes certbot's renewal credential too — after a
     # key roll the old bunny.ini would fail the next wildcard renewal.
-    mkdir -p "$HOME/.secrets/certbot"
-    printf 'dns_bunny_api_key = %s\n' "$BUNNY_API_KEY" > "$HOME/.secrets/certbot/bunny.ini"
-    chmod 600 "$HOME/.secrets/certbot/bunny.ini" 2>/dev/null
-    echo -e "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}"
+    # Written and announced only when the content actually changes: one
+    # install passes through here once per domain.
+    local bunny_ini="$HOME/.secrets/certbot/bunny.ini" bunny_body
+    bunny_body=$(printf 'dns_bunny_api_key = %s' "$BUNNY_API_KEY")
+    if [ ! -f "$bunny_ini" ] || [ "$(cat "$bunny_ini")" != "$bunny_body" ]; then
+        mkdir -p "$HOME/.secrets/certbot"
+        printf '%s\n' "$bunny_body" > "$bunny_ini"
+        chmod 600 "$bunny_ini" 2>/dev/null
+        printf "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}\n" "$bunny_ini"
+    fi
 
     # Record names are relative to the zone (panel.example.com in the
     # example.com zone is just "panel"); the apex record is "@".
@@ -214,15 +220,20 @@ ensure_dns_record_cloudflare() {
 
     # The working token refreshes certbot's renewal credential too — after a
     # token roll the old cloudflare.ini would fail the next wildcard renewal.
-    mkdir -p "$HOME/.secrets/certbot"
+    # Written and announced only when the content actually changes: a token
+    # seeded from this very file must not re-announce itself per domain.
+    local cf_ini="$HOME/.secrets/certbot/cloudflare.ini" cf_body
     if [[ $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
-        printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_KEY" > "$HOME/.secrets/certbot/cloudflare.ini"
+        cf_body=$(printf 'dns_cloudflare_api_token = %s' "$CLOUDFLARE_API_KEY")
     else
-        printf 'dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s\n' \
-            "$CLOUDFLARE_EMAIL" "$CLOUDFLARE_API_KEY" > "$HOME/.secrets/certbot/cloudflare.ini"
+        cf_body=$(printf 'dns_cloudflare_email = %s\ndns_cloudflare_api_key = %s' "$CLOUDFLARE_EMAIL" "$CLOUDFLARE_API_KEY")
     fi
-    chmod 600 "$HOME/.secrets/certbot/cloudflare.ini" 2>/dev/null
-    echo -e "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}"
+    if [ ! -f "$cf_ini" ] || [ "$(cat "$cf_ini")" != "$cf_body" ]; then
+        mkdir -p "$HOME/.secrets/certbot"
+        printf '%s\n' "$cf_body" > "$cf_ini"
+        chmod 600 "$cf_ini" 2>/dev/null
+        printf "${COLOR_GRAY}${LANG[DNS_TOKEN_REFRESHED]}${COLOR_RESET}\n" "$cf_ini"
+    fi
 
     local record_id response
     record_id=$(curl -s --max-time 20 "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=A&name=$domain" \

@@ -907,4 +907,4 @@ LANG[XCHK_PORT_HELD_HINT]="Two ways to get the public page: add the status domai
 LANG[DNS_CREDS_REUSED]="Using the saved %s token from ~/.secrets/certbot."
 LANG[DNS_TOKEN_REJECTED]="Cloudflare rejected the token (%s). Enter a valid one — an API token or the global key:"
 LANG[DNS_TOKEN_REJECTED_FINAL]="The Cloudflare token was never accepted — try later or create a new one in the Cloudflare dashboard."
-LANG[DNS_TOKEN_REFRESHED]="The working token is saved to ~/.secrets/certbot/cloudflare.ini — certificate renewals will keep working."
+LANG[DNS_TOKEN_REFRESHED]="The working token is saved to %s — certificate renewals will keep working."

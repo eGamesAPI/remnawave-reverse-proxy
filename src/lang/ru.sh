@@ -907,4 +907,4 @@ LANG[XCHK_PORT_HELD_HINT]="Публичную страницу можно под
 LANG[DNS_CREDS_REUSED]="Использую сохранённый API-ключ %s из ~/.secrets/certbot."
 LANG[DNS_TOKEN_REJECTED]="Cloudflare отклонил токен (%s). Введите действующий API-токен или глобальный ключ:"
 LANG[DNS_TOKEN_REJECTED_FINAL]="Токен Cloudflare так и не принят, попробуйте позже или создайте новый в панели Cloudflare."
-LANG[DNS_TOKEN_REFRESHED]="Действующий токен сохранён в ~/.secrets/certbot/cloudflare.ini, продления сертификатов будут работать."
+LANG[DNS_TOKEN_REFRESHED]="Действующий токен сохранён в %s, продления сертификатов будут работать."
