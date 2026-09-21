@@ -1593,6 +1593,9 @@ declare -A PUBLIC_SUFFIXES=(
 # example.com.ru, panel.example.com → example.com.
 extract_domain() {
     local domain="${1,,}"
+    # Immune to a caller's IFS: the split below needs the spaces produced by
+    # the substitution, whatever separator the caller happens to run with.
+    local IFS=$' \t\n'
     local parts=(${domain//./ })
     local count=${#parts[@]}
     if [ "$count" -ge 3 ] && [ -n "${PUBLIC_SUFFIXES[${parts[count-2]}.${parts[count-1]}]+x}" ]; then
@@ -1685,8 +1688,9 @@ check_domain() {
     fi
 
     local ip_in_cloudflare=false
-    local IFS='.'
-    read -r a b c d <<<"$domain_ip"
+    # Command-scoped IFS: a function-wide `local IFS='.'` leaks into callees
+    # (ensure_dns_record) and breaks extract_domain's word split.
+    IFS='.' read -r a b c d <<<"$domain_ip"
     local domain_ip_int=$(( (a << 24) + (b << 16) + (c << 8) + d ))
 
     if [ ${#cf_array[@]} -gt 0 ]; then
@@ -1696,7 +1700,7 @@ check_domain() {
             fi
             local network=$(echo "$cidr" | cut -d'/' -f1)
             local mask=$(echo "$cidr" | cut -d'/' -f2)
-            read -r a b c d <<<"$network"
+            IFS='.' read -r a b c d <<<"$network"
             local network_int=$(( (a << 24) + (b << 16) + (c << 8) + d ))
             local mask_bits=$(( 32 - mask ))
             local range_size=$(( 1 << mask_bits ))
@@ -1721,8 +1725,17 @@ check_domain() {
     # not allowed (Reality selfsteal): offer to create or fix it through
     # the DNS API instead of showing a bare warning.
     if [ "$show_warning" = true ]; then
-        if load_dns_records_module && ensure_dns_record "$domain" "$allow_cf_proxy"; then
-            return 0
+        local dns_flow_ran=false
+        if load_dns_records_module; then
+            dns_flow_ran=true
+            ensure_dns_record "$domain" "$allow_cf_proxy" && return 0
+        fi
+
+        if [ "$dns_flow_ran" = true ]; then
+            # The DNS flow has already printed its specific error; the
+            # mismatch diagnosis below would only repeat it. Keep the choice.
+            reading_yn "${LANG[CONFIRM_PROMPT]}" confirm || return 2
+            return 1
         fi
 
         # The user skipped the fix — keep the original confirm choice.
