@@ -79,7 +79,11 @@ check_api() {
             echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_ATTEMPT]}" "$attempt" "$attempts")${COLOR_RESET}"
             if [ $attempt -lt $attempts ]; then
                 reading "${LANG[ENTER_CF_TOKEN]}" CLOUDFLARE_API_KEY
-                reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+                # API tokens carry uppercase letters and sign alone; only
+                # the legacy global key pairs with the email
+                if [[ ! $CLOUDFLARE_API_KEY =~ [A-Z] ]]; then
+                    reading "${LANG[ENTER_CF_EMAIL]}" CLOUDFLARE_EMAIL
+                fi
             fi
             attempt=$((attempt + 1))
         fi
