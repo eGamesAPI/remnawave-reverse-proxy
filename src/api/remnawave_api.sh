@@ -56,6 +56,7 @@ get_panel_token() {
 
     local auth_status=$(make_api_request "GET" "http://${domain_url}/api/auth/status" "")
     local oauth_enabled=false
+    local oauth_providers=""
 
     if [ -n "$auth_status" ]; then
         local github_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.github // false' 2>/dev/null)
@@ -63,9 +64,13 @@ get_panel_token() {
         local pocketid_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.pocketid // false' 2>/dev/null)
         local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.telegram // .response.authentication.tgAuth.enabled // false' 2>/dev/null)
 
-        if [ "$github_enabled" = "true" ] || [ "$yandex_enabled" = "true" ] || \
-           [ "$pocketid_enabled" = "true" ] || [ "$telegram_enabled" = "true" ]; then
+        [ "$github_enabled" = "true" ] && oauth_providers+="GitHub, "
+        [ "$yandex_enabled" = "true" ] && oauth_providers+="Yandex, "
+        [ "$pocketid_enabled" = "true" ] && oauth_providers+="Pocket ID, "
+        [ "$telegram_enabled" = "true" ] && oauth_providers+="Telegram, "
+        if [ -n "$oauth_providers" ]; then
             oauth_enabled=true
+            oauth_providers="${oauth_providers%, }"
         fi
     fi
 
@@ -89,7 +94,7 @@ get_panel_token() {
         if [ "$oauth_enabled" = true ]; then
             echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
             echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}${LANG[TELEGRAM_OAUTH_WARNING]}${COLOR_RESET}"
+            printf "${COLOR_YELLOW}${LANG[OAUTH_ENABLED_WARNING]}${COLOR_RESET}\n" "$oauth_providers"
             printf "${COLOR_YELLOW}${LANG[CREATE_API_TOKEN_INSTRUCTION]}${COLOR_RESET}\n" "$PANEL_DOMAIN"
             reading "${LANG[ENTER_API_TOKEN]}" token
             if [ -z "$token" ]; then
