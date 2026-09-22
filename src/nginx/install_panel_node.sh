@@ -480,13 +480,18 @@ server {
         index index.html;
     }
 
-    # OAuth2 Telegram login
+    # OAuth2 callbacks land on /oauth2/callback/:provider from every
+    # provider's redirect (GitHub, Yandex, Pocket ID, Telegram) without
+    # the access cookie. Referer can't tell them apart — Pocket ID is
+    # self-hosted and browsers may strip the header — but every real
+    # callback carries ?code and ?state, so only that knock gets through.
     location ^~ /oauth2/ {
-        
-        if (\$http_referer !~ "^https://oauth\.telegram\.org/") {
+        if (\$arg_code = "") {
             return 444;
         }
-        
+        if (\$arg_state = "") {
+            return 444;
+        }
         proxy_http_version 1.1;
         proxy_pass http://remnawave;
         proxy_set_header Host \$host;

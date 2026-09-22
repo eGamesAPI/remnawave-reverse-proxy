@@ -50,12 +50,37 @@ register_remnawave() {
     fi
 }
 
+panel_login_url() {
+    local dir="${1:-/opt/remnawave}"
+    local domain="${PANEL_DOMAIN:-}"
+    if [ -z "$domain" ]; then
+        domain=$(grep -h '^PANEL_DOMAIN=' "$dir/.env" "$dir/docker-compose.yml" 2>/dev/null | head -n1 \
+            | sed -e 's/^PANEL_DOMAIN=//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" -e 's/[[:space:]]*$//')
+    fi
+    [ -n "$domain" ] || return 1
+
+    local url="https://${domain}" line c1 c2
+    if [ -f "$dir/nginx.conf" ] && ! grep -q "auth_request /tinyauth_check" "$dir/nginx.conf"; then
+        line=$(grep -A 2 "map \$http_cookie \$auth_cookie" "$dir/nginx.conf" | grep "~*\w\+.*=" | head -n1)
+        c1=$(echo "$line" | grep -oP '~*\K\w+(?==)')
+        c2=$(echo "$line" | grep -oP '=\K\w+(?=")')
+        [ -n "$c1" ] && [ -n "$c2" ] && url="https://${domain}/auth/login?${c1}=${c2}"
+    elif [ -f "$dir/Caddyfile" ] && ! grep -q "authentication portal" "$dir/Caddyfile"; then
+        line=$(grep 'header +Set-Cookie' "$dir/Caddyfile" | head -n 1)
+        c1=$(echo "$line" | grep -oP 'Set-Cookie "\K[^=]+')
+        c2=$(echo "$line" | grep -oP 'Set-Cookie "[^=]+=\K[^;]+')
+        [ -n "$c1" ] && [ -n "$c2" ] && url="https://${domain}/auth/login?${c1}=${c2}"
+    fi
+    echo "$url"
+}
+
 get_panel_token() {
     TOKEN_FILE="${DIR_REMNAWAVE}/token"
     local domain_url="127.0.0.1:3000"
 
     local auth_status=$(make_api_request "GET" "http://${domain_url}/api/auth/status" "")
     local oauth_enabled=false
+    local oauth_providers=""
 
     if [ -n "$auth_status" ]; then
         local github_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.github // false' 2>/dev/null)
@@ -63,9 +88,13 @@ get_panel_token() {
         local pocketid_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.pocketid // false' 2>/dev/null)
         local telegram_enabled=$(echo "$auth_status" | jq -r '.response.authentication.oauth2.providers.telegram // .response.authentication.tgAuth.enabled // false' 2>/dev/null)
 
-        if [ "$github_enabled" = "true" ] || [ "$yandex_enabled" = "true" ] || \
-           [ "$pocketid_enabled" = "true" ] || [ "$telegram_enabled" = "true" ]; then
+        [ "$github_enabled" = "true" ] && oauth_providers+="GitHub, "
+        [ "$yandex_enabled" = "true" ] && oauth_providers+="Yandex, "
+        [ "$pocketid_enabled" = "true" ] && oauth_providers+="Pocket ID, "
+        [ "$telegram_enabled" = "true" ] && oauth_providers+="Telegram, "
+        if [ -n "$oauth_providers" ]; then
             oauth_enabled=true
+            oauth_providers="${oauth_providers%, }"
         fi
     fi
 
@@ -87,10 +116,10 @@ get_panel_token() {
 
     if [ -z "$token" ]; then
         if [ "$oauth_enabled" = true ]; then
-            echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
+            echo -e ""
             echo -e "${COLOR_RED}${LANG[WARNING_LABEL]}${COLOR_RESET}"
-            echo -e "${COLOR_YELLOW}${LANG[TELEGRAM_OAUTH_WARNING]}${COLOR_RESET}"
-            printf "${COLOR_YELLOW}${LANG[CREATE_API_TOKEN_INSTRUCTION]}${COLOR_RESET}\n" "$PANEL_DOMAIN"
+            printf "${COLOR_YELLOW}${LANG[OAUTH_ENABLED_WARNING]}${COLOR_RESET}\n" "$oauth_providers"
+            printf "${COLOR_YELLOW}${LANG[CREATE_API_TOKEN_INSTRUCTION]}${COLOR_RESET}\n" "$(panel_login_url)"
             reading "${LANG[ENTER_API_TOKEN]}" token
             if [ -z "$token" ]; then
                 echo -e "${COLOR_RED}${LANG[EMPTY_TOKEN_ERROR]}${COLOR_RESET}"

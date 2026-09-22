@@ -932,12 +932,15 @@ xchk_install() {
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MODE_BUNDLE]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MODE_CHECKER]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     while true; do
         reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" mode
         case "$mode" in
             1) mode="bundle"; break ;;
             2) mode="checker"; break ;;
+            0) echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_CANCELLED]}${COLOR_RESET}"
+               return 0 ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
         esac
     done
@@ -951,6 +954,7 @@ xchk_install() {
         echo -e "    ${COLOR_GRAY}${LANG[XCHK_PAGE_MRVIBE_DESC]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_PAGE_KUTOVOYS]}${COLOR_RESET}"
         echo -e "    ${COLOR_GRAY}${LANG[XCHK_PAGE_KUTOVOYS_DESC]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
         local page_pick
         while true; do
@@ -960,6 +964,8 @@ xchk_install() {
                 # kutovoys' page lives inside the checker itself — the stack
                 # stays checker-only, the UI just gets published with auth.
                 2) page="kutovoys"; mode="checker"; break ;;
+                0) echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_CANCELLED]}${COLOR_RESET}"
+                   return 0 ;;
                 *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
             esac
         done
@@ -984,11 +990,14 @@ xchk_install() {
         echo -e ""
         echo -e "${COLOR_YELLOW}1. $(printf "${LANG[XCHK_SUB_AUTO]}" "$XCHK_MONITOR_USER")${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_SUB_MANUAL]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
         while true; do
             reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" sub_choice
             case "$sub_choice" in
                 1|2) break ;;
+                0) echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_CANCELLED]}${COLOR_RESET}"
+                   return 0 ;;
                 *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "2" ;;
             esac
         done
@@ -1054,6 +1063,7 @@ xchk_install() {
     echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_METHOD_IP]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_METHOD_STATUS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}3. ${LANG[XCHK_METHOD_DOWNLOAD]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local method_default=1
     [ -n "$method_same_box" ] && method_default=2
@@ -1068,6 +1078,8 @@ xchk_install() {
             3) method="download"
                echo -e "${COLOR_YELLOW}${LANG[XCHK_METHOD_DOWNLOAD_WARN]}${COLOR_RESET}"
                break ;;
+            0) echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_CANCELLED]}${COLOR_RESET}"
+               return 0 ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "3" ;;
         esac
     done
@@ -1501,10 +1513,12 @@ show_xray_checker_menu() {
     local last=1
     if xchk_installed; then
         local n=2
+        local opt_publish=99
         echo -e "${COLOR_YELLOW}1. ${LANG[XCHK_MENU_STATUS]}${COLOR_RESET}"
         if [ -z "$xchk_dom" ]; then
-            echo -e "${COLOR_YELLOW}2. ${LANG[XCHK_MENU_PUBLISH]}${COLOR_RESET}"
-            n=3
+            opt_publish=$n
+            echo -e "${COLOR_YELLOW}${opt_publish}. ${LANG[XCHK_MENU_PUBLISH]}${COLOR_RESET}"
+            n=$((n + 1))
         fi
         local opt_restart=$n opt_update=$((n + 1)) opt_tg=99
         n=$((n + 2))
@@ -1532,12 +1546,7 @@ show_xray_checker_menu() {
     if xchk_installed; then
         case $xchk_option in
             1) xchk_status; sleep 2; show_xray_checker_menu ;;
-            2) if [ -z "$xchk_dom" ]; then
-                   xchk_publish
-               else
-                   printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
-               fi
-               sleep 2; show_xray_checker_menu ;;
+            "$opt_publish") xchk_publish; sleep 2; show_xray_checker_menu ;;
             "$opt_restart") xchk_restart; sleep 2; show_xray_checker_menu ;;
             "$opt_update") xchk_update; sleep 2; show_xray_checker_menu ;;
             "$opt_tg") xchk_setup_tg; sleep 2; show_xray_checker_menu ;;
