@@ -130,11 +130,6 @@ show_manage_panel_menu() {
             sleep 2
             show_manage_panel_menu
             ;;
-        6)
-            manage_panel_access
-            sleep 2
-            show_manage_panel_menu
-            ;;
         "$opt_access")
             manage_panel_access
             sleep 2
