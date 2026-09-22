@@ -463,7 +463,7 @@ https://{\$PANEL_DOMAIN} {
     encode
 
     # Open routes: the panel API carries its own Bearer-token auth, and
-    # Telegram OAuth callbacks must reach the backend untouched.
+    # OAuth2 callbacks must reach the backend untouched.
     route /api/* {
         reverse_proxy {\$BACKEND_URL} {
             header_up X-Real-IP {remote}
@@ -523,21 +523,16 @@ https://{\$PANEL_DOMAIN} {
         file_server
     }
 
-    @oauth2_bad {
+    # OAuth2 callbacks land here from every provider's redirect without
+    # the access cookie. Referer can't tell them apart — Pocket ID is
+    # self-hosted and browsers may strip the header — but every real
+    # callback carries ?code and ?state, so only that knock gets through.
+    @oauth2_callback {
         path /oauth2/*
-        not header Referer https://oauth.telegram.org/*
+        query code=* state=*
     }
 
-    handle @oauth2_bad {
-        abort
-    }
-
-    @oauth2 {
-        path /oauth2/*
-        header Referer https://oauth.telegram.org/*
-    }
-
-    handle @oauth2 {
+    handle @oauth2_callback {
         reverse_proxy {\$BACKEND_URL} {
             header_up Host {host}
         }
