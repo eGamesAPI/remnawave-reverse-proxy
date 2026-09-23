@@ -261,7 +261,7 @@ sr_ensure_user() {
 # outbound and rules in place and never touches anything else in the config.
 # The catch-all rule routes every inbound tag of this profile.
 sr_patch_public_profile() {
-    local profile_uuid="$1" host="$2" port="$3" password="$4" merged
+    local profile_uuid="$1" host="$2" port="$3" password="$4" mode="${5:-direct}" merged
     sr_get_profile "$profile_uuid" || return 1
     if [ "$(echo "$SR_PROFILE_TAGS" | jq 'length')" -eq 0 ]; then
         err_msg "${LANG[SR_PROFILE_NO_INBOUNDS]}"
@@ -269,9 +269,14 @@ sr_patch_public_profile() {
     fi
 
     step_do "$(printf "${LANG[SR_PATCH_PROFILE]}" "$SR_PROFILE_NAME")"
+    # direct: RU rules → DIRECT + a catch-all sending everything else into
+    #          the bridge (the article's topology);
+    # bridge: RU rules → the bridge and NO catch-all — untouched traffic keeps
+    #          whatever egress the profile already had (direct, typically).
     merged=$(echo "$SR_PROFILE_CONFIG" | jq -c \
         --arg ob "$SR_OUTBOUND_TAG" --arg host "$host" --argjson port "$port" \
-        --arg pass "$password" --arg method "$SR_SS_METHOD" --argjson tags "$SR_PROFILE_TAGS" '
+        --arg pass "$password" --arg method "$SR_SS_METHOD" --argjson tags "$SR_PROFILE_TAGS" \
+        --arg mode "$mode" '
         . as $cfg
         | ((($cfg.outbounds // []) | map(select(.tag != $ob))) +
            [{ tag: $ob, protocol: "shadowsocks",
@@ -281,10 +286,16 @@ sr_patch_public_profile() {
             + (if ($keep | any((.ip // []) | index("geoip:private"))) then [] else [{ ip: ["geoip:private"], outboundTag: "BLOCK" }] end)
             + (if ($keep | any((.domain // []) | index("geosite:private"))) then [] else [{ domain: ["geosite:private"], outboundTag: "BLOCK" }] end)
             + (if ($keep | any((.protocol // []) | index("bittorrent"))) then [] else [{ protocol: ["bittorrent"], outboundTag: "BLOCK" }] end)
-            + (if ($keep | any((.ip // []) | index("geoip:ru"))) then [] else [{ ip: ["geoip:ru"], outboundTag: "DIRECT" }] end)
-            + (if ($keep | any((.domain // []) | index("geosite:category-ru"))) then [] else [{ domain: ["geosite:category-ru"], outboundTag: "DIRECT" }] end)
-            + [{ inboundTag: $tags, outboundTag: $ob }]) as $rules
+            + (if ($keep | any((.ip // []) | index("geoip:ru"))) then [] else [{ ip: ["geoip:ru"], outboundTag: (if $mode == "bridge" then $ob else "DIRECT" end) }] end)
+            + (if ($keep | any((.domain // []) | index("geosite:category-ru"))) then [] else [{ domain: ["geosite:category-ru"], outboundTag: (if $mode == "bridge" then $ob else "DIRECT" end) }] end)
+            + (if $mode == "bridge" then [] else [{ inboundTag: $tags, outboundTag: $ob }] end)) as $rules
         | $cfg + { outbounds: $newobs, routing: (($cfg.routing // {}) + { rules: $rules }) }')
+    # Pre-existing RU rules sit earlier in the list and shadow ours in bridge
+    # mode — the operator should know instead of wondering why RU leaks.
+    if [ "$mode" = "bridge" ] \
+        && echo "$SR_PROFILE_CONFIG" | jq -e 'any((.routing.rules // [])[]; ((.ip // []) | index("geoip:ru")) or ((.domain // []) | index("geosite:category-ru")))' >/dev/null 2>&1; then
+        echo -e "${COLOR_YELLOW}${LANG[SR_BRIDGE_MODE_SHADOW]}${COLOR_RESET}"
+    fi
     sr_patch_profile_config "$profile_uuid" "$merged" || return 1
     step_ok "$(printf "${LANG[SR_PATCH_PROFILE_OK]}" "$SR_PROFILE_NAME")"
 }
@@ -599,6 +610,28 @@ sr_pick_public_profile() {
     sr_pick_public_profile "$skip_uuid"
 }
 
+sr_pick_route_mode() {
+    # Where RU traffic should leave from depends on the topology: the article
+    # has the entry node inside RU (RU sites leave it directly); a box abroad
+    # with an RU exit machine wants the exact opposite.
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[SR_ROUTE_MODE_TITLE]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[SR_ROUTE_MODE_DIRECT]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[SR_ROUTE_MODE_DIRECT_HINT]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[SR_ROUTE_MODE_BRIDGE]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[SR_ROUTE_MODE_BRIDGE_HINT]}${COLOR_RESET}"
+        echo -e ""
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SR_ROUTE_MODE_PICK
+        case $SR_ROUTE_MODE_PICK in
+            1) SR_ROUTE_MODE=direct; return 0 ;;
+            2) SR_ROUTE_MODE=bridge; return 0 ;;
+            *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" 2 ;;
+        esac
+    done
+}
+
 sr_setup() {
     local host ss_port profile_uuid inbound_uuid inbound_tag node_uuid
     local profile_created=no node_installed=no has_vless=no ib mode_choice
@@ -617,6 +650,8 @@ sr_setup() {
 
     reading "$(printf "${LANG[SR_PORT_PROMPT]}" "$SR_DEFAULT_PORT")" ss_port
     [ -n "$ss_port" ] || ss_port=$SR_DEFAULT_PORT
+
+    sr_pick_route_mode
 
     re_require_access_host "$host" || { echo -e "${COLOR_RED}$(printf "${LANG[SR_SSH_FAIL]}" "$host")${COLOR_RESET}"; return 1; }
 
@@ -685,6 +720,7 @@ sr_setup() {
 
     sr_state_set host "$host"
     sr_state_set port "$ss_port"
+    sr_state_set route_mode "$SR_ROUTE_MODE"
     sr_state_set node_uuid "$node_uuid"
     sr_state_set profile_uuid "$profile_uuid"
     sr_state_set profile_created "$profile_created"
@@ -698,7 +734,7 @@ sr_setup() {
 
     # --- public RU profile ----------------------------------------------------
     sr_pick_public_profile "$profile_uuid" || return 1
-    sr_patch_public_profile "$SR_PICKED_PROFILE" "$host" "$ss_port" "$SR_SS_PASSWORD" || return 1
+    sr_patch_public_profile "$SR_PICKED_PROFILE" "$host" "$ss_port" "$SR_SS_PASSWORD" "$SR_ROUTE_MODE" || return 1
 
     local ru_list
     ru_list=$(sr_state_get ru_profiles)
@@ -734,8 +770,13 @@ sr_setup() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[SR_DONE_TITLE]}${COLOR_RESET}"
     printf "${COLOR_YELLOW}${LANG[SR_DONE_LINE]}${COLOR_RESET}\n" "$host" "$ss_port"
-    echo -e "${COLOR_YELLOW}${LANG[SR_DONE_RULES]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}${LANG[SR_DONE_TEST]}${COLOR_RESET}"
+    if [ "$SR_ROUTE_MODE" = "bridge" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[SR_DONE_RULES_BRIDGE]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[SR_DONE_TEST_BRIDGE]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[SR_DONE_RULES_DIRECT]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[SR_DONE_TEST_DIRECT]}${COLOR_RESET}"
+    fi
     return 0
 }
 
