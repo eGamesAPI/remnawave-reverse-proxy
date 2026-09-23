@@ -603,6 +603,7 @@ sr_setup() {
     local host ss_port profile_uuid inbound_uuid inbound_tag node_uuid
     local profile_created=no node_installed=no has_vless=no ib mode_choice
 
+    load_api_module || return 1
     load_remote_exec_module || return 1
     get_panel_token || { echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}${COLOR_RESET}"; return 1; }
 
@@ -889,5 +890,9 @@ show_server_routing_menu() {
 }
 
 manage_server_routing() {
+    # sr_status_live talks to the panel from the menu header already, so the
+    # API module (get_panel_token / make_api_request / err_msg) must be in
+    # place before any menu renders — not only inside sr_setup.
+    load_api_module || return 1
     show_server_routing_menu
 }
