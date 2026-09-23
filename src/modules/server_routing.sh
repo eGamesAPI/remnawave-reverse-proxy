@@ -383,10 +383,88 @@ services:
 EOL
 }
 
-# Install the node on the DE box over SSH and register it in the panel.
+# Deploy the node container on the DE box over SSH: docker bootstrap, compose,
+# up, firewall, wait for the panel to report it connected. Panel-side objects
+# (bridge profile, node record) must already exist.
+sr_remote_deploy_node() {
+    local host="$1" ss_port="$2" public_key="$3" panel_ip attempt
+
+    step_do "${LANG[SR_REMOTE_DOCKER]}" >&2
+    # Mirrors install_packages from install_remnawave.sh: curl-or-wget
+    # download over get.docker.com plus the three proxy mirrors, shebang
+    # validation of what landed, an Aliyun-mirror retry of the script
+    # itself, and the distro docker.io only as the last resort. A minimal
+    # image with neither downloader gets curl from apt first.
+    if ! re_run_host "$host" 'if command -v docker >/dev/null 2>&1; then exit 0; fi
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
+    apt-get -o DPkg::Lock::Timeout=300 install -y curl
+fi
+docker_ok=""
+for docker_url in https://get.docker.com \
+    https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+    https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+    https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh; do
+    rm -f /tmp/get-docker.sh
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 "$docker_url" -o /tmp/get-docker.sh
+    else
+        wget -q --timeout=10 --tries=1 -O /tmp/get-docker.sh "$docker_url"
+    fi
+    if [ -s /tmp/get-docker.sh ] && head -1 /tmp/get-docker.sh | grep -q "^#!/bin/sh"; then
+        if sh /tmp/get-docker.sh || sh /tmp/get-docker.sh --mirror Aliyun; then
+            docker_ok=1
+            break
+        fi
+    fi
+done
+rm -f /tmp/get-docker.sh
+if [ -z "$docker_ok" ]; then
+    apt-get -o DPkg::Lock::Timeout=300 update -y
+    apt-get -o DPkg::Lock::Timeout=300 install -y docker.io docker-compose-v2 || apt-get -o DPkg::Lock::Timeout=300 install -y docker.io
+fi
+command -v docker >/dev/null 2>&1' >&2; then
+        err_msg "${LANG[SR_REMOTE_DOCKER_FAIL]}"
+        return 1
+    fi
+
+    step_do "${LANG[SR_REMOTE_COMPOSE]}" >&2
+    if ! printf '%s\n' "$(sr_remote_compose "$public_key")" \
+        | re_run_host "$host" "mkdir -p /opt/remnanode && cat > /opt/remnanode/docker-compose.yml" >&2; then
+        err_msg "${LANG[SR_REMOTE_COMPOSE_FAIL]}"
+        return 1
+    fi
+
+    step_do "${LANG[SR_REMOTE_UP]}" >&2
+    # get.docker.com ships the compose plugin; a distro docker.io may not —
+    # docker-compose (v1) is the last resort for the up itself.
+    if ! re_run_host "$host" 'cd /opt/remnanode && { docker compose up -d || docker-compose up -d; }' >&2; then
+        err_msg "${LANG[SR_REMOTE_UP_FAIL]}"
+        return 1
+    fi
+
+    panel_ip=$(sr_panel_public_ip)
+    if [ -n "$panel_ip" ]; then
+        re_run_host "$host" "command -v ufw >/dev/null 2>&1 || apt-get -o DPkg::Lock::Timeout=300 install -y ufw >/dev/null 2>&1; ufw allow from $panel_ip to any port 2222 proto tcp; ufw allow from $panel_ip to any port $ss_port proto tcp" >/dev/null 2>&1
+    fi
+
+    # The panel dials the node on 2222; poll until it reports connected.
+    for attempt in 1 2 3 4 5 6; do
+        sleep 10
+        step_do "$(printf "${LANG[SR_WAIT_CONNECT]}" "$attempt")" >&2
+        if sr_node_connected "$host"; then
+            step_ok "${LANG[SR_WAIT_CONNECT_OK]}" >&2
+            return 0
+        fi
+    done
+    echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_WAIT_CONNECT_FAIL]}" "$host")${COLOR_RESET}" >&2
+    return 0
+}
+
+# Register the node in the panel and deploy it on the DE box.
 # Sets SR_NODE_UUID / SR_PROFILE_UUID / SR_INBOUND_UUID / SR_INBOUND_TAG.
 sr_remote_install_node() {
-    local host="$1" ss_port="$2" panel_ip response public_key
+    local host="$1" ss_port="$2" response public_key
     local profile_uuid inbound_uuid inbound_tag node_uuid node_name
 
     # A bridge node carries no user secrets of its own; refuse to trample a
@@ -396,6 +474,9 @@ sr_remote_install_node() {
         return 1
     fi
 
+    # A fresh publicKey from the x25519 generator is a valid node SECRET_KEY;
+    # previously issued keys also stay valid (verified on a live panel), so
+    # one new key per install is fine.
     step_do "${LANG[SR_REMOTE_KEYGEN]}" >&2
     response=$(sr_api "GET" "/api/system/tools/x25519/generate")
     public_key=$(echo "$response" | jq -r '.response.keypairs[0].publicKey // empty')
@@ -426,45 +507,8 @@ sr_remote_install_node() {
     fi
     step_ok "${LANG[SR_CREATE_NODE_OK]}" >&2
 
-    step_do "${LANG[SR_REMOTE_DOCKER]}" >&2
-    if ! re_run_host "$host" "command -v docker >/dev/null 2>&1 || { curl -fsSL https://get.docker.com -o /tmp/get-docker.sh && sh /tmp/get-docker.sh; }" >&2; then
-        err_msg "${LANG[SR_REMOTE_DOCKER_FAIL]}"
-        return 1
-    fi
+    sr_remote_deploy_node "$host" "$ss_port" "$public_key" || return 1
 
-    step_do "${LANG[SR_REMOTE_COMPOSE]}" >&2
-    if ! printf '%s\n' "$(sr_remote_compose "$public_key")" \
-        | re_run_host "$host" "mkdir -p /opt/remnanode && cat > /opt/remnanode/docker-compose.yml" >&2; then
-        err_msg "${LANG[SR_REMOTE_COMPOSE_FAIL]}"
-        return 1
-    fi
-
-    step_do "${LANG[SR_REMOTE_UP]}" >&2
-    if ! re_run_host "$host" "cd /opt/remnanode && docker compose up -d" >&2; then
-        err_msg "${LANG[SR_REMOTE_UP_FAIL]}"
-        return 1
-    fi
-
-    panel_ip=$(sr_panel_public_ip)
-    if [ -n "$panel_ip" ]; then
-        re_run_host "$host" "command -v ufw >/dev/null 2>&1 || apt-get -o DPkg::Lock::Timeout=300 install -y ufw >/dev/null 2>&1; ufw allow from $panel_ip to any port 2222 proto tcp; ufw allow from $panel_ip to any port $ss_port proto tcp" >/dev/null 2>&1
-    fi
-
-    # The panel dials the node on 2222; poll until it reports connected.
-    local attempt
-    for attempt in 1 2 3 4 5 6; do
-        sleep 10
-        step_do "$(printf "${LANG[SR_WAIT_CONNECT]}" "$attempt")" >&2
-        if sr_node_connected "$host"; then
-            step_ok "${LANG[SR_WAIT_CONNECT_OK]}" >&2
-            SR_NODE_UUID="$node_uuid"
-            SR_PROFILE_UUID="$profile_uuid"
-            SR_INBOUND_UUID="$inbound_uuid"
-            SR_INBOUND_TAG="$inbound_tag"
-            return 0
-        fi
-    done
-    echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_WAIT_CONNECT_FAIL]}" "$host")${COLOR_RESET}" >&2
     SR_NODE_UUID="$node_uuid"
     SR_PROFILE_UUID="$profile_uuid"
     SR_INBOUND_UUID="$inbound_uuid"
@@ -669,40 +713,84 @@ sr_setup() {
     # --- bridge inbound: existing node or remote install ---------------------
     if sr_find_node_by_host "$host"; then
         node_uuid="$SR_NODE_UUID"
+
+        # A previous run may have died after creating the node record but
+        # before finishing the remote install — it left an SR-Bridge profile
+        # active on the node. Reuse it instead of stacking a second one.
+        local reuse_uuid="" reuse_tag
         if [ -n "$SR_NODE_PROFILE" ] && sr_get_profile "$SR_NODE_PROFILE" >/dev/null 2>&1; then
-            for ib in $(echo "$SR_PROFILE_CONFIG" | jq -r '.inbounds[]? | select(.protocol == "vless" or .protocol == "trojan") | .uuid' 2>/dev/null); do
-                case " $SR_NODE_INBOUNDS " in
-                    *" $ib "*) has_vless=yes ;;
-                esac
-            done
+            reuse_uuid=$(echo "$SR_PROFILE_CONFIG" | jq -r '.inbounds[]? | select((.tag // "") | startswith("SR_BRIDGE_SS_IN_")) | .uuid' | head -n1)
+            reuse_tag=$(echo "$SR_PROFILE_CONFIG" | jq -r '.inbounds[]? | select((.tag // "") | startswith("SR_BRIDGE_SS_IN_")) | .tag' | head -n1)
         fi
 
-        if [ "$has_vless" = "yes" ]; then
-            echo -e ""
-            echo -e "${COLOR_YELLOW}${LANG[SR_NODE_USERFACING_WARN]}${COLOR_RESET}"
-            if reading_yn "${LANG[SR_NODE_ADD_INBOUND]}" confirm_add; then
-                mode_choice=add
+        if [ -n "$reuse_uuid" ] && [ -n "$reuse_tag" ]; then
+            # Keep the inbound port in step with what was just asked (a retry
+            # with a different port must not silently keep the old one).
+            local cur_port fixed_cfg
+            cur_port=$(echo "$SR_PROFILE_CONFIG" | jq -r --arg t "$reuse_tag" '.inbounds[]? | select(.tag == $t) | .port')
+            if [ "$cur_port" != "$ss_port" ]; then
+                fixed_cfg=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg t "$reuse_tag" --argjson p "$ss_port" \
+                    '.inbounds |= map(if .tag == $t then .port = $p else . end)')
+                sr_patch_profile_config "$SR_NODE_PROFILE" "$fixed_cfg" || return 1
+            fi
+            profile_uuid="$SR_NODE_PROFILE"
+            inbound_uuid="$reuse_uuid"
+            inbound_tag="$reuse_tag"
+            step_ok "${LANG[SR_REUSE_PROFILE]}"
+
+            # The same dead run may have left the machine itself without its
+            # node — finish the deployment with a fresh link key when the
+            # remnanode container is not running there.
+            if ! re_run_host "$host" "docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnanode"; then
+                local response public_key
+                step_do "${LANG[SR_REMOTE_KEYGEN]}" >&2
+                response=$(sr_api "GET" "/api/system/tools/x25519/generate")
+                public_key=$(echo "$response" | jq -r '.response.keypairs[0].publicKey // empty')
+                if [ -z "$public_key" ]; then
+                    err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
+                    return 1
+                fi
+                step_ok "${LANG[SR_REMOTE_KEYGEN_OK]}" >&2
+                sr_remote_deploy_node "$host" "$ss_port" "$public_key" || return 1
+                node_installed=yes
+            fi
+        else
+            has_vless=no
+            if [ -n "$SR_NODE_PROFILE" ] && sr_get_profile "$SR_NODE_PROFILE" >/dev/null 2>&1; then
+                for ib in $(echo "$SR_PROFILE_CONFIG" | jq -r '.inbounds[]? | select(.protocol == "vless" or .protocol == "trojan") | .uuid' 2>/dev/null); do
+                    case " $SR_NODE_INBOUNDS " in
+                        *" $ib "*) has_vless=yes ;;
+                    esac
+                done
+            fi
+
+            if [ "$has_vless" = "yes" ]; then
+                echo -e ""
+                echo -e "${COLOR_YELLOW}${LANG[SR_NODE_USERFACING_WARN]}${COLOR_RESET}"
+                if reading_yn "${LANG[SR_NODE_ADD_INBOUND]}" confirm_add; then
+                    mode_choice=add
+                else
+                    mode_choice=switch
+                fi
             else
                 mode_choice=switch
             fi
-        else
-            mode_choice=switch
-        fi
 
-        if [ "$mode_choice" = "add" ]; then
-            sr_add_ss_inbound "$SR_NODE_PROFILE" "$ss_port" || return 1
-            profile_uuid="$SR_NODE_PROFILE"
-            inbound_uuid="$SR_INBOUND_UUID"
-            inbound_tag="$SR_INBOUND_TAG"
-        else
-            sr_create_bridge_profile "$ss_port" || return 1
-            profile_uuid="$SR_PROFILE_UUID"
-            inbound_uuid="$SR_INBOUND_UUID"
-            inbound_tag="$SR_INBOUND_TAG"
-            profile_created=yes
-            step_do "${LANG[SR_SWITCH_NODE]}"
-            sr_set_node_profile "$node_uuid" "$profile_uuid" "$inbound_uuid" || return 1
-            step_ok "${LANG[SR_SWITCH_NODE_OK]}"
+            if [ "$mode_choice" = "add" ]; then
+                sr_add_ss_inbound "$SR_NODE_PROFILE" "$ss_port" || return 1
+                profile_uuid="$SR_NODE_PROFILE"
+                inbound_uuid="$SR_INBOUND_UUID"
+                inbound_tag="$SR_INBOUND_TAG"
+            else
+                sr_create_bridge_profile "$ss_port" || return 1
+                profile_uuid="$SR_PROFILE_UUID"
+                inbound_uuid="$SR_INBOUND_UUID"
+                inbound_tag="$SR_INBOUND_TAG"
+                profile_created=yes
+                step_do "${LANG[SR_SWITCH_NODE]}"
+                sr_set_node_profile "$node_uuid" "$profile_uuid" "$inbound_uuid" || return 1
+                step_ok "${LANG[SR_SWITCH_NODE_OK]}"
+            fi
         fi
     else
         if ! reading_yn "$(printf "${LANG[SR_INSTALL_NODE_ASK]}" "$host")" confirm_install; then
