@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.71"
+SCRIPT_VERSION="3.5.72"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -8,7 +8,7 @@ LANG_FILE="${DIR_REMNAWAVE}selected_language"
 # Flip SOURCE_BRANCH to "dev" to point every download at the development
 # branch at once — no other URL in this file mentions the branch.
 SOURCE_REPO="eGamesAPI/remnawave-reverse-proxy"
-SOURCE_BRANCH="dev"
+SOURCE_BRANCH="main"
 SOURCE_BASE_URL="https://raw.githubusercontent.com/${SOURCE_REPO}/refs/heads/${SOURCE_BRANCH}"
 
 SCRIPT_URL="${SOURCE_BASE_URL}/install_remnawave.sh"
@@ -916,6 +916,7 @@ show_node_extensions_menu() {
     local opt_plugins="__none__"
     local opt_core="__none__"
     local opt_ssh="__none__"
+    local opt_routing="__none__"
 
     echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
     # Plugins are configured through the panel API, so a node-only box —
@@ -937,6 +938,13 @@ show_node_extensions_menu() {
     last=$((last + 1))
     opt_ssh=$last
     echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_SSH]}${COLOR_RESET}"
+    # Server routing drives the panel API end to end (and remote_exec for
+    # the DE box), so it needs a panel on this machine.
+    if panel_is_installed; then
+        last=$((last + 1))
+        opt_routing=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_ROUTING]}${COLOR_RESET}"
+    fi
 
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
@@ -966,6 +974,12 @@ show_node_extensions_menu() {
         "$opt_ssh")
             load_remote_exec_module
             manage_remote_exec
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_routing")
+            load_server_routing_module
+            manage_server_routing
             sleep 2
             show_node_extensions_menu
             ;;
@@ -1843,6 +1857,7 @@ load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" 
 load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
 load_node_core_module() { load_module "node_core" "modules" "${1:-false}"; }
 load_remote_exec_module() { load_module "remote_exec" "modules" "${1:-false}"; }
+load_server_routing_module() { load_module "server_routing" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
