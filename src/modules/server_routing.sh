@@ -54,6 +54,9 @@ sr_fetch_nodes() {
 }
 
 # Loads SR_NODE_* for the node whose address matches; rc=1 when absent.
+# The jq here sticks to the most conservative forms (no array building, no
+# index-after-pipe): the panel box may run an old jq, and this chain fires
+# on every wait-loop tick, so it must not have exotic corners.
 sr_find_node_by_host() {
     local want="$1" match
     SR_NODE_UUID=""
@@ -61,11 +64,14 @@ sr_find_node_by_host() {
     SR_NODE_INBOUNDS=""
     SR_NODE_CONNECTED=false
     sr_fetch_nodes || return 1
-    match=$(echo "$SR_NODES_JSON" | jq -c --arg addr "$want" '[.[] | select(.address == $addr)] | .[0]')
-    [ "$match" = "null" ] && return 1
-    SR_NODE_UUID=$(echo "$match" | jq -r '.uuid')
+    match=$(echo "$SR_NODES_JSON" | jq -c --arg addr "$want" '.[] | select(.address == $addr)' | head -n1)
+    [ -z "$match" ] && return 1
+    SR_NODE_UUID=$(echo "$match" | jq -r '.uuid // empty')
     SR_NODE_PROFILE=$(echo "$match" | jq -r '.configProfile.activeConfigProfileUuid // empty')
-    SR_NODE_INBOUNDS=$(echo "$match" | jq -r '.configProfile.activeInbounds // [] | join(" ")')
+    # activeInbounds arrives as uuid strings on some panel builds and as full
+    # inbound objects on others (seen live: join() chokes on the objects with
+    # "string and object cannot be added") — normalize both to a flat list.
+    SR_NODE_INBOUNDS=$(echo "$match" | jq -r '[.configProfile.activeInbounds[]? | if type == "string" then . else (.uuid // empty) end] | join(" ")')
     SR_NODE_CONNECTED=$(echo "$match" | jq -r '.isConnected // false')
     return 0
 }
