@@ -991,6 +991,7 @@ LANG[SR_SWITCH_NODE]="Переключаю ноду на bridge-профиль..
 LANG[SR_SWITCH_NODE_OK]="Нода переключена на bridge-профиль"
 LANG[SR_CREATE_PROFILE]="Создаю bridge-профиль с SS-инбаундом..."
 LANG[SR_CREATE_PROFILE_OK]="Bridge-профиль создан"
+LANG[SR_REUSE_PROFILE]="У ноды уже есть наш bridge-профиль — использую его"
 LANG[SR_CREATE_PROFILE_FAIL]="Инбаунд не найден в ответе панели"
 LANG[SR_ADD_INBOUND]="Добавляю SS-инбаунд в существующий профиль..."
 LANG[SR_ADD_INBOUND_OK]="SS-инбаунд добавлен"
