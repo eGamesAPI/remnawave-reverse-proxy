@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="Dev 3.5.69"
+SCRIPT_VERSION="Dev 3.5.70"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -915,6 +915,7 @@ show_node_extensions_menu() {
     local last=1
     local opt_plugins="__none__"
     local opt_core="__none__"
+    local opt_ssh="__none__"
 
     echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
     # Plugins are configured through the panel API, so a node-only box —
@@ -931,6 +932,11 @@ show_node_extensions_menu() {
         opt_core=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_CORE]}${COLOR_RESET}"
     fi
+    # SSH reach into the operator's other machines (the bridge node first):
+    # plain ssh, no panel dependency, so the entry is always applicable.
+    last=$((last + 1))
+    opt_ssh=$last
+    echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_SSH]}${COLOR_RESET}"
 
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
@@ -954,6 +960,12 @@ show_node_extensions_menu() {
         "$opt_core")
             load_node_core_module
             manage_xray_core
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_ssh")
+            load_remote_exec_module
+            manage_remote_exec
             sleep 2
             show_node_extensions_menu
             ;;
@@ -1830,6 +1842,7 @@ load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
 load_node_core_module() { load_module "node_core" "modules" "${1:-false}"; }
+load_remote_exec_module() { load_module "remote_exec" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
