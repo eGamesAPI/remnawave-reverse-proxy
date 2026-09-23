@@ -1,28 +1,91 @@
 #!/bin/bash
 # Module: remote_exec — SSH access
 
-RE_STATE_FILE="${DIR_REMNAWAVE}remote-exec.state"
+RE_LEGACY_STATE="${DIR_REMNAWAVE}remote-exec.state"
+RE_CONF_DIR="${DIR_REMNAWAVE}remote-exec"
+RE_ACTIVE_FILE="${DIR_REMNAWAVE}remote-exec.active"
 RE_KEY_DIR="${DIR_REMNAWAVE}ssh"
 RE_KEY_FILE="${RE_KEY_DIR}/id_ed25519"
 RE_KNOWN_HOSTS="${RE_KEY_DIR}/known_hosts"
 
-re_state_get() {
-    [ -r "$RE_STATE_FILE" ] || return 0
-    sed -n "s|^$1=||p" "$RE_STATE_FILE" | head -n1
+# Filename-safe target id for a host:port pair.
+re_target_name() {
+    printf '%s_%s' "$1" "$2" | tr -c 'a-zA-Z0-9._-' '_'
 }
 
-re_state_write() {
-    printf 'host=%s\nport=%s\nuser=%s\nkey=%s\n' "$1" "$2" "$3" "$4" > "$RE_STATE_FILE"
-    chmod 600 "$RE_STATE_FILE" 2>/dev/null
+re_target_write() {
+    local name
+    name=$(re_target_name "$1" "$2")
+    mkdir -p "$RE_CONF_DIR" 2>/dev/null
+    printf 'host=%s\nport=%s\nuser=%s\nkey=%s\nlabel=%s\n' "$1" "$2" "$3" "$4" "${5:-}" \
+        > "${RE_CONF_DIR}/${name}.target"
+    chmod 600 "${RE_CONF_DIR}/${name}.target" 2>/dev/null
+    printf '%s\n' "$name" > "$RE_ACTIVE_FILE"
+    chmod 600 "$RE_ACTIVE_FILE" 2>/dev/null
 }
 
-re_load_state() {
-    RE_HOST=$(re_state_get host)
-    RE_PORT=$(re_state_get port)
+# One-shot import of the pre-multi-target single state file.
+re_migrate_legacy() {
+    [ -f "$RE_LEGACY_STATE" ] || return 0
+    local host port user key
+    host=$(sed -n 's|^host=||p' "$RE_LEGACY_STATE" | head -n1)
+    port=$(sed -n 's|^port=||p' "$RE_LEGACY_STATE" | head -n1)
+    user=$(sed -n 's|^user=||p' "$RE_LEGACY_STATE" | head -n1)
+    key=$(sed -n 's|^key=||p' "$RE_LEGACY_STATE" | head -n1)
+    rm -f "$RE_LEGACY_STATE"
+    [ -n "$host" ] && [ -n "$key" ] || return 0
+    [ -n "$port" ] || port=22
+    [ -n "$user" ] || user=root
+    re_target_write "$host" "$port" "$user" "$key"
+}
+
+# Every configured target name, one per line; nothing when none exist.
+re_targets_list() {
+    local f
+    for f in "$RE_CONF_DIR"/*.target; do
+        [ -f "$f" ] || continue
+        basename "$f" .target
+    done
+}
+
+# Load target <name> into RE_HOST/RE_PORT/RE_USER/RE_KEY/RE_LABEL.
+re_target_load() {
+    local file="${RE_CONF_DIR}/$1.target"
+    [ -r "$file" ] || return 1
+    RE_HOST=$(sed -n 's|^host=||p' "$file" | head -n1)
+    RE_PORT=$(sed -n 's|^port=||p' "$file" | head -n1)
     [ -n "$RE_PORT" ] || RE_PORT=22
-    RE_USER=$(re_state_get user)
+    RE_USER=$(sed -n 's|^user=||p' "$file" | head -n1)
     [ -n "$RE_USER" ] || RE_USER=root
-    RE_KEY=$(re_state_get key)
+    RE_KEY=$(sed -n 's|^key=||p' "$file" | head -n1)
+    RE_LABEL=$(sed -n 's|^label=||p' "$file" | head -n1)
+    [ -n "$RE_HOST" ] && [ -n "$RE_KEY" ]
+}
+
+# Find the target whose host matches the address, whatever its port.
+re_target_load_by_host() {
+    local want="$1" name
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        if re_target_load "$name" && [ "$RE_HOST" = "$want" ]; then
+            return 0
+        fi
+    done < <(re_targets_list)
+    return 1
+}
+
+# Load the active (last used) target; with exactly one configured target
+# that one wins even without the pointer.
+re_load_state() {
+    re_migrate_legacy
+    local name
+    if [ -r "$RE_ACTIVE_FILE" ]; then
+        name=$(cat "$RE_ACTIVE_FILE" 2>/dev/null)
+        re_target_load "$name" && return 0
+    fi
+    name=$(re_targets_list | head -n1)
+    [ -n "$name" ] && re_target_load "$name"
+    return 0
 }
 
 re_is_configured() {
@@ -87,9 +150,11 @@ re_try_key() {
 }
 
 # Keys worth probing, most specific first; deduped, missing files skipped.
+# Custom keys remembered by earlier targets come first: a box the operator
+# already automated is the most likely to accept the same key again.
 re_candidate_keys() {
     {
-        re_state_get key
+        sed -n 's|^key=||p' "$RE_CONF_DIR"/*.target 2>/dev/null
         printf '%s\n' "$RE_KEY_FILE"
         printf '%s\n' /root/.ssh/id_ed25519 /root/.ssh/id_ecdsa /root/.ssh/id_rsa
     } | awk 'NF && !seen[$0]++'
@@ -110,8 +175,14 @@ reading_hidden() {
     echo ""
 }
 
-# Sets RE_HOST. Panel node list as numbered picks, manual entry as the
-# fallback (and the only option without a panel).
+# Free-text label shown in menus: echo -e would eat backslash escapes, so
+# they are stripped; length capped to keep one line per machine.
+re_clean_label() {
+    local l="${1//\\/}"
+    printf '%s' "${l:0:32}"
+}
+
+# Sets RE_HOST from the panel node list or manual entry; rc=1 — cancelled.
 re_pick_host() {
     local entries=() entry name address pick last
     if panel_is_installed && command -v jq >/dev/null 2>&1 && load_api_module; then
@@ -120,7 +191,8 @@ re_pick_host() {
 
     if [ "${#entries[@]}" -eq 0 ]; then
         reading "${LANG[RE_HOST_PROMPT]}" RE_HOST
-        return
+        [ -n "$RE_HOST" ] || return 1
+        return 0
     fi
 
     echo -e ""
@@ -136,16 +208,22 @@ re_pick_host() {
     last=$i
     echo -e "${COLOR_YELLOW}${last}. ${LANG[RE_NODES_MANUAL]}${COLOR_RESET}"
     echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
     reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick
     [ -z "$pick" ] && pick=1
 
+    if [ "$pick" = "0" ]; then
+        return 1
+    fi
     if [ "$pick" = "$last" ]; then
         reading "${LANG[RE_HOST_PROMPT]}" RE_HOST
-        return
+        [ -n "$RE_HOST" ] || return 1
+        return 0
     fi
     if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#entries[@]}" ]; then
         RE_HOST="${entries[$((pick - 1))]##*$'\t'}"
-        return
+        return 0
     fi
     printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
     sleep 1
@@ -243,20 +321,26 @@ re_setup_paste() {
     done
 }
 
+# Bootstrap a target; an optional argument preseeds the address (server
+# routing knows the bridge node's address and must not re-ask it).
 re_bootstrap() {
-    local host port user candidate keys=() choice
+    local host port user label candidate keys=() choice
     re_ensure_client || { echo -e "${COLOR_RED}${LANG[RE_NO_SSH]}${COLOR_RESET}"; return 1; }
+    re_migrate_legacy
 
-    RE_HOST=""
-    while [ -z "$RE_HOST" ]; do
-        re_pick_host
-    done
+    if [ -n "${1:-}" ]; then
+        RE_HOST="$1"
+    else
+        re_pick_host || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
+    fi
     host="$RE_HOST"
 
     reading "$(printf "${LANG[RE_PORT_PROMPT]}" 22)" port
     [ -n "$port" ] || port=22
     reading "$(printf "${LANG[RE_USER_PROMPT]}" root)" user
     [ -n "$user" ] || user=root
+    reading "${LANG[RE_LABEL_PROMPT]}" label
+    label=$(re_clean_label "$label")
 
     step_do "${LANG[RE_TRYING]}"
     while IFS= read -r candidate; do
@@ -265,7 +349,7 @@ re_bootstrap() {
     for candidate in "${keys[@]}"; do
         if re_try_key "$host" "$port" "$user" "$candidate"; then
             step_ok "$(printf "${LANG[RE_TRYING_OK]}" "$candidate")"
-            re_state_write "$host" "$port" "$user" "$candidate"
+            re_target_write "$host" "$port" "$user" "$candidate" "$label"
             echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
             return 0
         fi
@@ -290,21 +374,21 @@ re_bootstrap() {
         case $choice in
             1)
                 if re_setup_custom_key "$host" "$port" "$user"; then
-                    re_state_write "$host" "$port" "$user" "$RE_PICKED_KEY"
+                    re_target_write "$host" "$port" "$user" "$RE_PICKED_KEY" "$label"
                     echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
                     return 0
                 fi
                 ;;
             2)
                 if re_setup_password "$host" "$port" "$user"; then
-                    re_state_write "$host" "$port" "$user" "$RE_KEY_FILE"
+                    re_target_write "$host" "$port" "$user" "$RE_KEY_FILE" "$label"
                     echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
                     return 0
                 fi
                 ;;
             3)
                 if re_setup_paste "$host" "$port" "$user"; then
-                    re_state_write "$host" "$port" "$user" "$RE_KEY_FILE"
+                    re_target_write "$host" "$port" "$user" "$RE_KEY_FILE" "$label"
                     echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
                     return 0
                 fi
@@ -321,9 +405,9 @@ re_bootstrap() {
     done
 }
 
-# Run a command on the configured box; output and exit code pass through.
-re_run() {
-    re_load_state
+# Run a command on the currently loaded target; output and exit code pass
+# through. Callers either re_load_state() first or use re_run/re_run_host.
+re_ssh_run() {
     re_is_configured || return 1
     re_ensure_dirs
     ssh -i "$RE_KEY" -p "$RE_PORT" \
@@ -335,17 +419,39 @@ re_run() {
         "$RE_USER@$RE_HOST" "$@"
 }
 
-# Ready for re_run? Bootstraps interactively when not, so a caller (server
-# routing) can simply do: re_require_access || bail.
+# Run on the active (last used) target.
+re_run() {
+    re_load_state
+    re_ssh_run "$@"
+}
+
+# Run on the target bound to the given address; rc=2 when none is bound.
+re_run_host() {
+    local host="$1"
+    shift
+    re_migrate_legacy
+    re_target_load_by_host "$host" || return 2
+    re_ssh_run "$@"
+}
+
+# Ready for re_run? Bootstraps interactively when not.
 re_require_access() {
     re_load_state
     re_is_configured && return 0
     re_bootstrap
 }
 
+# Ready for re_run_host <address>? Bootstraps for that exact address when no
+# target is bound to it yet.
+re_require_access_host() {
+    re_migrate_legacy
+    re_target_load_by_host "$1" && [ -f "$RE_KEY" ] && return 0
+    re_bootstrap "$1"
+}
+
 re_test_connection() {
     local out
-    if out=$(re_run "hostname" 2>&1); then
+    if out=$(re_ssh_run "hostname" 2>&1); then
         step_ok "$(printf "${LANG[RE_TEST_OK]}" "$out")"
         return 0
     fi
@@ -358,87 +464,86 @@ re_run_menu() {
     reading "$(printf "${LANG[RE_CMD_PROMPT]}" "$RE_HOST")" cmd
     [ -z "$cmd" ] && return 0
     echo -e ""
-    re_run "$cmd"
+    re_ssh_run "$cmd"
     rc=$?
     echo -e ""
-    [ "$rc" -eq 0 ] || echo -e "${COLOR_RED}$(printf "${LANG[RE_RUN_FAIL]}" "$rc")${COLOR_RESET}"
+    # A remote answer may legitimately be empty (an empty ls, a quiet service
+    # reload) — a bare blank line reads as "nothing happened", so the outcome
+    # is stated on success too.
+    if [ "$rc" -eq 0 ]; then
+        echo -e "${COLOR_GRAY}${LANG[RE_RUN_DONE]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_RED}$(printf "${LANG[RE_RUN_FAIL]}" "$rc")${COLOR_RESET}"
+    fi
     return 0
 }
 
-re_revoke() {
-    local host="$RE_HOST" marker esc
-    # Only our own key ever added a line remotely; a custom-key setup just
-    # forgets the pairing.
+# Key kind for the status line: our service key vs the operator's own file.
+re_key_kind() {
+    if [ "$RE_KEY" = "$RE_KEY_FILE" ]; then
+        echo "${LANG[RE_KEY_KIND_OWN]}"
+    else
+        printf "${LANG[RE_KEY_KIND_CUSTOM]}" "$RE_KEY"
+    fi
+}
+
+# "(label)" suffix for list lines; empty when the machine has no name.
+re_label_suffix() {
+    [ -n "$RE_LABEL" ] && printf ' %s(%s)%s' "$COLOR_GRAY" "$RE_LABEL" "$COLOR_RESET"
+    return 0
+}
+
+# Rewrite the loaded target with a new label; empty input drops the name.
+re_rename_target() {
+    local label
+    reading "${LANG[RE_LABEL_PROMPT]}" label
+    label=$(re_clean_label "$label")
+    re_target_write "$RE_HOST" "$RE_PORT" "$RE_USER" "$RE_KEY" "$label"
+    RE_LABEL="$label"
+    step_ok "${LANG[RE_RENAME_OK]}"
+}
+
+# Revoke the currently loaded target: drop our line on that box, forget the
+# pairing. The shared local key survives while any other target still uses it.
+re_revoke_target() {
+    local host="$RE_HOST" name marker esc
+    name=$(re_target_name "$RE_HOST" "$RE_PORT")
+
     if [ "$RE_KEY" = "$RE_KEY_FILE" ] && [ -s "$RE_KEY_FILE.pub" ]; then
         marker=$(awk '{print $3}' "$RE_KEY_FILE.pub")
         esc=${marker//./\\.}
         step_do "${LANG[RE_REVOKING]}"
-        if ! re_run "sed -i '\\|${esc}|d' ~/.ssh/authorized_keys"; then
-            rm -rf "$RE_KEY_DIR"
-            rm -f "$RE_STATE_FILE"
+        if ! re_ssh_run "sed -i '\\|${esc}|d' ~/.ssh/authorized_keys"; then
+            rm -f "${RE_CONF_DIR}/${name}.target"
+            [ "$(cat "$RE_ACTIVE_FILE" 2>/dev/null)" = "$name" ] && rm -f "$RE_ACTIVE_FILE"
             echo -e "${COLOR_YELLOW}$(printf "${LANG[RE_REVOKE_REMOTE_FAIL]}" "$host" "$marker")${COLOR_RESET}"
             return 1
         fi
     fi
-    rm -rf "$RE_KEY_DIR"
-    rm -f "$RE_STATE_FILE"
+
+    rm -f "${RE_CONF_DIR}/${name}.target"
+    [ "$(cat "$RE_ACTIVE_FILE" 2>/dev/null)" = "$name" ] && rm -f "$RE_ACTIVE_FILE"
+
+    # The key is shared by all targets; wipe it only when the last one is gone.
+    if ! grep -qF "$RE_KEY_FILE" "$RE_CONF_DIR"/*.target 2>/dev/null; then
+        rm -rf "$RE_KEY_DIR"
+    fi
     step_ok "${LANG[RE_REVOKE_OK]}"
     return 0
 }
 
 show_remote_exec_menu() {
-    re_load_state
+    re_migrate_legacy
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[RE_TITLE]}${COLOR_RESET}"
     echo -e ""
 
-    if re_is_configured; then
-        echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_STATUS_READY]}" "$RE_USER" "$RE_HOST" "$RE_PORT")${COLOR_RESET}"
-        echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_STATUS_KEY]}" "$RE_KEY")${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}1. ${LANG[RE_TEST]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}2. ${LANG[RE_RUN]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}3. ${LANG[RE_RECONFIGURE]}${COLOR_RESET}"
-        echo -e "${COLOR_YELLOW}4. ${LANG[RE_REVOKE]}${COLOR_RESET}"
-        echo -e ""
-        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-        echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 4)" REMOTE_EXEC_OPTION
+    local names=() name pick i
+    while IFS= read -r name; do
+        [ -n "$name" ] && names+=("$name")
+    done < <(re_targets_list)
 
-        case $REMOTE_EXEC_OPTION in
-            1)
-                re_test_connection
-                sleep 2
-                show_remote_exec_menu
-                ;;
-            2)
-                re_run_menu
-                echo -e "${COLOR_GRAY}${LANG[RE_RUN_RETURN_HINT]}${COLOR_RESET}"
-                read -rp ""
-                show_remote_exec_menu
-                ;;
-            3)
-                re_bootstrap
-                sleep 2
-                show_remote_exec_menu
-                ;;
-            4)
-                if reading_yn "$(printf "${LANG[RE_REVOKE_CONFIRM]}" "$RE_HOST")" confirm_revoke; then
-                    re_revoke
-                fi
-                sleep 2
-                show_remote_exec_menu
-                ;;
-            0)
-                return 0
-                ;;
-            *)
-                printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" 4
-                sleep 1
-                show_remote_exec_menu
-                ;;
-        esac
-    else
+    if [ "${#names[@]}" -eq 0 ]; then
         echo -e " ${COLOR_GRAY}${LANG[RE_STATUS_NOT_CONFIGURED]}${COLOR_RESET}"
         echo -e ""
         echo -e "${COLOR_YELLOW}1. ${LANG[RE_SETUP]}${COLOR_RESET}"
@@ -462,7 +567,112 @@ show_remote_exec_menu() {
                 show_remote_exec_menu
                 ;;
         esac
+        return 0
     fi
+
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_TARGETS_COUNT]}" "${#names[@]}")${COLOR_RESET}"
+    echo -e ""
+    i=1
+    for name in "${names[@]}"; do
+        if re_target_load "$name"; then
+            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${RE_USER}@${RE_HOST}:${RE_PORT}${COLOR_RESET}$(re_label_suffix) ${COLOR_GRAY}— $(re_key_kind)${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${name}${COLOR_RESET}"
+        fi
+        i=$((i + 1))
+    done
+    local new=$i
+    echo -e "${COLOR_YELLOW}${new}. ${LANG[RE_NEW_TARGET]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" REMOTE_EXEC_OPTION
+
+    case $REMOTE_EXEC_OPTION in
+        0)
+            return 0
+            ;;
+        "$new")
+            re_bootstrap
+            sleep 2
+            show_remote_exec_menu
+            ;;
+        *)
+            if [ "$REMOTE_EXEC_OPTION" -ge 1 ] 2>/dev/null && [ "$REMOTE_EXEC_OPTION" -le "${#names[@]}" ]; then
+                re_target_menu "${names[$((REMOTE_EXEC_OPTION - 1))]}"
+                sleep 1
+                show_remote_exec_menu
+            else
+                printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$new"
+                sleep 1
+                show_remote_exec_menu
+            fi
+            ;;
+    esac
+}
+
+re_target_menu() {
+    local name="$1"
+    re_target_load "$name" || return 1
+    printf '%s\n' "$name" > "$RE_ACTIVE_FILE"
+
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[RE_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    if [ -n "$RE_LABEL" ]; then
+        echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_STATUS_LABEL]}" "$RE_LABEL")${COLOR_RESET}"
+    fi
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_STATUS_READY]}" "$RE_USER" "$RE_HOST" "$RE_PORT")${COLOR_RESET}"
+    echo -e " ${COLOR_GRAY}$(printf "${LANG[RE_STATUS_KEY]}" "$(re_key_kind)")${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[RE_TEST]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[RE_RUN]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}3. ${LANG[RE_RENAME]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}4. ${LANG[RE_RECONFIGURE]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}5. ${LANG[RE_REVOKE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" REMOTE_EXEC_OPTION
+
+    case $REMOTE_EXEC_OPTION in
+        1)
+            re_test_connection
+            sleep 2
+            re_target_menu "$name"
+            ;;
+        2)
+            re_run_menu
+            echo -e "${COLOR_GRAY}${LANG[RE_RUN_RETURN_HINT]}${COLOR_RESET}"
+            read -rp ""
+            re_target_menu "$name"
+            ;;
+        3)
+            re_rename_target
+            sleep 1
+            re_target_menu "$name"
+            ;;
+        4)
+            # The address may change during reconfiguration, so the flow
+            # returns to the machine list instead of this (possibly stale) name.
+            re_bootstrap
+            sleep 2
+            ;;
+        5)
+            if reading_yn "$(printf "${LANG[RE_REVOKE_CONFIRM]}" "$RE_HOST")" confirm_revoke; then
+                re_revoke_target
+            fi
+            sleep 2
+            ;;
+        0)
+            return 0
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" 5
+            sleep 1
+            re_target_menu "$name"
+            ;;
+    esac
 }
 
 manage_remote_exec() {
