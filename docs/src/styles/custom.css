@@ -106,6 +106,20 @@
   color: black !important;
 }
 
+/* Aside "tip" cards: galaxy ships them emerald green, which drowns in the
+   mint accent — recolored to the blue of "note" cards and NEW sidebar badges. */
+.starlight-aside--tip {
+  --galaxy-aside-accent: #3b82f6 !important;
+  --galaxy-aside-bg: #3b82f60d !important;
+  --galaxy-aside-border: #3b82f633 !important;
+  --galaxy-aside-code-bg: #3b82f614 !important;
+}
+:root[data-theme='dark'] .starlight-aside--tip {
+  --galaxy-aside-bg: #3b82f614 !important;
+  --galaxy-aside-border: #3b82f640 !important;
+  --galaxy-aside-code-bg: #3b82f61f !important;
+}
+
 /* ============================================================
    Splash home page — one viewport, no scrolling
    ============================================================ */

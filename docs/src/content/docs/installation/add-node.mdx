@@ -1,6 +1,6 @@
 ---
 title: Add node to panel
-description: Instructions for adding a Remnawave node to your panel.
+description: Manual and automatic installation of a Remnawave node on a separate server.
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -20,17 +20,63 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 ## Add node to panel
 
+Select `Install Remnawave components`, then `Add node to panel`.
+
+![Main menu EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+
+![Add node to panel EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel.webp)
+
+After confirming you are on the panel server, the script asks how to set up the node server: `Automatically over SSH` or `Manually`. For the automatic mode a web server is then chosen, nginx or Caddy. From there you enter the node domain and its name — the difference is only in who installs the node on the server.
+
+## Automatic installation
+
+The panel installs the node on its server by itself: it connects over SSH, prepares the machine and brings up the containers. You never log in to the node server.
+
+**What you need:**
+
+- a separate server running Debian or Ubuntu with root SSH access. A password is enough: the script installs its own key on the server and forgets the password.
+- the node domain, for example `node.example.com`.
+- port 443 free on the node server. For Caddy, port 80 must be free as well — the firewall rule is added automatically.
+
+:::tip[Domain and DNS]
+An A record already pointing at the node server makes the installation take the shortest path. Without one the script creates it through your DNS provider's API: Cloudflare, Gcore or Bunny.net, asking for a missing key once and remembering it. Working without an API is fine too: the script shows which record to add by hand.
+:::
+
+**How the installation goes:**
+
 <Steps>
 
-1. Select `Install Remnawave components`
+1. **SSH connection.** Access already configured in the [SSH access](/configuration/ssh-remote-access/) section is reused silently, without extra questions. For a domain without an A record the script asks for the server IP, and that is the only additional question.
 
-    ![Main menu EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+2. **DNS record.** When there is none, the script creates it. A zone whose certificate the panel already holds is detected automatically; for a new zone the script asks which DNS service to use.
 
-2. Then select `Add node to panel`
+3. **Server preparation.** The script installs packages and Docker with mirrors in case of blockings, brings up ufw with port 443 open and SSH preserved.
 
-    ![Add node to panel EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel.webp)
+4. **Link key and certificate.** First the script issues the link key between the node and the panel. Then the certificate: when the panel wildcard already covers the node domain (`*.example.com` covers `node.example.com`), its files are copied to the node and the panel ships renewals there itself. Otherwise the certificate is issued right on the node server via the DNS challenge and renewed there, without the panel. With Caddy it is simpler still: it issues and renews the certificate itself, the panel plays no part.
 
-3. Enter your new domain `selfsteal` which will be used to connect the node to the panel, as well as the name for the node.
+5. **Node start.** The script generates the camouflage website, writes the configuration and brings up the node and web server containers.
+
+6. **Connectivity check.** The script waits for the node to report to the panel. A brand-new DNS record can still be invisible to the panel's resolvers: the script then points the panel at the address directly, and the connection goes through right away.
+
+</Steps>
+
+When you see `The node server is set up, the node is running`, the installation is finished. Check that the node is green in the panel's Nodes section and that its domain opens the camouflage website in a browser.
+
+:::note[Replacing an existing node]
+If a node container already runs on the server, the script always asks before replacing it. An accidental reinstall is impossible.
+:::
+
+:::note[When something fails]
+The node is already created in the panel by then. The script offers a retry, and a refusal shows how to finish the installation manually.
+:::
+
+## Manual installation
+
+The script creates the node, profile and host in the panel, and you perform the server installation yourself.
+
+<Steps>
+
+1. Enter your new domain `selfsteal` which will be used to connect the node to the panel, as well as the name for the node.
 
     :::danger[Warning]
     Don't forget to add a DNS record for your domain.
@@ -38,7 +84,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
     ![Add node to panel2 EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel2.webp)
 
-4. After successfully adding the node to the panel, run the script on your new server, where the Remnawave node will be installed, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
+2. After successfully adding the node to the panel, run the script on your new server, where the Remnawave node will be installed, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
 
 </Steps>
 

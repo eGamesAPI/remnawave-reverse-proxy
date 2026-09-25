@@ -99,15 +99,22 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Modules', translations: { ru: 'Модули' },
+					items: [
+					{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
+					{ label: 'SSH remote access', slug: 'configuration/ssh-remote-access', translations: { ru: 'SSH-доступ к удалённым машинам' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
+					{ label: 'Server routing (bridge)', slug: 'configuration/server-routing', translations: { ru: 'Серверный роутинг (мост)' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
+					],
+				},
+				{
 					label: 'Configuration', translations: { ru: 'Настройка' },
 					items: [
 						{ label: 'Certwarden', slug: 'configuration/certwarden', translations: { ru: 'Certwarden' } },
-						{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
-						{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
+							{ label: 'Beszel', slug: 'configuration/beszel', translations: { ru: 'Beszel' } },
 						{ label: 'Netbird', slug: 'configuration/netbird', translations: { ru: 'Netbird' } },
 						{ label: 'Monitoring with Grafana and Victoria Metrics', slug: 'configuration/grafana-monitoring-setup', translations: { ru: 'Мониторинг через Grafana и Victoria Metrics' } },
 						{ label: 'SWAG (Secure Web Application Gateway)', slug: 'configuration/swag', translations: { ru: 'SWAG (Secure Web Application Gateway)' } },
-					],
+							],
 				},
 				{
 					label: 'Troubleshooting', translations: { ru: 'Устранение неполадок' },

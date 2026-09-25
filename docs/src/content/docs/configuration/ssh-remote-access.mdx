@@ -1,0 +1,101 @@
+---
+title: SSH access to remote machines
+description: "Manage a second server from the script menu: one-question access setup, running commands, updating a node over SSH"
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { FileTree } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
+import { Kbd } from 'starlight-kbd/components';
+
+The SSH access module lets you maintain a second server (a node machine, for example) straight from the script menu on the panel: update packages, restart the node container, read logs, without opening a second SSH session. Another module, [server routing](/configuration/server-routing/), uses this access automatically when it installs a node onto the second machine.
+
+- **Asked once.** The script installs its key and forgets the password; it is never written to disk.
+- **Your key stays yours.** Your own key is used by path, its contents never read or copied.
+- **One line in `authorized_keys`.** The script's key lives as a separate line marked `remnawave-reverse-proxy`, your lines are never touched.
+
+The entry lives in the script menu: **4. Node extensions → SSH access to a remote machine**.
+
+## First-time setup
+
+The script picks the easiest path for you:
+
+<Steps>
+
+1. **Probe existing keys.** If this machine already holds a key that opens the second server, the script takes it silently: no questions asked, nothing changes on the remote box.
+2. **Point at your own key.** If the key lives here but was not found automatically, give its path.
+3. **Root password, once.** The script asks for the password (hidden input), installs its own dedicated key and forgets it.
+4. **Manual paste.** For servers with password login disabled, the script prints its public key and the command to run on the second machine. The check repeats on <Kbd windows="Enter" />; leave the wait with <Kbd windows="Q" />.
+
+</Steps>
+
+:::tip[Check it right away]
+The module offers a connection test that prints the remote hostname. If you see it, access works.
+:::
+
+## Several servers
+
+There can be as many machines as you like:
+
+```
+SSH-доступ к удалённым машинам
+
+ Настроено машин: 2
+
+ 1. root@203.0.113.20:22 (Kazan)
+ 2. root@203.0.113.5:22 (Frankfurt)
+
+ 3. Настроить новую машину
+
+ 0. Выход
+```
+
+Each machine can be given a name: shown in brackets next to the address, renameable at any time. All machines share one key (the panel is a single point of access), but each machine keeps its own line in `authorized_keys`.
+
+## Running commands
+
+The "Run a command" item executes a command on the remote server, streams the output back and reports the exit code. Typical use:
+
+```bash title="Update packages on the remote machine"
+apt update && apt upgrade -y
+```
+
+```bash title="Update the node (commands start in /root, compose needs a cd)"
+cd /opt/remnanode && docker compose pull && docker compose up -d
+```
+
+```bash title="Node logs"
+docker logs remnanode --tail 50
+```
+
+:::note[Limitations]
+Interactive programs (`top`, `nano`, `mc`) won't work: no terminal is allocated on the remote side. Use plain text-output commands instead: `docker logs`, `free -h`, `df -h`.
+:::
+
+<details>
+<summary><strong>Under the hood: where it lives</strong></summary>
+
+All access data stays on the panel in `/usr/local/remnawave_reverse`:
+
+<FileTree>
+- /usr/local/remnawave_reverse
+  - remote-exec
+    - **203.0.113.20_22.target** (a machine: address, port, user, key, label)
+    - 203.0.113.5_22.target
+  - remote-exec.active (the machine used last)
+  - ssh
+    - id_ed25519 (the script's key, one for all machines)
+    - known_hosts
+</FileTree>
+
+The `.target` files are plain `key=value`; edit them by hand only as a last resort: the rename and reconfigure menus do the same thing more safely.
+
+</details>
+
+## Revoking access
+
+"Revoke access" removes the script's line from the remote `authorized_keys`, wipes the local key (when no other machine uses it) and forgets the machine. Your own access to the server is not affected in any way.
+
+---
+
+<LinkCard title="Server routing (bridge)" href="/configuration/server-routing/" description="Splitting traffic between two servers: this access is used there automatically." />

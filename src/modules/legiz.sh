@@ -188,9 +188,23 @@ manage_sub_page_upload() {
     sed -i -e '/^volumes:/i\' -e '' "$docker_compose_file"
 
     cd /opt/remnawave || return 1
-    docker compose down remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
-    docker compose up -d remnawave-subscription-page > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    # Guarded twin of manage_panel's helper: a failed `up` would leave the
+    # subscription page down behind a green success line.
+    command -v compose_run_spinner >/dev/null 2>&1 || compose_run_spinner() {
+        local desc="$1"; shift
+        local rc_file
+        rc_file=$(mktemp)
+        ( "$@" > /dev/null 2>&1; echo $? > "$rc_file" ) &
+        spinner $! "$desc"
+        local rc
+        rc=$(cat "$rc_file" 2>/dev/null)
+        rm -f "$rc_file"
+        return "${rc:-1}"
+    }
+    if ! compose_run_spinner "${LANG[WAITING]}" docker compose down remnawave-subscription-page \
+        || ! compose_run_spinner "${LANG[WAITING]}" docker compose up -d remnawave-subscription-page; then
+        echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_UP_FAIL]}" "/opt/remnawave" "/opt/remnawave")${COLOR_RESET}"
+        return 1
+    fi
     echo -e "${COLOR_GREEN}${LANG[SUB_PAGE_UPDATED_SUCCESS]}${COLOR_RESET}"
 }

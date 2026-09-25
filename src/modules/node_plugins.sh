@@ -1786,12 +1786,28 @@ np_tg_show_error() {
 }
 
 np_tg_recreate_stack() {
+    local rc_file
+    rc_file=$(mktemp)
     (
-        cd /opt/remnawave || exit 1
+        cd /opt/remnawave || { echo 1 > "$rc_file"; exit 1; }
         docker compose down > /dev/null 2>&1
         docker compose up -d > /dev/null 2>&1
+        echo $? > "$rc_file"
     ) &
     spinner $! "${LANG[WAITING]}"
+    # A failed `up` leaves the whole PANEL down with every error silenced —
+    # verify the container actually came back, retry once, then say it loudly.
+    if [ "$(cat "$rc_file" 2>/dev/null)" != "0" ] \
+        || ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnawave; then
+        ( cd /opt/remnawave && docker compose up -d ) >/dev/null 2>&1
+        sleep 3
+    fi
+    rm -f "$rc_file"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnawave; then
+        return 0
+    fi
+    echo -e "${COLOR_RED}${LANG[NP_TG_RECREATE_FAIL]}${COLOR_RESET}"
+    return 1
 }
 
 np_tg_disable() {
@@ -1811,8 +1827,9 @@ np_tg_disable() {
         fi
     done
     [ "$others_left" = "0" ] && np_env_set "IS_TELEGRAM_NOTIFICATIONS_ENABLED" "false"
-    np_tg_recreate_stack
-    step_ok "${LANG[NP_TG_DISABLED_OK]}"
+    if np_tg_recreate_stack; then
+        step_ok "${LANG[NP_TG_DISABLED_OK]}"
+    fi
 }
 
 np_setup_tg() {
@@ -1913,8 +1930,9 @@ np_setup_tg() {
         sed -i "s|^TELEGRAM_BOT_PROXY=|# TELEGRAM_BOT_PROXY=|" "$NP_PANEL_ENV"
     fi
     step_do "${LANG[NP_TG_RECREATING]}"
-    np_tg_recreate_stack
-    step_ok "${LANG[NP_TG_DONE]}"
+    if np_tg_recreate_stack; then
+        step_ok "${LANG[NP_TG_DONE]}"
+    fi
 }
 
 # Sets NP_STATUS_COLOR / NP_STATUS_TEXT for a plugin state.

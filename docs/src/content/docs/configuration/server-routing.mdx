@@ -1,0 +1,225 @@
+---
+title: Server routing (bridge)
+description: "Split traffic between two servers: the country-split bridge sends RU and foreign sites out of different IPs, while the per-user bridge gives everyone their own exit through an extra host in the subscription (VLESS Route)"
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { FileTree } from '@astrojs/starlight/components';
+import { LinkCard } from '@astrojs/starlight/components';
+import { Kbd } from 'starlight-kbd/components';
+
+Server routing connects two of your servers so that user traffic is split by direction: some sites leave the entry node directly, the rest travel a tunnel to the exit machine. Users notice nothing: same subscription, same addresses, same entry speed.
+
+- **Two directions.** Russian and foreign sites see different IPs, and which side sees which address is your choice.
+- **Shadowsocks transport.** One `chacha20-ietf-poly1305` tunnel between the servers, carrying everything including UDP.
+- **Panel-driven.** Profiles, squads and the service user are created automatically through the API.
+- **No node needed upfront.** The script installs it over SSH, Docker and the ufw port included.
+- **Second bridge type: VLESS Route.** Every user picks their own exit: the profile gets one more host in the subscription.
+
+The entry lives in the script menu: **4. Node extensions → Server routing**. Inside you pick the type: "Bridge via Shadowsocks" (country split, described below) or "Bridge via VLESS Route" (a personal exit for everyone, its own section). It requires a panel on this machine and a second machine.
+
+:::danger[Important]
+The squad the script creates for the bridge is a service one: it has no hosts, and a subscription built from it is empty. Users belong in the regular squads holding the entry node: the routing rules live in the server-side config and apply to everyone passing through the node.
+:::
+
+## How it works
+
+```
+user → entry node ─┬─ RU sites and IPs → direct (entry IP)
+                   └─ everything else → SS tunnel → exit machine
+```
+
+An outbound Shadowsocks entry and a set of rules are added to the entry node's profile: where Russian traffic goes and what stays direct. The exit machine runs a node with a single service inbound, it serves no users, it only terminates the tunnel.
+
+## You pick the direction
+
+The setup's key question is where Russian traffic should go, with a hint in the menu spelling out the consequences. The result looks like this:
+
+<Tabs>
+  <TabItem label="Entry node abroad">
+    **"Through the bridge" mode.** Foreign sites see the clean foreign IP of the entry, while Russian services get a native RU address from the exit machine. No "you are visiting from abroad" captchas on RU services.
+
+    | Service | Sees the IP of |
+    |---|---|
+    | [`yandex.ru/internet`](https://yandex.ru/internet) and RU sites | exit machine |
+    | [`ifconfig.me`](https://ifconfig.me) and foreign | entry node |
+  </TabItem>
+  <TabItem label="Entry node inside RU">
+    **"Straight from the entry node" mode.** RU sites stay on the Russian entry, foreign traffic goes through the second machine and gets a foreign address.
+
+    | Service | Sees the IP of |
+    |---|---|
+    | [`yandex.ru/internet`](https://yandex.ru/internet) and RU sites | entry node |
+    | [`ifconfig.me`](https://ifconfig.me) and foreign | exit machine |
+  </TabItem>
+</Tabs>
+
+The mode can be flipped at any time with a single "Set up again" run, and the direction switches without a reinstall: objects are reused.
+
+## Setup
+
+<Steps>
+
+1. **Exit machine.** Picked from the machines with [SSH access](/configuration/ssh-remote-access/) configured (or entered manually, and the script will then offer to set the access up).
+2. **Bridge port.** Defaults to `9999`; <Kbd windows="Enter" /> keeps it.
+3. **Traffic direction.** The table above.
+4. **Bridge name.** One name for every object in the panel; <Kbd windows="Enter" /> pre-fills the SSH machine's name: squad `Kazan bridge`, service user `bridge-kazan`, node and profile `Kazan-bridge`.
+5. **Node on the second machine.** If there is none, the script offers a fully remote install: Docker (with mirrors in case of blocks), the node container, panel registration and the ufw port. The exit machine needs no domain and no certificates: it just listens on a port and terminates the tunnel.
+6. **Entry node profile.** The outbound and rules go into it. More profiles can be attached later, for a second entry node, for example.
+
+</Steps>
+
+At the end the script verifies things live: whether the node is connected to the panel, whether the bridge port answers, and reminds you how to check the result from a client.
+
+<details>
+<summary><strong>Under the hood: the profile rules</strong></summary>
+
+In "through the bridge" mode the profile gets an outbound plus rules like these:
+
+```json
+{ "ip": ["geoip:private"], "outboundTag": "BLOCK" },
+{ "protocol": ["bittorrent"], "outboundTag": "BLOCK" },
+{ "ip": ["geoip:ru"], "outboundTag": "SR_BRIDGE_SS" },
+{ "domain": ["geosite:category-ru"], "outboundTag": "SR_BRIDGE_SS" }
+```
+
+In "straight from the entry node" mode the `geoip:ru` and `geosite:category-ru` rules switch their `outboundTag` to `DIRECT`, and a catch-all rule is added sending the profile's remaining traffic into `SR_BRIDGE_SS`. With the extended RU lists one more rule is appended, `ext:geosite-ruex.dat:ru-available-only-inside`, always pointed at the bridge.
+
+</details>
+
+## The bridge menu
+
+```text title="Server routing → Kazan"
+Серверный роутинг (мост): Kazan
+
+ Мост: 203.0.113.20:9999
+ Нода 203.0.113.20 подключена к панели
+ Порт 9999 отвечает с этой машины
+
+ 1. Подключить ещё профиль
+ 2. RU-списки: расширенные (вернуть стандартные)
+ 3. Настроить заново
+ 4. Переименовать мост
+ 5. Убрать роутинг
+```
+
+There can be several bridges: each with its own exit machine, its own panel objects and its own attached profiles. When a profile is already taken by another bridge, the script warns and offers to repoint it.
+
+## Bridge via VLESS Route
+
+The country-split bridge decides for everyone: one direction for the whole profile. The second type hands the choice to the user. The profile gets one more host in the subscription, "Germany → Moscow" for example, and picking it sends the user's whole connection through the bridge machine: Russian and foreign sites alike see its IP. The usual host keeps working as before.
+
+| Subscription host | RU sites see | Foreign sites see |
+|---|---|---|
+| Germany (usual) | whatever the profile's common rules say | same |
+| Germany → Moscow | the bridge machine's IP | the bridge machine's IP |
+
+Hosts are switched in the client at any moment, no reinstall and no second subscription: a phone can sit on "Germany → Moscow" for the banks while the desktop stays on the plain "Germany".
+
+### How it works
+
+The route number is a native host field in the panel (`vlessRouteId`). The panel bakes the number into the link's UUID, the entry node reads it and sends the connection through the matching outbound. The user configures nothing: they simply pick a host with a readable name.
+
+- **One line per exit.** As many exit machines as you have, that many lines, each with its own route number and its own traffic stats under the service user.
+- **Exit reuse.** A second line to the same exit needs no new machine: the same tunnel, its own service user and its own traffic accounting.
+- **Several entries.** The "Attach another profile" item adds a "its entry → this exit" host to a second entry node under the same route number.
+- **The geo split stays out of the way.** Route rules sit above the geo rules: a routed user leaves through their exit entirely, everyone else follows the profile's common rules.
+
+<details>
+<summary><strong>Under the hood: rules and the UUID</strong></summary>
+
+An outbound and numbered route rules are added to the entry profile:
+
+```json
+{ "vlessRoute": 1, "outboundTag": "DIRECT" },
+{ "vlessRoute": 2, "outboundTag": "SR_BRIDGE_SS_kazan" }
+```
+
+Route 1 is a service one: a direct egress from the entry node, and a host for it appears only when the profile already splits by country. The number lives in the UUID's third group: a user `9d5f42a1-7b3c-4d8e-…` on route 2 gets a link with `9d5f42a1-7b3c-0002-…`, and that exact pair of bytes is what the node reads as the number.
+
+</details>
+
+### Setup
+
+<Steps>
+
+1. **Exit machine.** A new machine over SSH, or an "Exit of bridge …" line from the existing ones: the same line, its own service user.
+2. **Port and name.** Defaults are `9999` and the SSH machine's name; <Kbd windows="Enter" /> keeps both.
+3. **Entry node profile.** VLESS only: the route travels inside the link's UUID, Trojan and Shadowsocks have none. Profiles already fed by other bridges are marked in the list.
+4. **Route number.** A free number is offered automatically, taken ones are not.
+5. **Host name.** Defaults to "entry → exit", "Germany → Moscow" for example.
+
+</Steps>
+
+From there the script works on its own: when a node container is already running on the machine without a panel record, it offers to attach it as is, with no reinstall. ufw on the exit machine enables itself: the ports already listening from outside stay open, everything else closes.
+
+### The bridge menu
+
+```text title="Server routing → Bridges via VLESS Route → Kazan"
+Мост через VLESS Route: Kazan (маршрут 2)
+
+ Мост: 203.0.113.20:9999
+ Нода 203.0.113.20 подключена к панели
+ Порт 9999 отвечает с этой машины
+ Хост в подписке: Germany → Kazan
+
+ 1. Скрыть хост из подписок
+ 2. Подключить ещё профиль
+ 3. Настроить заново
+ 4. Переименовать мост
+ 5. Убрать роутинг
+```
+
+The teardown is soft: the host leaves the subscriptions and the rules leave the profile, while a user holding an old cached link simply falls back to the common rules, nothing breaks.
+
+## Extended RU lists
+
+The stock `geosite:category-ru` rule covers every domain in the `.ru`, `.su`, `.рф` zones plus the named lists. But Russian services living on foreign domains never match it and stay behind.
+
+The "RU lists" item connects the lists from the [runetfreedom](https://github.com/runetfreedom/russia-v2ray-rules-dat) project, rebuilt daily. One rule is added, for the domains reachable only from inside Russia (`ext:ru-available-only-inside`):
+
+- **Nothing is replaced.** The stock rules stay exactly as they are, the new rule is added on top.
+- **Always a Russian egress.** Domains from the list get an RU exit in either mode.
+- **Installed on entry nodes.** Routing decisions happen on the entry node, so the lists file goes there, kept separate from the stock Xray geodata.
+- **Self-updating.** Every day at 4:30 a fresh copy is downloaded over mirrors and checksum-verified. Nodes restart only when the file actually changed.
+
+<details>
+<summary><strong>Under the hood: files and cron</strong></summary>
+
+<FileTree>
+- /usr/local/remnawave_reverse
+  - server-routing
+    - **kazan.bridge** (the bridge: machine, port, mode, panel objects)
+    - ruex.state (extended-lists state)
+    - ruex-update.sh (the daily updater)
+    - ruex-update.log (last 50 log lines)
+</FileTree>
+
+The `crontab -l` line looks like `30 4 * * * bash /usr/local/remnawave_reverse/server-routing/ruex-update.sh`. The updater downloads the dat over four mirrors, verifies the sha256 and spreads the file across the entry nodes; node restarts go through the panel API and happen only when the file really changed.
+
+</details>
+
+## Checking from a client
+
+Connect as a user from a regular squad (the one holding the entry node) and open two sites:
+
+<Tabs>
+  <TabItem label="RU direct">
+    [`yandex.ru/internet`](https://yandex.ru/internet) will show the entry node IP, [`ifconfig.me`](https://ifconfig.me) will show the exit machine IP.
+  </TabItem>
+  <TabItem label="RU through the bridge">
+    [`yandex.ru/internet`](https://yandex.ru/internet) will show the exit machine IP, [`ifconfig.me`](https://ifconfig.me) will show the entry node IP.
+  </TabItem>
+  <TabItem label="Route host (VLESS Route)">
+    Pick the bridge host in the client, "Germany → Moscow" for example: [`ifconfig.me`](https://ifconfig.me) will show the bridge machine's IP, while the usual host keeps its familiar address.
+  </TabItem>
+</Tabs>
+
+## Teardown
+
+"Remove routing" (Убрать роутинг) returns the profiles to direct egress, deletes the service user and the squad, and closes the bridge port in the remote ufw. The bridge node and its profile stay, they route nothing anymore and can be deleted in the panel by hand if unwanted.
+
+---
+
+<LinkCard title="SSH access to remote machines" href="/configuration/ssh-remote-access/" description="How the script gets access to the second machine and what can be done remotely." />

@@ -1292,8 +1292,15 @@ xchk_update() {
         echo -e "${COLOR_GREEN}${LANG[XCHK_UP_TO_DATE]}${COLOR_RESET}"
         return 0
     fi
+    local up_pid
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
-    spinner $! "${LANG[XCHK_UPDATING]}"
+    up_pid=$!
+    spinner "$up_pid" "${LANG[XCHK_UPDATING]}"
+    wait "$up_pid"
+    if [ $? -ne 0 ] || ! xchk_container_up xray-checker; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XCHK_UPDATE_FAIL]}" "docker compose up -d")${COLOR_RESET}"
+        return 1
+    fi
     step_ok "${LANG[XCHK_UPDATED]}"
 }
 

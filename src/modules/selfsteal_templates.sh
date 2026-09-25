@@ -250,6 +250,10 @@ randomhtml_pick_specific() {
 }
 
 randomhtml_apply() {
+    # Default target is the local web root; add_node's automatic deploy
+    # passes a staging directory instead — the panel's own /var/www/html
+    # must keep serving the panel's camouflage site.
+    local dest="${1:-/var/www/html}"
     local random_meta_id random_comment random_class_suffix random_title_suffix random_id_suffix
     random_meta_id=$(openssl rand -hex 16)
     random_comment=$(openssl rand -hex 8)
@@ -296,15 +300,15 @@ randomhtml_apply() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${TEMPLATE_DISPLAY_NAME:-$RandomHTML}"
 
-    mkdir -p /var/www/html/ || { echo "Failed to create /var/www/html/"; return 1; }
-    rm -rf /var/www/html/* /var/www/html/.[!.]* /var/www/html/..?* 2>/dev/null
+    mkdir -p "$dest/" || { randomhtml_fail "Failed to create $dest/"; return 1; }
+    rm -rf "$dest"/* "$dest"/.[!.]* "$dest"/..?* 2>/dev/null
 
     if [[ -d "${RandomHTML}" ]]; then
-        cp -a "${RandomHTML}"/. "/var/www/html/" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
-        echo "${LANG[TEMPLATE_COPY]}"
+        cp -a "${RandomHTML}"/. "$dest/" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
+        printf "${LANG[TEMPLATE_COPY]}\n" "$dest"
     elif [[ -f "${RandomHTML}" ]]; then
-        cp "${RandomHTML}" "/var/www/html/index.html" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
-        echo "${LANG[TEMPLATE_COPY]}"
+        cp "${RandomHTML}" "$dest/index.html" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
+        printf "${LANG[TEMPLATE_COPY]}\n" "$dest"
     else
         randomhtml_fail "${LANG[UNPACK_ERROR]}"
         return 1

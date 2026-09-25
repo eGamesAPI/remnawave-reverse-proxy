@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.4.1"
+SCRIPT_VERSION="3.5.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -335,7 +335,14 @@ reading() {
 }
 
 reading_yn() {
-    printf ' %s' "$(question "$1")"
+    # Every yes/no question shows the (y/n) hint; strings that already carry
+    # it (older wording) are passed through untouched.
+    local q="$1"
+    case "$q" in
+        *"(y/n)"*) ;;
+        *) q="$q (y/n)" ;;
+    esac
+    printf ' %s' "$(question "$q")"
     read_yn "$2"
 }
 
@@ -915,6 +922,8 @@ show_node_extensions_menu() {
     local last=1
     local opt_plugins="__none__"
     local opt_core="__none__"
+    local opt_ssh="__none__"
+    local opt_routing="__none__"
 
     echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
     # Plugins are configured through the panel API, so a node-only box —
@@ -930,6 +939,18 @@ show_node_extensions_menu() {
         last=$((last + 1))
         opt_core=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_CORE]}${COLOR_RESET}"
+    fi
+    # SSH reach into the operator's other machines (the bridge node first):
+    # plain ssh, no panel dependency, so the entry is always applicable.
+    last=$((last + 1))
+    opt_ssh=$last
+    echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_SSH]}${COLOR_RESET}"
+    # Server routing drives the panel API end to end (and remote_exec for
+    # the DE box), so it needs a panel on this machine.
+    if panel_is_installed; then
+        last=$((last + 1))
+        opt_routing=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_ROUTING]}${COLOR_RESET}"
     fi
 
     echo -e ""
@@ -954,6 +975,18 @@ show_node_extensions_menu() {
         "$opt_core")
             load_node_core_module
             manage_xray_core
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_ssh")
+            load_remote_exec_module
+            manage_remote_exec
+            sleep 2
+            show_node_extensions_menu
+            ;;
+        "$opt_routing")
+            load_server_routing_module
+            manage_server_routing
             sleep 2
             show_node_extensions_menu
             ;;
@@ -1830,6 +1863,8 @@ load_ipv6_module() { load_module "ipv6" "modules" "${1:-false}"; }
 load_selfsteal_templates_module() { load_module "selfsteal_templates" "modules" "${1:-false}"; }
 load_node_plugins_module() { load_module "node_plugins" "modules" "${1:-false}"; }
 load_node_core_module() { load_module "node_core" "modules" "${1:-false}"; }
+load_remote_exec_module() { load_module "remote_exec" "modules" "${1:-false}"; }
+load_server_routing_module() { load_module "server_routing" "modules" "${1:-false}"; }
 load_legiz_module() { load_module "legiz" "modules" "${1:-false}"; }
 load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
@@ -1855,6 +1890,22 @@ if ! load_language; then
 fi
 
 install_script_if_missing
+
+# Non-interactive package bootstrap for remote node deploys: add_node's
+# automatic mode pushes this script to the node server over SSH and runs
+# it with this flag, reusing install_packages verbatim (docker, ufw with
+# 443 open, BBR) instead of shipping a second drifting copy of that logic.
+# The caller preseeds selected_language so load_language never prompts.
+if [ "${1:-}" = "--bootstrap-packages" ]; then
+    # install_packages ends with clear, which needs a working terminal:
+    # over a non-pty ssh it exits 1 (even TERM=dumb has no clear capability)
+    # and poisons the exit code the panel reads. A stub fixes that for the
+    # whole run; the interactive paths below are never reached.
+    clear() { :; }
+    install_packages
+    exit $?
+fi
+
 check_update_status
 show_menu
 
