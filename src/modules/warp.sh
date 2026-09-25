@@ -164,6 +164,7 @@ warp_patch_config() {
 manage_warp_native() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[WARP_NATIVE_MENU]}${COLOR_RESET}"
+    echo -e " ${COLOR_GRAY}${LANG[WARP_DOC_LINK]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[WARP_UNINSTALL]}${COLOR_RESET}"

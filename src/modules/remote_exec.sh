@@ -32,8 +32,9 @@ re_migrate_legacy() {
     port=$(sed -n 's|^port=||p' "$RE_LEGACY_STATE" | head -n1)
     user=$(sed -n 's|^user=||p' "$RE_LEGACY_STATE" | head -n1)
     key=$(sed -n 's|^key=||p' "$RE_LEGACY_STATE" | head -n1)
+    # Validate BEFORE removing: a partial read must not destroy the only copy.
+    { [ -n "$host" ] && [ -n "$key" ]; } || return 0
     rm -f "$RE_LEGACY_STATE"
-    [ -n "$host" ] && [ -n "$key" ] || return 0
     [ -n "$port" ] || port=22
     [ -n "$user" ] || user=root
     re_target_write "$host" "$port" "$user" "$key"
@@ -113,10 +114,14 @@ re_ensure_sshpass() {
 
 # Marker on every key we install: identifies our line in authorized_keys for
 # revocation and shows up in sshd logs as "this was the panel, not the human".
+# Quotes, backslashes and whitespace are stripped: the pubkey is interpolated
+# into single-quoted remote commands and a sed address on revoke — one stray
+# character in PANEL_DOMAIN would break both.
 re_key_comment() {
     local domain
     domain=$(sed -n 's/^PANEL_DOMAIN=//p' /opt/remnawave/.env 2>/dev/null | head -n1 | tr -d '"')
-    echo "remnawave-reverse-proxy@${domain:-$(hostname)}"
+    domain=$(printf '%s' "${domain:-$(hostname)}" | tr -d "'\\" | tr -d '[:space:]')
+    echo "remnawave-reverse-proxy@${domain:-localhost}"
 }
 
 re_generate_key() {
@@ -136,11 +141,14 @@ re_pubkey() {
 }
 
 # Silent publickey probe: BatchMode keeps it from ever waiting on a prompt.
+# -n keeps ssh from draining the caller's stdin — a probe that ate the input
+# stream left every later read in the interactive setup at EOF (seen live: a piped
+# answers file died exactly here). Data-shipping ssh calls must NOT copy this.
 re_try_key() {
     local host="$1" port="$2" user="$3" key="$4"
     [ -r "$key" ] || return 1
     re_ensure_dirs
-    ssh -i "$key" -p "$port" \
+    ssh -n -i "$key" -p "$port" \
         -o BatchMode=yes \
         -o ConnectTimeout=8 \
         -o StrictHostKeyChecking=accept-new \
@@ -434,6 +442,27 @@ re_run_host() {
     re_ssh_run "$@"
 }
 
+# re_run_host with ssh -n: for remote commands that read no stdin (checks,
+# status dumps, rule pushes). Keeps the CALLER's input stream intact — a
+# plain re_run_host between interactive prompts eats the piped answers and every
+# later read hits EOF. Data-shipping calls (cat > file, tar -xf -) must use
+# re_run_host: -n would cut their payload.
+re_run_host_n() {
+    local host="$1"
+    shift
+    re_migrate_legacy
+    re_target_load_by_host "$host" || return 2
+    re_is_configured || return 1
+    re_ensure_dirs
+    ssh -n -i "$RE_KEY" -p "$RE_PORT" \
+        -o BatchMode=yes \
+        -o ConnectTimeout=10 \
+        -o StrictHostKeyChecking=accept-new \
+        -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
+        -o IdentitiesOnly=yes \
+        "$RE_USER@$RE_HOST" "$@"
+}
+
 # Ready for re_run? Bootstraps interactively when not.
 re_require_access() {
     re_load_state
@@ -447,6 +476,60 @@ re_require_access_host() {
     re_migrate_legacy
     re_target_load_by_host "$1" && [ -f "$RE_KEY" ] && return 0
     re_bootstrap "$1"
+}
+
+# Remote Docker bootstrap script. Echoes the script text — run it with
+# re_run_host. Mirrors install_packages from install_remnawave.sh:
+# curl-or-wget download over get.docker.com plus the three proxy mirrors,
+# shebang validation of what landed, an Aliyun-mirror retry of the script
+# itself, and the distro docker.io only as the last resort. A minimal image
+# with neither downloader gets curl from apt first.
+re_remote_docker_install() {
+    cat <<'EOL'
+if command -v docker >/dev/null 2>&1; then exit 0; fi
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
+    apt-get -o DPkg::Lock::Timeout=300 install -y curl
+fi
+docker_ok=""
+for docker_url in https://get.docker.com \
+    https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+    https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+    https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh; do
+    rm -f /tmp/get-docker.sh
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 10 "$docker_url" -o /tmp/get-docker.sh
+    else
+        wget -q --timeout=10 --tries=1 -O /tmp/get-docker.sh "$docker_url"
+    fi
+    if [ -s /tmp/get-docker.sh ] && head -1 /tmp/get-docker.sh | grep -q "^#!/bin/sh"; then
+        if sh /tmp/get-docker.sh || sh /tmp/get-docker.sh --mirror Aliyun; then
+            docker_ok=1
+            break
+        fi
+    fi
+done
+rm -f /tmp/get-docker.sh
+if [ -z "$docker_ok" ]; then
+    apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
+    apt-get -o DPkg::Lock::Timeout=300 install -y docker.io docker-compose-v2 || apt-get -o DPkg::Lock::Timeout=300 install -y docker.io
+fi
+command -v docker >/dev/null 2>&1
+EOL
+}
+
+# Rule chain for a remote ufw: installs ufw from apt when the box has none
+# (a fresh minimal image has no package lists, the curl lesson) and then
+# runs the rules. "required" exits 127 when ufw never appeared, so the ssh
+# exit code tells the truth; "optional" (teardown) treats a missing ufw as
+# nothing-to-do success.
+re_remote_ufw_cmd() {
+    local mode="$1" rules="$2"
+    printf 'command -v ufw >/dev/null 2>&1 || { apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null 2>&1; apt-get -o DPkg::Lock::Timeout=300 install -y ufw >/dev/null 2>&1; }
+if ! command -v ufw >/dev/null 2>&1; then
+    if [ "%s" = required ]; then exit 127; else exit 0; fi
+fi
+%s' "$mode" "$rules"
 }
 
 re_test_connection() {
@@ -536,6 +619,7 @@ show_remote_exec_menu() {
     re_migrate_legacy
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[RE_TITLE]}${COLOR_RESET}"
+    echo -e " ${COLOR_GRAY}${LANG[RE_DOC_LINK]}${COLOR_RESET}"
     echo -e ""
 
     local names=() name pick i
@@ -575,7 +659,7 @@ show_remote_exec_menu() {
     i=1
     for name in "${names[@]}"; do
         if re_target_load "$name"; then
-            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${RE_USER}@${RE_HOST}:${RE_PORT}${COLOR_RESET}$(re_label_suffix) ${COLOR_GRAY}— $(re_key_kind)${COLOR_RESET}"
+            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${RE_USER}@${RE_HOST}:${RE_PORT}${COLOR_RESET}$(re_label_suffix) ${COLOR_GRAY}($(re_key_kind))${COLOR_RESET}"
         else
             echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${name}${COLOR_RESET}"
         fi
@@ -659,6 +743,7 @@ re_target_menu() {
             sleep 2
             ;;
         5)
+            echo -e "    ${COLOR_GRAY}${LANG[RE_REVOKE_HINT]}${COLOR_RESET}"
             if reading_yn "$(printf "${LANG[RE_REVOKE_CONFIRM]}" "$RE_HOST")" confirm_revoke; then
                 re_revoke_target
             fi

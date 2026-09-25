@@ -289,6 +289,24 @@ xc_download_core() {
     return 0
 }
 
+# Recreate the node container under a spinner, rc captured from the silenced
+# subshell — a failed `up` used to read as success because nothing checked it.
+xc_recreate_node() {
+    local dir="$1" rc_file
+    rc_file=$(mktemp)
+    (
+        cd "$dir" || { echo 1 > "$rc_file"; exit 1; }
+        docker compose up -d remnanode > /dev/null 2>&1
+        echo $? > "$rc_file"
+    ) &
+    spinner $! "${LANG[WAITING]}"
+    local rc
+    rc=$(cat "$rc_file" 2>/dev/null)
+    rm -f "$rc_file"
+    [ "$rc" = "0" ] || return 1
+    return 0
+}
+
 # Install a given source+tag end to end: download, mount, recreate the node.
 xc_install_core() {
     local source="$1" tag="$2" confirm
@@ -326,13 +344,26 @@ xc_install_core() {
     xc_state_set "$source" "$tag"
 
     step_do "${LANG[XC_APPLYING]}"
-    ( cd "$dir" && docker compose up -d remnanode ) > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    if ! xc_recreate_node "$dir"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL]}" "$dir")${COLOR_RESET}"
+        return 1
+    fi
 
-    local running
-    running=$(docker exec remnanode xray version 2>/dev/null | head -n1)
-    if [ -n "$running" ]; then
+    # The version check is the real proof: the freshly installed tag must
+    # actually RUN. One immediate exec can hit a still-booting container —
+    # retry a few times — and a version that does not match the tag means the
+    # recreate never took (an old container must not read as success).
+    local try running
+    running=""
+    for try in 1 2 3 4 5; do
+        running=$(docker exec remnanode xray version 2>/dev/null | head -n1)
+        [ -n "$running" ] && break
+        sleep 2
+    done
+    if echo "$running" | grep -q "${tag#v}"; then
         step_ok "$(printf "${LANG[XC_INSTALLED_OK]}" "$(xc_source_name "$source")" "$tag")"
+    elif [ -n "$running" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_INSTALLED_MISMATCH]}" "$running")${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_INSTALLED_NORUN]}" "$(xc_source_name "$source")" "$tag")${COLOR_RESET}"
     fi
@@ -368,8 +399,10 @@ xc_restore_core() {
     xc_state_clear
 
     step_do "${LANG[XC_APPLYING]}"
-    ( cd "$dir" && docker compose up -d remnanode ) > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    if ! xc_recreate_node "$dir"; then
+        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL]}" "$dir")${COLOR_RESET}"
+        return 1
+    fi
     step_ok "${LANG[XC_RESTORED_OK]}"
 }
 
@@ -448,7 +481,7 @@ show_xray_core_menu() {
 }
 
 xc_install_manual() {
-    local source xc_input repo rc
+    local source xc_input repo rc source_num
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[XC_SOURCE_OFF_NAME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XC_SOURCE_JOLY_NAME]}${COLOR_RESET}"

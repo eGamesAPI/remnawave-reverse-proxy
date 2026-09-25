@@ -192,6 +192,20 @@ compose_stack_running() {
     docker compose ps --status running --quiet 2>/dev/null | grep -q .
 }
 
+# Silenced compose call under a spinner with an honest exit code. Defined
+# guardedly so several modules can carry the same definition.
+command -v compose_run_spinner >/dev/null 2>&1 || compose_run_spinner() {
+    local desc="$1"; shift
+    local rc_file
+    rc_file=$(mktemp)
+    ( "$@" > /dev/null 2>&1; echo $? > "$rc_file" ) &
+    spinner $! "$desc"
+    local rc
+    rc=$(cat "$rc_file" 2>/dev/null)
+    rm -f "$rc_file"
+    return "${rc:-1}"
+}
+
 start_panel_node() {
     local dir any=0
     while IFS= read -r dir; do
@@ -204,9 +218,11 @@ start_panel_node() {
         else
             echo -e "${COLOR_YELLOW}${LANG[STACK_STARTING]} ($dir)...${COLOR_RESET}"
             sleep 1
-            docker compose up -d > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
-            echo -e "${COLOR_GREEN}${LANG[PANEL_RUN]} ($dir)${COLOR_RESET}"
+            if compose_run_spinner "${LANG[WAITING]}" docker compose up -d; then
+                echo -e "${COLOR_GREEN}${LANG[PANEL_RUN]} ($dir)${COLOR_RESET}"
+            else
+                echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_UP_FAIL]}" "$dir" "$dir")${COLOR_RESET}"
+            fi
         fi
     done < <(managed_compose_dirs)
 
@@ -225,9 +241,11 @@ stop_panel_node() {
         else
             echo -e "${COLOR_YELLOW}${LANG[STACK_STOPPING]} ($dir)...${COLOR_RESET}"
             sleep 1
-            docker compose down > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
-            echo -e "${COLOR_GREEN}${LANG[PANEL_STOP]} ($dir)${COLOR_RESET}"
+            if compose_run_spinner "${LANG[WAITING]}" docker compose down; then
+                echo -e "${COLOR_GREEN}${LANG[PANEL_STOP]} ($dir)${COLOR_RESET}"
+            else
+                echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_DOWN_FAIL]}" "$dir")${COLOR_RESET}"
+            fi
         fi
     done < <(managed_compose_dirs)
 
@@ -272,11 +290,18 @@ update_panel_node() {
         if [ "$before" != "$after" ] || echo "$pull_output" | grep -q "Pull complete"; then
             echo -e ""
             echo -e "${COLOR_YELLOW}${LANG[IMAGES_DETECTED]} ($dir)${COLOR_RESET}"
-            docker compose down > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
+            # A failed `up` here leaves the whole panel DOWN behind a green
+            # success line — the rc gate is the difference between an honest
+            # error and a silent outage.
+            if ! compose_run_spinner "${LANG[WAITING]}" docker compose down; then
+                echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_DOWN_FAIL]}" "$dir")${COLOR_RESET}"
+                continue
+            fi
             sleep 5
-            docker compose up -d > /dev/null 2>&1 &
-            spinner $! "${LANG[WAITING]}"
+            if ! compose_run_spinner "${LANG[WAITING]}" docker compose up -d; then
+                echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_UP_FAIL]}" "$dir" "$dir")${COLOR_RESET}"
+                continue
+            fi
             sleep 1
             docker image prune -f > /dev/null 2>&1
             echo -e "${COLOR_GREEN}${LANG[UPDATE_SUCCESS1]} ($dir)${COLOR_RESET}"
