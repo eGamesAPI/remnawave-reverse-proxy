@@ -632,19 +632,24 @@ EOL
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
 
+    # Long-lived admin token for the script's own menu calls
+    persist_script_api_token "$domain_url" "$token"
+
     # Create API token for subscription page
     create_api_token "$domain_url" "$token" "$target_dir"
 
-    # Stop and start Remnawave
+    # Stop and start Remnawave — a failed `up` must not hide behind the
+    # green completion banner below with the whole panel left down.
     step_do "${LANG[STOPPING_REMNAWAVE]}"
     sleep 1
-    docker compose down > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    docker compose down > /dev/null 2>&1
 
     step_do "${LANG[STARTING_PANEL_NODE]}"
     sleep 1
-    docker compose up -d > /dev/null 2>&1 &
-    spinner $! "${LANG[WAITING]}"
+    if ! docker compose up -d > /dev/null 2>&1; then
+        echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_UP_FAIL]}" "/opt/remnawave" "/opt/remnawave")${COLOR_RESET}"
+        return 1
+    fi
 
     clear
 
