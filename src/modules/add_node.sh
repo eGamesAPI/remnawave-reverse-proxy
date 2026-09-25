@@ -789,15 +789,25 @@ an_offer_stale_cleanup() {
     read_yn confirm || { echo; return 1; }
     echo
 
-    make_api_request "DELETE" "http://$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
-    local hosts_json huuid still_used=""
-    hosts_json=$(make_api_request "GET" "http://$domain_url/api/hosts" "$token")
-    for huuid in $(echo "$hosts_json" | jq -r --arg p "$profile_uuid" '.response[]? | select((.inbound.configProfileUuid // "") == $p) | .uuid' 2>/dev/null); do
-        make_api_request "DELETE" "http://$domain_url/api/hosts/$huuid" "$token" >/dev/null 2>&1
-    done
+    # Hosts belong to the profile, not to the node: when other nodes sit on the
+    # same profile the hosts are their live inbounds, so usage is checked before
+    # anything is deleted. Unreadable usage counts as "in use".
+    local still_used=""
     if [ -n "$profile_uuid" ]; then
         still_used=$(echo "$nodes_json" | jq -r --arg p "$profile_uuid" --arg n "$node_uuid" '[.response[]? | select(.configProfileUuid == $p and .uuid != $n)] | length' 2>/dev/null)
-        [ "${still_used:-1}" = "0" ] && make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token" >/dev/null 2>&1
+    fi
+
+    make_api_request "DELETE" "http://$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
+    if [ -n "$profile_uuid" ] && [ "${still_used:-1}" = "0" ]; then
+        local hosts_json huuid
+        hosts_json=$(make_api_request "GET" "http://$domain_url/api/hosts" "$token")
+        for huuid in $(echo "$hosts_json" | jq -r --arg p "$profile_uuid" '.response[]? | select((.inbound.configProfileUuid // "") == $p) | .uuid' 2>/dev/null); do
+            make_api_request "DELETE" "http://$domain_url/api/hosts/$huuid" "$token" >/dev/null 2>&1
+        done
+        make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token" >/dev/null 2>&1
+    fi
+    if [ -n "$profile_uuid" ] && [ "${still_used:-1}" != "0" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_HOSTS_KEPT]}" "${still_used:-1}")${COLOR_RESET}"
     fi
     echo -e "${COLOR_GREEN}${LANG[AN_STALE_DONE]}${COLOR_RESET}"
     return 0

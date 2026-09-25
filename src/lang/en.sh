@@ -378,8 +378,7 @@ LANG[AN_SYNC_NODE]="The node certificate lives on the node itself and renews the
 LANG[AN_STALE_FOUND]="Node '%s' with this address already exists in the panel and is not connected right now."
 LANG[AN_STALE_ASK]="Delete its records (node, hosts and the profile if nothing else uses it) and continue with this domain? (y/n):"
 LANG[AN_STALE_DONE]="Stale records removed, continuing with this domain"
-
-
+LANG[AN_STALE_HOSTS_KEPT]="Hosts and profile kept: other nodes still use them (%s)"
 LANG[SELFSTEAL]="Enter the node's selfsteal domain (the address from its card in the panel):"
 LANG[PANEL_IP_PROMPT]="Enter the IP address of the panel to establish a connection between the panel and the node:"
 LANG[IP_ERROR]="Enter a valid IP address in the format X.X.X.X (e.g., 192.168.1.1)"
@@ -833,7 +832,6 @@ LANG[NP_ATTACH_NO_NODES]="No enabled nodes — the plugin is saved in the panel 
 LANG[NP_DETACH_FAIL]="Failed to unbind the plugin from nodes."
 LANG[NP_BOUND_FMT]="Nodes running the plugin: %s of %s"
 LANG[NP_NOT_BOUND]="The plugin is not bound to any node — the features are inactive on nodes. Any settings change binds it."
-
 LANG[MENU_12]="Xray Checker — subscription monitoring"
 LANG[XCHK_MENU_TITLE]="Xray Checker"
 LANG[XCHK_NOT_INSTALLED]="not installed"
