@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.5.75"
+SCRIPT_VERSION="3.5.76"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -335,7 +335,14 @@ reading() {
 }
 
 reading_yn() {
-    printf ' %s' "$(question "$1")"
+    # Every yes/no question shows the (y/n) hint; strings that already carry
+    # it (older wording) are passed through untouched.
+    local q="$1"
+    case "$q" in
+        *"(y/n)"*) ;;
+        *) q="$q (y/n)" ;;
+    esac
+    printf ' %s' "$(question "$q")"
     read_yn "$2"
 }
 
@@ -1883,6 +1890,22 @@ if ! load_language; then
 fi
 
 install_script_if_missing
+
+# Non-interactive package bootstrap for remote node deploys: add_node's
+# automatic mode pushes this script to the node server over SSH and runs
+# it with this flag, reusing install_packages verbatim (docker, ufw with
+# 443 open, BBR) instead of shipping a second drifting copy of that logic.
+# The caller preseeds selected_language so load_language never prompts.
+if [ "${1:-}" = "--bootstrap-packages" ]; then
+    # install_packages ends with clear, which needs a working terminal:
+    # over a non-pty ssh it exits 1 (even TERM=dumb has no clear capability)
+    # and poisons the exit code the panel reads. A stub fixes that for the
+    # whole run; the interactive paths below are never reached.
+    clear() { :; }
+    install_packages
+    exit $?
+fi
+
 check_update_status
 show_menu
 
