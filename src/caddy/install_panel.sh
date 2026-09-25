@@ -572,6 +572,9 @@ installation_panel_caddy() {
     # Update squad
     update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
 
+    # Long-lived admin token for the script's own menu calls
+    persist_script_api_token "$domain_url" "$token"
+
     if [ "$PANEL_WITH_SUB" != "false" ]; then
         # Create API token for subscription page
         create_api_token "$domain_url" "$token" "$target_dir"
