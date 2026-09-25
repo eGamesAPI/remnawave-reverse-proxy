@@ -27,6 +27,48 @@ make_api_request() {
 }
 
 
+# Login JWTs carry role ADMIN in the payload, panel-issued API tokens carry
+# role API; both start with eyJ, so the prefix alone cannot tell them apart.
+rw_token_is_api() {
+    local payload="${1#*.}"; payload="${payload%%.*}"
+    local pad=$(( (4 - ${#payload} % 4) % 4 ))
+    [ "$pad" -ne 0 ] && payload="$payload$(printf '=%.0s' $(seq $pad))"
+    printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -e 'select(.role == "API")' >/dev/null 2>&1
+}
+
+# /api/tokens accepts an admin JWT only, so the exchange must run while a
+# login token is still alive. Drops our stale tokens from previous rotations
+# (name match), then mints a wildcard token valid for 10 years. Prints the
+# new token on stdout, rc=1 when the panel refuses (e.g. no /api/tokens yet).
+mint_script_api_token() {
+    local domain_url="$1" jwt="$2"
+    local name="remnawave-reverse-proxy"
+    local response uuid token
+
+    response=$(make_api_request "GET" "http://${domain_url}/api/tokens" "$jwt")
+    for uuid in $(echo "$response" | jq -r --arg n "$name" '.response.tokens[]? | select(.name == $n) | .uuid' 2>/dev/null); do
+        make_api_request "DELETE" "http://${domain_url}/api/tokens/$uuid" "$jwt" >/dev/null 2>&1
+    done
+
+    response=$(make_api_request "POST" "http://${domain_url}/api/tokens" "$jwt"         "{\"name\":\"$name\",\"expiresInDays\":3650,\"scopes\":[\"*\"]}")
+    token=$(echo "$response" | jq -r '.response.token // ""' 2>/dev/null)
+    if [ -n "$token" ] && [ "$token" != "null" ]; then
+        echo "$token"
+        return 0
+    fi
+    return 1
+}
+
+# Install flows: mint the token and drop it where get_panel_token looks, so
+# the first menu run after install does not ask for credentials again.
+persist_script_api_token() {
+    local token
+    token=$(mint_script_api_token "$1" "$2") || return 1
+    echo "$token" > "${DIR_REMNAWAVE}/token"
+    chmod 600 "${DIR_REMNAWAVE}/token" 2>/dev/null
+}
+
+
 register_remnawave() {
     local domain_url=$1
     local username=$2
@@ -112,6 +154,19 @@ get_panel_token() {
             fi
             token=""
         fi
+
+        # legacy saved login JWT: swap it for our own long-lived token while
+        # it still validates, so the next run does not ask for credentials
+        if [ "${token:0:3}" = "eyJ" ] && ! rw_token_is_api "$token"; then
+            local minted
+            minted=$(mint_script_api_token "$domain_url" "$token")
+            if [ -n "$minted" ]; then
+                token="$minted"
+                echo "$token" > "$TOKEN_FILE"
+                chmod 600 "$TOKEN_FILE" 2>/dev/null
+                echo -e "${COLOR_GREEN}${LANG[API_TOKEN_MINTED]}${COLOR_RESET}"
+            fi
+        fi
     fi
 
     if [ -z "$token" ]; then
@@ -131,6 +186,16 @@ get_panel_token() {
                 echo -e "${COLOR_RED}${LANG[INVALID_SAVED_TOKEN]}: $test_response${COLOR_RESET}"
                 return 1
             fi
+
+            # a pasted login JWT expires soon; exchange it for our own token
+            if [ "${token:0:3}" = "eyJ" ] && ! rw_token_is_api "$token"; then
+                local minted
+                minted=$(mint_script_api_token "$domain_url" "$token")
+                if [ -n "$minted" ]; then
+                    token="$minted"
+                    echo -e "${COLOR_GREEN}${LANG[API_TOKEN_MINTED]}${COLOR_RESET}"
+                fi
+            fi
         else
             reading "${LANG[ENTER_PANEL_USERNAME]}" username
             reading "${LANG[ENTER_PANEL_PASSWORD]}" password
@@ -141,6 +206,16 @@ get_panel_token() {
             if [ -z "$token" ] || [ "$token" == "null" ]; then
                 echo -e "${COLOR_RED}${LANG[ERROR_TOKEN]}: $login_response${COLOR_RESET}"
                 return 1
+            fi
+
+            echo -e "${COLOR_YELLOW}${LANG[MINTING_API_TOKEN]}${COLOR_RESET}"
+            local minted
+            minted=$(mint_script_api_token "$domain_url" "$token")
+            if [ -n "$minted" ]; then
+                token="$minted"
+                echo -e "${COLOR_GREEN}${LANG[API_TOKEN_MINTED]}${COLOR_RESET}"
+            else
+                echo -e "${COLOR_YELLOW}${LANG[API_TOKEN_MINT_FAILED]}${COLOR_RESET}"
             fi
         fi
 
