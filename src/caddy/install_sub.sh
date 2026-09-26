@@ -179,7 +179,7 @@ installation_sub_caddy() {
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" || return 1
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" true || return 1
     SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
 
     # Secrets land in the compose — root-only from the first byte on.
