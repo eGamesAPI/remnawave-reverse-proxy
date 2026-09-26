@@ -5,25 +5,34 @@ err_msg() {
     echo -e "${COLOR_RED}$*${COLOR_RESET}" >&2
 }
 
+# Headers go through a file descriptor, never through argv: a Bearer token
+# in an -H string is visible to ps on a shared box (curl >= 7.55 reads
+# headers with -H @file). Requires curl 7.55+, a documented preflight.
 make_api_request() {
     local method=$1
     local url=$2
     local token=$3
     local data=$4
 
-    local headers=(
-        -H "Authorization: Bearer $token"
-        -H "Content-Type: application/json"
-        -H "X-Forwarded-For: 127.0.0.1"
-        -H "X-Forwarded-Proto: https"
-        -H "X-Remnawave-Client-Type: browser"
-    )
+    local hdr
+    hdr=$(printf 'Authorization: Bearer %s\nContent-Type: application/json\nX-Forwarded-For: 127.0.0.1\nX-Forwarded-Proto: https\nX-Remnawave-Client-Type: browser\n' "$token")
 
     if [ -n "$data" ]; then
-        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" "${headers[@]}" -d "$data"
+        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" -H @<(printf '%s' "$hdr") -d "$data"
     else
-        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" "${headers[@]}"
+        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" -H @<(printf '%s' "$hdr")
     fi
+}
+
+# Public IPv4 of THIS box over https, shape-checked: the answer is pasted
+# into root-level commands on remote machines, so an error page or an empty
+# reply must never slip through (the old plain `curl -s ifconfig.me` did).
+get_public_ipv4() {
+    local ip
+    ip=$(curl -fsS4 --connect-timeout 8 --max-time 15 https://api.ipify.org 2>/dev/null | tr -d '[:space:]')
+    [ -n "$ip" ] || ip=$(curl -fsS4 --connect-timeout 8 --max-time 15 https://ifconfig.me 2>/dev/null | tr -d '[:space:]')
+    printf '%s' "$ip" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || return 1
+    printf '%s' "$ip"
 }
 
 
@@ -351,8 +360,13 @@ EOF
     local node_response
     node_response=$(make_api_request "POST" "http://$domain_url/api/nodes" "$token" "$node_data")
 
+    # Follow-ups (overlay wait by uuid, cert-sync state) need the id: it is
+    # printed as the function's last line and left in CREATED_NODE_UUID.
+    CREATED_NODE_UUID=""
     if echo "$node_response" | jq -e '.response.uuid' > /dev/null 2>&1; then
         step_ok "${LANG[NODE_CREATED]}"
+        CREATED_NODE_UUID=$(echo "$node_response" | jq -r '.response.uuid')
+        echo "$CREATED_NODE_UUID"
         return 0
     fi
 
@@ -613,17 +627,15 @@ create_api_token() {
 
     step_do "${LANG[CREATING_API_TOKEN]}" >&2
 
-    local token_data='{"name":"'"$token_name"'","expiresInDays":3650,"scopes":["subscription-page-configs:list","subscription-page-configs:get","subscriptions:subpage-config","system:metadata","users:by-username"]}'
+    # Scoped or nothing: a wildcard fallback would hand the subscription
+    # server full panel access just because one scope name drifted.
+    local token_data
+    token_data=$(jq -n --arg n "$token_name" \
+        '{name:$n, expiresInDays:3650, scopes:["subscription-page-configs:list","subscription-page-configs:get","subscriptions:subpage-config","system:metadata","users:by-username"]}')
 
-    local api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
-    local api_token
+    local api_response api_token
+    api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
     api_token=$(echo "$api_response" | jq -r '.response.token // ""')
-
-    if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
-        token_data='{"name":"'"$token_name"'","expiresInDays":3650,"scopes":["*"]}'
-        api_response=$(make_api_request "POST" "http://$domain_url/api/tokens" "$token" "$token_data")
-        api_token=$(echo "$api_response" | jq -r '.response.token // ""')
-    fi
 
     if [ -z "$api_token" ] || [ "$api_token" = "null" ]; then
         echo -e "${COLOR_RED}${LANG[ERROR_CREATE_API_TOKEN]}: $(echo "$api_response" | jq -r '.message // "Unknown error"')" >&2
@@ -631,6 +643,7 @@ create_api_token() {
     fi
 
     sed -i "s|REMNAWAVE_API_TOKEN=.*|REMNAWAVE_API_TOKEN=$api_token|" "$target_dir/docker-compose.yml"
+    chmod 600 "$target_dir/docker-compose.yml" 2>/dev/null
     sleep 1
 
     step_ok "${LANG[API_TOKEN_ADDED]}" >&2
