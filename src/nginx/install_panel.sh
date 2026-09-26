@@ -22,13 +22,7 @@ install_panel_nginx() {
         fi
     fi
 
-    reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
-
-    if [ "$PANEL_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; then
-        echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
-        exit 1
-    fi
-    if [ "$PANEL_WITH_SUB" != "false" ] && { [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ] || [ "$SUB_DOMAIN" = "$SELFSTEAL_DOMAIN" ]; }; then
+    if [ "$PANEL_WITH_SUB" != "false" ] && [ "$PANEL_DOMAIN" = "$SUB_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[DOMAINS_MUST_BE_UNIQUE]}${COLOR_RESET}"
         exit 1
     fi
@@ -70,7 +64,7 @@ install_panel_nginx() {
 
     if [ "$PANEL_AUTH_MODE" = "tinyauth" ]; then
         load_tinyauth_module
-        tinyauth_setup "$PANEL_BASE_DOMAIN" "$PANEL_DOMAIN" "$SUB_DOMAIN" "$SELFSTEAL_DOMAIN"
+        tinyauth_setup "$PANEL_BASE_DOMAIN" "$PANEL_DOMAIN" "$SUB_DOMAIN"
     fi
 
     cat > .env <<EOL
@@ -574,30 +568,10 @@ EOL
         *) abort_with_credentials "${LANG[ERROR_REGISTER]}: $token" ;;
     esac
 
-    # Generate Xray keys
-    sleep 1
-    local private_key
-    private_key=$(generate_xray_keys "$domain_url" "$token") || abort_with_credentials "${LANG[ERROR_GENERATE_KEYS]}"
-
-    # Delete default config profile
+    # Drop the panel's default placeholder profile: the real profile, node,
+    # host and squad bindings are created later by the add-node menu or a
+    # panel+node install, each with its own domain.
     delete_config_profile "$domain_url" "$token"
-
-    # Create config profile
-    local profile_output
-    profile_output=$(create_config_profile "$domain_url" "$token" "StealConfig" "$SELFSTEAL_DOMAIN" "$private_key") || abort_with_credentials "${LANG[ERROR_CREATE_CONFIG_PROFILE]}"
-    read -r config_profile_uuid inbound_uuid <<< "$profile_output"
-
-    # Create node with config profile binding
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" || abort_with_credentials "${LANG[ERROR_CREATE_NODE]}"
-
-    # Create host
-    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" || abort_with_credentials "${LANG[ERROR_CREATE_HOST]}"
-
-    # Get UUID default squad
-    local squad_uuid=$(get_default_squad "$domain_url" "$token")
-
-    # Update squad
-    update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
 
     # Long-lived admin token for the script's own menu calls
     persist_script_api_token "$domain_url" "$token"
@@ -639,5 +613,5 @@ EOL
     echo -e "${COLOR_YELLOW}${LANG[RELAUNCH_CMD]}${COLOR_RESET}"
     echo -e "${COLOR_GREEN}remnawave_reverse${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}=================================================${COLOR_RESET}"
-    echo -e "${COLOR_RED}${LANG[POST_PANEL_INSTRUCTION]}${COLOR_RESET}"
+    echo -e "${COLOR_RED}${LANG[PANEL_ONLY_NEXT_STEP]}${COLOR_RESET}"
 }
