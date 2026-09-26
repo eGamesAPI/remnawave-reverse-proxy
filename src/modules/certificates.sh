@@ -356,7 +356,7 @@ manage_certificates() {
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            remnawave_reverse
+            return 0
             ;;
         *)
             echo -e "${COLOR_YELLOW}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
@@ -558,7 +558,7 @@ EOL
     done
 
     sleep 2
-    remnawave_reverse
+    return 0
 }
 
 generate_new_certificates() {
@@ -638,7 +638,7 @@ generate_new_certificates() {
     fi
 
     sleep 2
-    remnawave_reverse
+    return 0
 }
 
 check_cert_expiry() {

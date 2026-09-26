@@ -13,13 +13,40 @@ re_target_name() {
     printf '%s_%s' "$1" "$2" | tr -c 'a-zA-Z0-9._-' '_'
 }
 
+# Persist a target; the optional sixth argument is the NetBird overlay alias.
+# Unknown keys already in the file survive the rewrite, one host keeps one
+# target — a write with a new port replaces the stale file instead of racing
+# directory collation — and an overlay alias lives on exactly one target.
 re_target_write() {
-    local name
-    name=$(re_target_name "$1" "$2")
+    local host="$1" port="$2" user="$3" key="$4" label="${5:-}" overlay="${6:-}"
+    local name other file tmp
+    name=$(re_target_name "$host" "$port")
     mkdir -p "$RE_CONF_DIR" 2>/dev/null
-    printf 'host=%s\nport=%s\nuser=%s\nkey=%s\nlabel=%s\n' "$1" "$2" "$3" "$4" "${5:-}" \
-        > "${RE_CONF_DIR}/${name}.target"
-    chmod 600 "${RE_CONF_DIR}/${name}.target" 2>/dev/null
+
+    while IFS= read -r other; do
+        [ "$other" = "$name" ] && continue
+        rm -f -- "${RE_CONF_DIR}/${other}.target"
+    done < <(re_targets_list | while IFS= read -r t; do
+        re_target_load "$t" && [ "$RE_HOST" = "$host" ] && printf '%s\n' "$t"
+    done)
+
+    if [ -n "$overlay" ]; then
+        while IFS= read -r other; do
+            [ "$other" = "$name" ] && continue
+            file="${RE_CONF_DIR}/${other}.target"
+            [ -f "$file" ] && sed -i '/^overlay=/d' "$file"
+        done < <(re_targets_list)
+    fi
+
+    file="${RE_CONF_DIR}/${name}.target"
+    tmp="${file}.tmp"
+    {
+        [ -f "$file" ] && grep -v -E '^(host|port|user|key|label|overlay)=' "$file"
+        printf 'host=%s\nport=%s\nuser=%s\nkey=%s\nlabel=%s\n' "$host" "$port" "$user" "$key" "$label"
+        [ -n "$overlay" ] && printf 'overlay=%s\n' "$overlay"
+    } > "$tmp" 2>/dev/null
+    mv -f "$tmp" "$file"
+    chmod 600 "$file" 2>/dev/null
     printf '%s\n' "$name" > "$RE_ACTIVE_FILE"
     chmod 600 "$RE_ACTIVE_FILE" 2>/dev/null
 }
@@ -60,19 +87,39 @@ re_target_load() {
     [ -n "$RE_USER" ] || RE_USER=root
     RE_KEY=$(sed -n 's|^key=||p' "$file" | head -n1)
     RE_LABEL=$(sed -n 's|^label=||p' "$file" | head -n1)
+    RE_OVERLAY=$(sed -n 's|^overlay=||p' "$file" | head -n1)
     [ -n "$RE_HOST" ] && [ -n "$RE_KEY" ]
 }
 
-# Find the target whose host matches the address, whatever its port.
+# Find the target bound to the address — its public host or its NetBird
+# overlay alias — whatever the port. A miss must clear the loaded fields:
+# callers act on RE_* afterwards, and a stale target's user/port silently
+# rode along (add_node printed access details of the wrong machine).
 re_target_load_by_host() {
     local want="$1" name
+    RE_HOST=""; RE_PORT=""; RE_USER=""; RE_KEY=""; RE_LABEL=""; RE_OVERLAY=""
     while IFS= read -r name; do
         [ -n "$name" ] || continue
-        if re_target_load "$name" && [ "$RE_HOST" = "$want" ]; then
+        if re_target_load "$name" && { [ "$RE_HOST" = "$want" ] || { [ -n "$RE_OVERLAY" ] && [ "$RE_OVERLAY" = "$want" ]; }; }; then
             return 0
         fi
     done < <(re_targets_list)
+    # The loop probes every file with re_target_load; without a final reset a
+    # miss would leave the LAST examined target sitting in RE_*.
+    RE_HOST=""; RE_PORT=""; RE_USER=""; RE_KEY=""; RE_LABEL=""; RE_OVERLAY=""
     return 1
+}
+
+# Drop the remembered host key for host:port (and optionally its overlay
+# alias) before reconnecting to a box that legitimately changed its key — an
+# OS reinstall. accept-new alone would silently trust the new key, so this is
+# always an explicit operator action with the fingerprint checked separately.
+re_forget_host_key() {
+    local host="$1" port="${2:-22}" alias="${3:-}"
+    ssh-keygen -R "[${host}]:${port}" -f "$RE_KNOWN_HOSTS" >/dev/null 2>&1
+    ssh-keygen -R "$host" -f "$RE_KNOWN_HOSTS" >/dev/null 2>&1
+    [ -n "$alias" ] && ssh-keygen -R "[${alias}]:${port}" -f "$RE_KNOWN_HOSTS" >/dev/null 2>&1
+    return 0
 }
 
 # Load the active (last used) target; with exactly one configured target
@@ -151,6 +198,7 @@ re_try_key() {
     ssh -n -i "$key" -p "$port" \
         -o BatchMode=yes \
         -o ConnectTimeout=8 \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
         -o StrictHostKeyChecking=accept-new \
         -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
         -o IdentitiesOnly=yes \
@@ -168,13 +216,34 @@ re_candidate_keys() {
     } | awk 'NF && !seen[$0]++'
 }
 
-# "name<TAB>address" per node, from the saved panel token only — a dead token
-# or a node-only box falls back to manual address entry without any prompt.
+# "name<TAB>address<TAB>uuid" per node, from the saved panel token only — a
+# dead token or a node-only box falls back to manual address entry without
+# any prompt. The uuid lets callers resolve overlay addresses back to the
+# public host through the netbird module state.
 re_panel_nodes() {
     local token_file="${DIR_REMNAWAVE}token" response
     [ -r "$token_file" ] || return 1
     response=$(make_api_request "GET" "http://127.0.0.1:3000/api/nodes?_=$(date +%s)" "$(cat "$token_file")" 2>/dev/null)
-    echo "$response" | jq -r '.response[]? | "\(.name)\t\(.address)"' 2>/dev/null | awk 'NF'
+    echo "$response" | jq -r '.response[]? | "\(.name)\t\(.address)\t\(.uuid)"' 2>/dev/null | awk 'NF'
+}
+
+# SSH address for a panel node. A node moved onto the NetBird overlay carries
+# its overlay IP as .address; the real public host sits in the netbird module
+# state next to the node uuid. Without that state the panel address passes
+# through unchanged.
+re_public_addr() {
+    local address="$1" uuid="${2:-}" f pub
+    if [ -d "${DIR_REMNAWAVE}netbird/nodes" ]; then
+        for f in "${DIR_REMNAWAVE}netbird/nodes"/*.json; do
+            [ -f "$f" ] || continue
+            if jq -e --arg a "$address" --arg u "$uuid" \
+                'select(.overlay == $a or ($u != "" and .uuid == $u))' "$f" >/dev/null 2>&1; then
+                pub=$(jq -r '.public_host // .old_address // empty' "$f" 2>/dev/null)
+                [ -n "$pub" ] && { printf '%s' "$pub"; return 0; }
+            fi
+        done
+    fi
+    printf '%s' "$address"
 }
 
 reading_hidden() {
@@ -191,51 +260,62 @@ re_clean_label() {
 }
 
 # Sets RE_HOST from the panel node list or manual entry; rc=1 — cancelled.
+# The list shows the public host: after a NetBird migration .address is an
+# overlay IP that SSH must never depend on. An empty pick re-asks instead of
+# silently taking the first node, and EOF cancels instead of recursing.
 re_pick_host() {
-    local entries=() entry name address pick last
+    local entries=() entry name address uuid pub pick last i
     if panel_is_installed && command -v jq >/dev/null 2>&1 && load_api_module; then
         mapfile -t entries < <(re_panel_nodes)
     fi
 
     if [ "${#entries[@]}" -eq 0 ]; then
-        reading "${LANG[RE_HOST_PROMPT]}" RE_HOST
+        reading "${LANG[RE_HOST_PROMPT]}" RE_HOST || return 1
         [ -n "$RE_HOST" ] || return 1
         return 0
     fi
 
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[RE_NODES_TITLE]}${COLOR_RESET}"
-    echo -e ""
-    local i=1
-    for entry in "${entries[@]}"; do
-        name="${entry%%$'\t'*}"
-        address="${entry##*$'\t'}"
-        echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${address}${COLOR_RESET} ${COLOR_GRAY}(${name})${COLOR_RESET}"
-        i=$((i + 1))
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[RE_NODES_TITLE]}${COLOR_RESET}"
+        echo -e ""
+        i=1
+        for entry in "${entries[@]}"; do
+            name="${entry%%$'\t'*}"
+            address=$(printf '%s' "$entry" | cut -f2)
+            uuid=$(printf '%s' "$entry" | cut -f3)
+            pub=$(re_public_addr "$address" "$uuid")
+            if [ "$pub" != "$address" ]; then
+                echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${pub}${COLOR_RESET} ${COLOR_GRAY}(${name}, overlay: ${address})${COLOR_RESET}"
+            else
+                echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${address}${COLOR_RESET} ${COLOR_GRAY}(${name})${COLOR_RESET}"
+            fi
+            i=$((i + 1))
+        done
+        last=$i
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[RE_NODES_MANUAL]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+        echo -e ""
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick || return 1
+
+        if [ "$pick" = "0" ]; then
+            return 1
+        fi
+        if [ "$pick" = "$last" ]; then
+            reading "${LANG[RE_HOST_PROMPT]}" RE_HOST || return 1
+            [ -n "$RE_HOST" ] || continue
+            return 0
+        fi
+        if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#entries[@]}" ]; then
+            address=$(printf '%s' "${entries[$((pick - 1))]}" | cut -f2)
+            uuid=$(printf '%s' "${entries[$((pick - 1))]}" | cut -f3)
+            RE_HOST=$(re_public_addr "$address" "$uuid")
+            return 0
+        fi
+        printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
+        sleep 1
     done
-    last=$i
-    echo -e "${COLOR_YELLOW}${last}. ${LANG[RE_NODES_MANUAL]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick
-    [ -z "$pick" ] && pick=1
-
-    if [ "$pick" = "0" ]; then
-        return 1
-    fi
-    if [ "$pick" = "$last" ]; then
-        reading "${LANG[RE_HOST_PROMPT]}" RE_HOST
-        [ -n "$RE_HOST" ] || return 1
-        return 0
-    fi
-    if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#entries[@]}" ]; then
-        RE_HOST="${entries[$((pick - 1))]##*$'\t'}"
-        return 0
-    fi
-    printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
-    sleep 1
-    re_pick_host
 }
 
 # Operator points at a key that already lives here; sets RE_PICKED_KEY. The
@@ -276,6 +356,7 @@ re_setup_password() {
     export SSHPASS="$pass"
     sshpass -e ssh -p "$port" \
         -o ConnectTimeout=10 \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
         -o StrictHostKeyChecking=accept-new \
         -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
         -o PreferredAuthentications=password \
@@ -421,6 +502,7 @@ re_ssh_run() {
     ssh -i "$RE_KEY" -p "$RE_PORT" \
         -o BatchMode=yes \
         -o ConnectTimeout=10 \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
         -o StrictHostKeyChecking=accept-new \
         -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
         -o IdentitiesOnly=yes \
@@ -457,6 +539,7 @@ re_run_host_n() {
     ssh -n -i "$RE_KEY" -p "$RE_PORT" \
         -o BatchMode=yes \
         -o ConnectTimeout=10 \
+        -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
         -o StrictHostKeyChecking=accept-new \
         -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
         -o IdentitiesOnly=yes \
@@ -483,10 +566,22 @@ re_require_access_host() {
 # curl-or-wget download over get.docker.com plus the three proxy mirrors,
 # shebang validation of what landed, an Aliyun-mirror retry of the script
 # itself, and the distro docker.io only as the last resort. A minimal image
-# with neither downloader gets curl from apt first.
+# with neither downloader gets curl from apt first. A fresh-boot host may be
+# mid unattended-upgrades, so every apt here waits out the dpkg lock.
 re_remote_docker_install() {
     cat <<'EOL'
 if command -v docker >/dev/null 2>&1; then exit 0; fi
+# make every apt on this box (incl. nested get.docker.com calls) wait for
+# the dpkg lock instead of failing on it
+mkdir -p /etc/apt/apt.conf.d 2>/dev/null
+printf 'DPkg::Lock::Timeout "600";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null
+waited=0
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+    [ "$waited" -eq 0 ] && echo "automatic system updates are running, waiting for the dpkg lock"
+    sleep 10
+    waited=$((waited + 10))
+    [ "$waited" -ge 600 ] && break
+done
 if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
     apt-get -o DPkg::Lock::Timeout=300 install -y curl
@@ -581,7 +676,7 @@ re_rename_target() {
     local label
     reading "${LANG[RE_LABEL_PROMPT]}" label
     label=$(re_clean_label "$label")
-    re_target_write "$RE_HOST" "$RE_PORT" "$RE_USER" "$RE_KEY" "$label"
+    re_target_write "$RE_HOST" "$RE_PORT" "$RE_USER" "$RE_KEY" "$label" "${RE_OVERLAY:-}"
     RE_LABEL="$label"
     step_ok "${LANG[RE_RENAME_OK]}"
 }
@@ -607,8 +702,10 @@ re_revoke_target() {
     rm -f "${RE_CONF_DIR}/${name}.target"
     [ "$(cat "$RE_ACTIVE_FILE" 2>/dev/null)" = "$name" ] && rm -f "$RE_ACTIVE_FILE"
 
-    # The key is shared by all targets; wipe it only when the last one is gone.
-    if ! grep -qF "$RE_KEY_FILE" "$RE_CONF_DIR"/*.target 2>/dev/null; then
+    # The key dir also holds known_hosts with every target's baseline; it goes
+    # only when the last target is gone — wiping it early makes the next
+    # accept-new silently trust a changed host key on machines still paired.
+    if ! compgen -G "${RE_CONF_DIR}/*.target" >/dev/null; then
         rm -rf "$RE_KEY_DIR"
     fi
     step_ok "${LANG[RE_REVOKE_OK]}"

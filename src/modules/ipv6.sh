@@ -54,8 +54,7 @@ manage_ipv6() {
                 ;;
             0)
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                remnawave_reverse
-                return
+                return 0
                 ;;
             *)
                 echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"

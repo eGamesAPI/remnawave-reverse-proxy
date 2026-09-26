@@ -200,8 +200,7 @@ EOL
 }
 
 an_panel_public_ip() {
-    curl -s --connect-timeout 8 --max-time 12 -4 ifconfig.me 2>/dev/null \
-        || curl -s --connect-timeout 8 --max-time 12 -4 api.ipify.org 2>/dev/null
+    get_public_ipv4
 }
 
 # isConnected flag for the node registered with this address.
@@ -306,45 +305,76 @@ fi
 # pushes the refreshed files and restarts the node's nginx — the compose
 # bind-mounts the files, and without a restart the container keeps serving
 # the old inode until it expires.
+# The cron script embeds its own copy of remote_exec: purge_stale_caches
+# wipes modules/ on every script update, and a script that sourced the
+# module went permanently silent (B-42). It regenerates whenever the
+# version marker below changes, so fixes reach installed boxes.
 an_setup_cert_sync() {
     local host="$1" lineage="$2"
     local sync_script="${DIR_REMNAWAVE}node-cert-sync.sh"
     local sync_list="${DIR_REMNAWAVE}node-cert-sync.list"
+    local marker="rrp-cert-sync v2"
 
-    if [ ! -f "$sync_script" ]; then
-        cat > "$sync_script" <<'EOL'
+    if [ ! -f "$sync_script" ] || ! head -3 "$sync_script" 2>/dev/null | grep -qF "$marker"; then
+        local re_src
+        re_src="${LOCAL_SRC_DIR:-}${LOCAL_SRC_DIR:+/}remote_exec.sh"
+        [ -r "$re_src" ] || re_src="${DIR_REMNAWAVE}modules/remote_exec.sh"
+        [ -r "$re_src" ] || return 0
+
+        {
+            cat <<'EOL'
 #!/bin/bash
-# Managed by remnawave-reverse-proxy (add_node auto deploy): pushes renewed
-# node certificates to the node servers. Entries live in node-cert-sync.list
-# as "host lineage" lines.
+# rrp-cert-sync v2 — managed by remnawave-reverse-proxy (add_node auto
+# deploy). Pushes renewed node certificates; entries live in
+# node-cert-sync.list as "host lineage" lines. The sync decision compares
+# the sha256 fingerprint of the panel's fullchain with the node's copy: a
+# renewal window on the panel says nothing about whether THIS node still
+# holds the previous file, and day counting used to skip nodes 2..N forever.
 set -u
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 log="${DIR_REMNAWAVE}node-cert-sync.log"
 exec >>"$log" 2>&1
-[ -r "${DIR_REMNAWAVE}modules/remote_exec.sh" ] || exit 0
 declare -A LANG=()
-. "${DIR_REMNAWAVE}modules/remote_exec.sh"
 
+# --- embedded remote_exec.sh, pinned to the version that wrote this file ---
+EOL
+            cat "$re_src"
+            cat <<'EOL'
+
+# --- sync loop --------------------------------------------------------------
 while read -r host lineage; do
     [ -n "$host" ] && [ -n "$lineage" ] || continue
     full="/etc/letsencrypt/live/$lineage/fullchain.pem"
     key="/etc/letsencrypt/live/$lineage/privkey.pem"
     [ -r "$full" ] && [ -r "$key" ] || continue
-    end=$(openssl x509 -noout -enddate -in "$full" 2>/dev/null) || continue
-    days=$(( ($(date -d "${end#notAfter=}" +%s) - $(date +%s)) / 86400 ))
-    [ "$days" -lt 31 ] || continue
+    pfp=$(openssl x509 -noout -fingerprint -sha256 -in "$full" 2>/dev/null)
+    [ -n "$pfp" ] || continue
+    rfp=$(re_run_host_n "$host" "openssl x509 -noout -fingerprint -sha256 -in /opt/remnanode/ssl/$lineage/fullchain.pem 2>/dev/null" 2>/dev/null | head -n1)
+    [ "$rfp" = "$pfp" ] && continue
     if cat "$full" | re_run_host "$host" "cat > /opt/remnanode/ssl/$lineage/fullchain.pem" \
        && cat "$key" | re_run_host "$host" "cat > /opt/remnanode/ssl/$lineage/privkey.pem"; then
-        re_run_host "$host" "docker restart remnawave-nginx" >/dev/null 2>&1
-        echo "$(date '+%F %T') $host $lineage synced ($days days left)"
+        re_run_host_n "$host" "docker restart remnawave-nginx" >/dev/null 2>&1
+        echo "$(date '+%F %T') $host $lineage synced"
     else
         echo "$(date '+%F %T') $host $lineage PUSH FAILED"
     fi
 done < "${DIR_REMNAWAVE}node-cert-sync.list"
 EOL
-        chmod 700 "$sync_script" 2>/dev/null
-        : > "$sync_list"
-        chmod 600 "$sync_list" 2>/dev/null
+        } > "${sync_script}.tmp" 2>/dev/null
+        # A broken embed must never replace a working cron script.
+        if bash -n "${sync_script}.tmp" 2>/dev/null; then
+            chmod 700 "${sync_script}.tmp"
+            mv -f "${sync_script}.tmp" "$sync_script"
+        else
+            rm -f "${sync_script}.tmp"
+            return 0
+        fi
+        # The list survives a regeneration — its format is stable, and
+        # wiping it would orphan every node the old script was serving.
+        if [ ! -f "$sync_list" ]; then
+            : > "$sync_list"
+            chmod 600 "$sync_list" 2>/dev/null
+        fi
     fi
 
     grep -qxF "$host $lineage" "$sync_list" 2>/dev/null || echo "$host $lineage" >> "$sync_list"
@@ -367,6 +397,21 @@ an_zone_provider() {
         dns-bunny)      echo bunny ;;
         dns-gcore)      echo gcore ;;
     esac
+}
+
+# After the reinstall-path `compose down` every failure must bring the old
+# stack back up — otherwise the node sits down while the panel reports a
+# mere "cancelled". rc is always 1, so call sites keep their return codes.
+an_deploy_bail() {
+    local host="$1" had_stack="$2"
+    if [ "$had_stack" = 1 ]; then
+        if re_run_host_n "$host" 'cd /opt/remnanode && { docker compose up -d || docker-compose up -d; }' >/dev/null 2>&1; then
+            echo -e "${COLOR_YELLOW}${LANG[AN_ROLLBACK_UP]}${COLOR_RESET}" >&2
+        else
+            echo -e "${COLOR_RED}${LANG[AN_ROLLBACK_UP_FAIL]}${COLOR_RESET}" >&2
+        fi
+    fi
+    return 1
 }
 
 # Deploy the freshly registered node on its server over SSH: DNS record and
@@ -412,8 +457,10 @@ an_auto_deploy() {
     host="$RE_HOST"
     step_ok "$(printf "${LANG[AN_SSH_OK]}" "${RE_USER}@${RE_HOST}:${RE_PORT}")"
 
-    node_ip=$(re_run_host "$host" "curl -s -4 --max-time 10 ifconfig.me || curl -s -4 --max-time 10 api.ipify.org" 2>/dev/null)
-    if [ -z "$node_ip" ]; then
+    # The node's public IP lands in root-level commands and the panel hosts
+    # hint — https + shape check, never a bare ifconfig.me answer.
+    node_ip=$(re_run_host_n "$host" "curl -fsS4 --max-time 10 https://api.ipify.org || curl -fsS4 --max-time 10 https://ifconfig.me" 2>/dev/null | tr -d '[:space:]')
+    if ! printf '%s' "$node_ip" | grep -qE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
         err_msg "${LANG[AN_NO_NODE_IP]}"
         return 1
     fi
@@ -421,9 +468,11 @@ an_auto_deploy() {
     # A remnanode that already runs on the box belongs to a flow we do not
     # own — replacing it destroys that node's registration, so it is always
     # a confirmation, never an assumption.
-    if re_run_host "$host" "if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}' | grep -qx remnanode; else exit 1; fi" >/dev/null 2>&1; then
+    local had_stack=0
+    if re_run_host_n "$host" "if command -v docker >/dev/null 2>&1; then docker ps -a --format '{{.Names}}' | grep -qx remnanode; else exit 1; fi" >/dev/null 2>&1; then
         if reading_yn "${LANG[AN_REMOTE_REINSTALL_ASK]}" confirm_remote_reinstall; then
-            re_run_host "$host" "cd /opt/remnanode && { docker compose down || docker-compose down; }" >/dev/null 2>&1
+            re_run_host_n "$host" "cd /opt/remnanode && { docker compose down || docker-compose down; }" >/dev/null 2>&1
+            had_stack=1
         else
             err_msg "${LANG[AN_REMOTE_ABORT]}"
             # A deliberate no — retrying would just re-ask the same question.
@@ -431,16 +480,18 @@ an_auto_deploy() {
         fi
     fi
 
-    if re_run_host "$host" "ss -tln 2>/dev/null | awk '{print \$4}' | grep -qE ':443$'" >/dev/null 2>&1; then
+    if re_run_host_n "$host" "ss -tln 2>/dev/null | awk '{print \$4}' | grep -qE ':443$'" >/dev/null 2>&1; then
         err_msg "${LANG[AN_PORT_BUSY]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
 
     # Caddy answers ACME on :80 — a listener already sitting there would leave
     # the caddy container crash-looping after a "successful" deploy.
     if [ "$ws" = "caddy" ] \
-        && re_run_host "$host" "ss -tln 2>/dev/null | awk '{print \$4}' | grep -qE ':80$'" >/dev/null 2>&1; then
+        && re_run_host_n "$host" "ss -tln 2>/dev/null | awk '{print \$4}' | grep -qE ':80$'" >/dev/null 2>&1; then
         err_msg "${LANG[AN_PORT80_BUSY]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
 
@@ -450,6 +501,7 @@ an_auto_deploy() {
     secret=$(echo "$response" | jq -r '.response.secretKey // empty')
     if [ -z "$secret" ]; then
         err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
     step_ok "${LANG[SR_REMOTE_KEYGEN_OK]}" >&2
@@ -477,9 +529,9 @@ an_auto_deploy() {
         if [ -n "$zone_prov" ]; then
             step_do "$(printf "${LANG[AN_DNS_STEP]}" "$domain" "$node_ip")" >&2
             case "$zone_prov" in
-                cloudflare) ensure_dns_record_cloudflare "$domain" "$base_domain" "$node_ip" || return 1 ;;
-                gcore)      ensure_dns_record_gcore "$domain" "$base_domain" "$node_ip" || return 1 ;;
-                bunny)      ensure_dns_record_bunny "$domain" "$base_domain" "$node_ip" || return 1 ;;
+                cloudflare) ensure_dns_record_cloudflare "$domain" "$base_domain" "$node_ip" || { an_deploy_bail "$host" "$had_stack"; return 1; } ;;
+                gcore)      ensure_dns_record_gcore "$domain" "$base_domain" "$node_ip" || { an_deploy_bail "$host" "$had_stack"; return 1; } ;;
+                bunny)      ensure_dns_record_bunny "$domain" "$base_domain" "$node_ip" || { an_deploy_bail "$host" "$had_stack"; return 1; } ;;
             esac
             step_ok "${LANG[AN_DNS_OK]}" >&2
         else
@@ -532,14 +584,16 @@ an_auto_deploy() {
     [ -s "$self" ] || self="/usr/local/bin/remnawave_reverse"
     if [ ! -s "$self" ]; then
         err_msg "${LANG[AN_PACKAGES_FAIL]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
 
     step_do "${LANG[AN_PACKAGES]}" >&2
     if ! printf '%s\n' "$lang_val" | re_run_host "$host" "mkdir -p ${DIR_REMNAWAVE} && cat > ${DIR_REMNAWAVE}selected_language" \
        || ! cat "$self" | re_run_host "$host" "cat > /tmp/remnawave_bootstrap.sh" \
-       || ! re_run_host "$host" "bash /tmp/remnawave_bootstrap.sh --bootstrap-packages; rc=\$?; rm -f /tmp/remnawave_bootstrap.sh; exit \$rc" >&2; then
+       || ! re_run_host_n "$host" "bash /tmp/remnawave_bootstrap.sh --bootstrap-packages; rc=\$?; rm -f /tmp/remnawave_bootstrap.sh; exit \$rc" >&2; then
         err_msg "${LANG[AN_PACKAGES_FAIL]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
 
@@ -565,12 +619,14 @@ an_auto_deploy() {
             bunny|gcore|cloudflare) ;;
             *)
                 err_msg "$(printf "${LANG[AN_DNS_UNKNOWN]}" "$base_domain")"
+                an_deploy_bail "$host" "$had_stack"
                 return 1
                 ;;
         esac
         step_do "$(printf "${LANG[AN_CERT_ISSUE]}" "$domain")" >&2
         if ! lineage=$(an_remote_cert_issue "$host" "$domain" "$cert_prov" "$cert_email"); then
             err_msg "$(printf "${LANG[AN_CERT_FAIL]}" "$domain")"
+            an_deploy_bail "$host" "$had_stack"
             return 1
         fi
         ssl_source="/etc/letsencrypt/live"
@@ -585,6 +641,7 @@ an_auto_deploy() {
         randomhtml_stop_spinner 2>/dev/null
         rm -rf "$tmpd"
         err_msg "${LANG[AN_HTML_FAIL]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
     # The spinner watches the MAIN pid — left running it would churn braille
@@ -594,7 +651,7 @@ an_auto_deploy() {
     # Caddy's ACME handshake arrives on :80 — without the rule the very
     # first certificate issue would stall behind the firewall.
     if [ "$ws" = "caddy" ]; then
-        if re_run_host "$host" "ufw allow 80/tcp" >/dev/null 2>&1; then
+        if re_run_host_n "$host" "ufw allow 80/tcp" >/dev/null 2>&1; then
             step_ok "${LANG[AN_UFW_80_OK]}" >&2
         else
             echo -e "${COLOR_YELLOW}${LANG[AN_UFW_80_FAIL]}${COLOR_RESET}" >&2
@@ -605,7 +662,7 @@ an_auto_deploy() {
     # the rule has to land now or the panel never reaches the node.
     panel_ip=$(an_panel_public_ip)
     if [ -n "$panel_ip" ]; then
-        if re_run_host "$host" "ufw allow from $panel_ip to any port 2222 proto tcp" >/dev/null 2>&1; then
+        if re_run_host_n "$host" "ufw allow from $panel_ip to any port 2222 proto tcp" >/dev/null 2>&1; then
             step_ok "${LANG[AN_UFW_2222_OK]}" >&2
         else
             echo -e "${COLOR_YELLOW}${LANG[AN_UFW_2222_FAIL]}${COLOR_RESET}" >&2
@@ -641,20 +698,63 @@ an_auto_deploy() {
          | re_run_host "$host" "mkdir -p /var/www/html && tar -xf - -C /var/www/html"; then
         rm -rf "$tmpd"
         err_msg "${LANG[AN_PUSH_FAIL]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
     step_ok "${LANG[SR_REMOTE_COMPOSE_OK]}" >&2
 
     step_do "${LANG[SR_REMOTE_UP]}" >&2
-    if ! re_run_host "$host" 'cd /opt/remnanode && { docker compose up -d || docker-compose up -d; }' >&2; then
+    if ! re_run_host_n "$host" 'cd /opt/remnanode && { docker compose up -d || docker-compose up -d; }' >&2; then
         rm -rf "$tmpd"
         err_msg "${LANG[SR_REMOTE_UP_FAIL]}"
+        an_deploy_bail "$host" "$had_stack"
         return 1
     fi
 
     rm -rf "$tmpd"
     if [ "$cert_on_node" = 0 ] && [ "$ws" != "caddy" ]; then
         an_setup_cert_sync "$host" "$lineage"
+    fi
+
+    # NetBird overlay birth (§8.5): join the machine (or reuse its live
+    # overlay), prove the path from the panel container, and hand the
+    # overlay address to the caller — the node record is created only after
+    # this succeeds.
+    AN_NODE_OVERLAY=""
+    if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ]; then
+        step_do "${LANG[AN_NB_JOIN_STEP]}" >&2
+        local node_ov="" kk up_out is unit="rrp-nb-apt-${NB_RUN_ID:-$RANDOM$RANDOM}"
+        if re_run_host_n "$host" 'netbird status --json 2>/dev/null | grep -q "\"connected\"[[:space:]]*:[[:space:]]*true"' >/dev/null 2>&1; then
+            node_ov=$(re_run_host_n "$host" "ip -4 -o addr show wt0 2>/dev/null" | awk '{print $4}' | cut -d/ -f1 | head -n1)
+            nb_is_ipv4 "$node_ov" || node_ov=""
+        fi
+        if [ -z "$node_ov" ]; then
+            re_run_host_n "$host" "$(nb_apt_repo_script)" >/dev/null 2>&1 \
+            && { is=$(nb_apt_install_script); is=${is//INSTALL_UNIT/$unit}; re_run_host_n "$host" "$is" >/dev/null 2>&1; } \
+            && re_run_host_n "$host" "$(nb_lazy_off_script)" >/dev/null 2>&1 || true
+            kk=$(nb_oneoff_key "$(nb_state_get grp_nodes)" "rrp-node-${entity_name}-${unit}") \
+                && up_out=$(printf '%s\n' "${kk#* }" | re_run_host "$host" "$(nb_up_script "$entity_name" "")") \
+                && { [ -n "${kk%% *}" ] && nb_revoke_setup_key "${kk%% *}"; } \
+                && node_ov=$(printf '%s\n' "$up_out" | sed -n 's/^RRP_OVERLAY=//p' | tail -n1)
+        fi
+        if ! nb_is_ipv4 "$node_ov"; then
+            echo -e "${COLOR_RED}${LANG[AN_NB_JOIN_FAIL]}${COLOR_RESET}" >&2
+            an_deploy_bail "$host" "$had_stack"
+            return 3
+        fi
+        local npid
+        npid=$(nb_peer_id_by_ip "$node_ov")
+        [ -n "$npid" ] && nb_group_add_peer "$(nb_state_get grp_nodes)" "$npid"
+        step_ok "$(printf "${LANG[AN_NB_JOIN_OK]}" "$node_ov")" >&2
+
+        step_do "${LANG[AN_NB_PATH_STEP]}" >&2
+        if ! nb_path_check_retry "$node_ov"; then
+            echo -e "${COLOR_RED}${LANG[AN_NB_PATH_FAIL]}${COLOR_RESET}" >&2
+            an_deploy_bail "$host" "$had_stack"
+            return 4
+        fi
+        step_ok "${LANG[AN_NB_PATH_OK]}" >&2
+        AN_NODE_OVERLAY="$node_ov"
     fi
 
     local attempt resolved_ip="" hosts_hinted=0
@@ -685,6 +785,15 @@ an_auto_deploy() {
             step_do "$(printf "${LANG[AN_WAIT_DNS]}" "$domain" "$attempt")" >&2
             sleep 15
         done
+    fi
+
+    # Overlay mode: the node record does not exist yet, so there is nothing
+    # to poll here — the caller creates the record at the overlay address and
+    # waits by its uuid.
+    if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ]; then
+        echo -e "${COLOR_GREEN}${LANG[AN_DEPLOY_OK]}${COLOR_RESET}"
+        echo -e "${COLOR_GRAY}$(printf "${LANG[AN_NB_DEPLOY_NOTE]}" "$AN_NODE_OVERLAY")${COLOR_RESET}"
+        return 0
     fi
 
     for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -755,7 +864,7 @@ add_node_to_panel() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     while true; do
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" auto_mode
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" auto_mode || return 0
         case "$auto_mode" in
             1|2) break ;;
             0) echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"; return 0 ;;
@@ -766,7 +875,65 @@ add_node_to_panel() {
         esac
     done
 
+    # A fresh node can be born straight on the NetBird overlay: the panel
+    # reaches it at its overlay address from the first second, and the public
+    # 2222 rule stays as the fallback. Needs API mode (one-off keys) and the
+    # panel itself joined.
+    AN_NODE_OVERLAY_MODE=0
+    if [ "$auto_mode" = "1" ] \
+       && load_netbird_module 2>/dev/null && nb_api_mode && nb_mgmt_connected; then
+        if reading_yn "${LANG[AN_NB_OVERLAY_ASK]}" an_nb_use; then
+            AN_NODE_OVERLAY_MODE=1
+        fi
+    fi
+
     # The web server only matters for the automatic path — the manual one
+# A node record with this address already exists but never connected: most
+# often a leftover from the old panel-only install, which used to pre-create
+# profile+node+host. Offer to wipe those records here instead of sending the
+# user to delete them by hand. rc=0 when the records were removed.
+an_offer_stale_cleanup() {
+    local domain_url="$1" token="$2" domain="$3"
+    local nodes_json node_uuid node_name profile_uuid
+    nodes_json=$(make_api_request "GET" "http://$domain_url/api/nodes" "$token")
+    node_uuid=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].uuid // empty' 2>/dev/null)
+    [ -n "$node_uuid" ] || return 1
+    if echo "$nodes_json" | jq -e --arg d "$domain" '[.response[]? | select(.address == $d)][0].isConnected' 2>/dev/null | grep -q true; then
+        return 1
+    fi
+    node_name=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].name // "?"' 2>/dev/null)
+    profile_uuid=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].configProfileUuid // empty' 2>/dev/null)
+
+    echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_FOUND]}" "$node_name")${COLOR_RESET}"
+    echo -n "$(question "${LANG[AN_STALE_ASK]}")"
+    local confirm
+    read_yn confirm || { echo; return 1; }
+    echo
+
+    # Hosts belong to the profile, not to the node: when other nodes sit on the
+    # same profile the hosts are their live inbounds, so usage is checked before
+    # anything is deleted. Unreadable usage counts as "in use".
+    local still_used=""
+    if [ -n "$profile_uuid" ]; then
+        still_used=$(echo "$nodes_json" | jq -r --arg p "$profile_uuid" --arg n "$node_uuid" '[.response[]? | select(.configProfileUuid == $p and .uuid != $n)] | length' 2>/dev/null)
+    fi
+
+    make_api_request "DELETE" "http://$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
+    if [ -n "$profile_uuid" ] && [ "${still_used:-1}" = "0" ]; then
+        local hosts_json huuid
+        hosts_json=$(make_api_request "GET" "http://$domain_url/api/hosts" "$token")
+        for huuid in $(echo "$hosts_json" | jq -r --arg p "$profile_uuid" '.response[]? | select((.inbound.configProfileUuid // "") == $p) | .uuid' 2>/dev/null); do
+            make_api_request "DELETE" "http://$domain_url/api/hosts/$huuid" "$token" >/dev/null 2>&1
+        done
+        make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token" >/dev/null 2>&1
+    fi
+    if [ -n "$profile_uuid" ] && [ "${still_used:-1}" != "0" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_HOSTS_KEPT]}" "${still_used:-1}")${COLOR_RESET}"
+    fi
+    echo -e "${COLOR_GREEN}${LANG[AN_STALE_DONE]}${COLOR_RESET}"
+    return 0
+}
+
     # picks it later in the "install node only" flow on the node itself.
     local an_ws="nginx" ws_choice
     if [ "$auto_mode" = "1" ]; then
@@ -802,7 +969,7 @@ add_node_to_panel() {
     token=$(cat "$TOKEN_FILE")
 
     while true; do
-        reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN
+        reading "${LANG[ENTER_NODE_DOMAIN]}" SELFSTEAL_DOMAIN || return 0
         if [ "$SELFSTEAL_DOMAIN" = "0" ]; then
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
             return 0
@@ -810,11 +977,14 @@ add_node_to_panel() {
         if check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
             break
         fi
+        if an_offer_stale_cleanup "$domain_url" "$token" "$SELFSTEAL_DOMAIN"            && check_node_domain "$domain_url" "$token" "$SELFSTEAL_DOMAIN"; then
+            break
+        fi
         echo -e "${COLOR_YELLOW}${LANG[TRY_ANOTHER_DOMAIN]}${COLOR_RESET}"
     done
 
     while true; do
-        reading "${LANG[ENTER_NODE_NAME]}" entity_name
+        reading "${LANG[ENTER_NODE_NAME]}" entity_name || return 0
         if [[ ! "$entity_name" =~ ^[a-zA-Z0-9-]+$ ]]; then
             echo -e "${COLOR_RED}${LANG[CF_INVALID_CHARS]}${COLOR_RESET}"
             continue
@@ -854,22 +1024,26 @@ add_node_to_panel() {
                or ((.pluginConfig // {}) | (has("torrentBlocker") or has("ingressFilter") or has("egressFilter"))))]
              | first | .uuid // empty' 2>/dev/null)
 
-    create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$plugin_uuid" || return 1
+    # Overlay mode creates the node record AFTER the path check proves the
+    # overlay works — the record's address will be the overlay IP.
+    if [ "${AN_NODE_OVERLAY_MODE:-0}" != "1" ]; then
+        create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$entity_name" "$plugin_uuid" || return 1
 
-    create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
+        create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
 
-    local squad_uuids
-    if ! squad_uuids=$(get_default_squad "$domain_url" "$token"); then
-        echo -e "${COLOR_RED}${LANG[ERROR_GET_SQUAD_LIST]}${COLOR_RESET}"
-    elif [ -z "$squad_uuids" ]; then
-        echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_TO_UPDATE]}${COLOR_RESET}"
-    else
-        for squad_uuid in $squad_uuids; do
-            update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
-        done
+        local squad_uuids
+        if ! squad_uuids=$(get_default_squad "$domain_url" "$token"); then
+            echo -e "${COLOR_RED}${LANG[ERROR_GET_SQUAD_LIST]}${COLOR_RESET}"
+        elif [ -z "$squad_uuids" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[NO_SQUADS_TO_UPDATE]}${COLOR_RESET}"
+        else
+            for squad_uuid in $squad_uuids; do
+                update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
+            done
+        fi
+
+        echo -e "${COLOR_GREEN}${LANG[NODE_ADDED_SUCCESS]}${COLOR_RESET}"
     fi
-
-    echo -e "${COLOR_GREEN}${LANG[NODE_ADDED_SUCCESS]}${COLOR_RESET}"
 
     if [ "$auto_mode" != "1" ]; then
         an_show_manual_instruction
@@ -891,5 +1065,44 @@ add_node_to_panel() {
             echo -e "${COLOR_YELLOW}${LANG[AN_FALLBACK]}${COLOR_RESET}"
         fi
         an_show_manual_instruction
+        return 0
+    fi
+
+    # Overlay birth: the deploy proved the path, now the record goes straight
+    # to the overlay address and the wait runs by uuid.
+    if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ] && [ -n "$AN_NODE_OVERLAY" ]; then
+        create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$AN_NODE_OVERLAY" "$entity_name" "$plugin_uuid" | tail -n1 > /tmp/rrp-an-node-uuid
+        local node_uuid
+        node_uuid=$(cat /tmp/rrp-an-node-uuid); rm -f /tmp/rrp-an-node-uuid
+        if [ -z "$node_uuid" ]; then
+            echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
+            return 1
+        fi
+        create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
+        local squad_uuid
+        local squad_uuids
+        if squad_uuids=$(get_default_squad "$domain_url" "$token"); then
+            for squad_uuid in $squad_uuids; do
+                update_squad "$domain_url" "$token" "$squad_uuid" "$inbound_uuid"
+            done
+        fi
+        echo -e "${COLOR_GREEN}${LANG[NODE_ADDED_SUCCESS]}${COLOR_RESET}"
+
+        step_do "${LANG[AN_NB_WAIT_STEP]}"
+        if nb_wait_node_connected "$token" "$node_uuid" "$(date +%s)" 120 45; then
+            step_ok "${LANG[SR_WAIT_CONNECT_OK]}"
+            nb_node_set "$node_uuid" uuid "$node_uuid"
+            nb_node_set "$node_uuid" name "$entity_name"
+            nb_node_set "$node_uuid" old_address "$SELFSTEAL_DOMAIN"
+            nb_node_set "$node_uuid" public_host "$SELFSTEAL_DOMAIN"
+            nb_node_set "$node_uuid" overlay "$AN_NODE_OVERLAY"
+            nb_node_state "$node_uuid" connected
+            nb_journal "$node_uuid" overlay-birth done
+            nb_audit "overlay-birth name=$entity_name overlay=$AN_NODE_OVERLAY"
+            echo -e "${COLOR_GREEN}$(printf "${LANG[AN_NB_DONE]}" "$entity_name" "$AN_NODE_OVERLAY")${COLOR_RESET}"
+            echo -e "${COLOR_GRAY}${LANG[NB_MG_PUBLIC_KEPT]}${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_NB_WAIT_FAIL]}" "$node_uuid")${COLOR_RESET}"
+        fi
     fi
 }
