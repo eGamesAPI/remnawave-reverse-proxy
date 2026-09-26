@@ -172,7 +172,7 @@ EOL
 
 tinyauth_banner() {
     local panel_domain="${1:-$PANEL_DOMAIN}"
-    echo -e "${COLOR_YELLOW}${LANG[PORTAL_ACCESS]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}${LANG[TINYAUTH_ACCESS]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}https://${panel_domain}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[PORTAL_CREDS]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}${LANG[USERNAME]} ${COLOR_WHITE}$TINYAUTH_USER${COLOR_RESET}"

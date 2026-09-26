@@ -763,6 +763,7 @@ handle_certificates() {
     local cert_method="$2"
     local letsencrypt_email="$3"
     local target_dir="${4:-/opt/remnawave}"
+    local skip_compose_append="${5:-false}"
 
     declare -A unique_domains
     local need_certificates=false
@@ -935,8 +936,14 @@ handle_certificates() {
             return 1
         fi
         if [ -z "${cert_domains_added[$cert_domain]}" ]; then
-            echo "      - /etc/letsencrypt/live/$cert_domain/fullchain.pem:/etc/nginx/ssl/$cert_domain/fullchain.pem:ro" >> "$target_dir/docker-compose.yml"
-            echo "      - /etc/letsencrypt/live/$cert_domain/privkey.pem:/etc/nginx/ssl/$cert_domain/privkey.pem:ro" >> "$target_dir/docker-compose.yml"
+            # Appending at EOF only works for composes whose last block IS
+            # the web server's volume list (the node flow); flow-specific
+            # renderers (install_sub) pass skip_compose_append and place the
+            # mounts themselves.
+            if [ "$skip_compose_append" != "true" ]; then
+                echo "      - /etc/letsencrypt/live/$cert_domain/fullchain.pem:/etc/nginx/ssl/$cert_domain/fullchain.pem:ro" >> "$target_dir/docker-compose.yml"
+                echo "      - /etc/letsencrypt/live/$cert_domain/privkey.pem:/etc/nginx/ssl/$cert_domain/privkey.pem:ro" >> "$target_dir/docker-compose.yml"
+            fi
             cert_domains_added["$cert_domain"]="1"
         fi
     done

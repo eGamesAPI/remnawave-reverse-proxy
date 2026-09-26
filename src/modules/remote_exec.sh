@@ -167,7 +167,7 @@ re_ensure_sshpass() {
 re_key_comment() {
     local domain
     domain=$(sed -n 's/^PANEL_DOMAIN=//p' /opt/remnawave/.env 2>/dev/null | head -n1 | tr -d '"')
-    domain=$(printf '%s' "${domain:-$(hostname)}" | tr -d "'\\" | tr -d '[:space:]')
+    domain=$(printf '%s' "${domain:-$(hostname)}" | tr -d "'\\\\" | tr -d '[:space:]')
     echo "remnawave-reverse-proxy@${domain:-localhost}"
 }
 
@@ -428,6 +428,10 @@ re_bootstrap() {
     [ -n "$port" ] || port=22
     reading "$(printf "${LANG[RE_USER_PROMPT]}" root)" user
     [ -n "$user" ] || user=root
+    # callers print the globals after a successful bootstrap (AN_SSH_OK),
+    # and a failed re_target_load_by_host before us has just reset them
+    RE_PORT="$port"
+    RE_USER="$user"
     reading "${LANG[RE_LABEL_PROMPT]}" label
     label=$(re_clean_label "$label")
 
@@ -567,21 +571,34 @@ re_require_access_host() {
 # shebang validation of what landed, an Aliyun-mirror retry of the script
 # itself, and the distro docker.io only as the last resort. A minimal image
 # with neither downloader gets curl from apt first. A fresh-boot host may be
-# mid unattended-upgrades, so every apt here waits out the dpkg lock.
+# mid unattended-upgrades, so every apt here waits out the dpkg lock, and the
+# update units get a graceful SIGTERM if it is still held after two minutes.
 re_remote_docker_install() {
     cat <<'EOL'
 if command -v docker >/dev/null 2>&1; then exit 0; fi
 # make every apt on this box (incl. nested get.docker.com calls) wait for
 # the dpkg lock instead of failing on it
 mkdir -p /etc/apt/apt.conf.d 2>/dev/null
-printf 'DPkg::Lock::Timeout "600";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null
-waited=0
+printf 'DPkg::Lock::Timeout "300";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null
+lock_waited=0
 while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-    [ "$waited" -eq 0 ] && echo "automatic system updates are running, waiting for the dpkg lock"
-    sleep 10
-    waited=$((waited + 10))
-    [ "$waited" -ge 600 ] && break
+    [ "$lock_waited" -eq 0 ] && echo "automatic system updates are running, waiting for the dpkg lock (up to 2 min)"
+    sleep 5
+    lock_waited=$((lock_waited + 5))
+    [ "$lock_waited" -ge 120 ] && break
 done
+if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+    echo "dpkg lock still held, asking system updates to stop (they resume on the next timer run)"
+    systemctl kill --kill-who=all --signal=SIGTERM apt-daily.service apt-daily-upgrade.service unattended-upgrades.service >/dev/null 2>&1
+    lock_waited=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        sleep 5
+        lock_waited=$((lock_waited + 5))
+        [ "$lock_waited" -ge 120 ] && break
+    done
+    # finish a package half-configured by the SIGTERM (live-observed on grub-pc)
+    dpkg --configure -a >/dev/null 2>&1 || true
+fi
 if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
     apt-get -o DPkg::Lock::Timeout=300 install -y curl

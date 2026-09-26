@@ -274,7 +274,9 @@ nb_install_local() {
 nb_read_hidden() {
     printf ' %s' "$(question "$1")"
     read -rs "$2"
+    local rc=$?
     echo ""
+    return "$rc"
 }
 
 nb_up_script() {
@@ -349,6 +351,9 @@ nb_api_token() {
 }
 
 nb_api_nodes() {
+    # self-sufficient: this helper may run in a subshell where no flow
+    # loaded the panel API module beforehand
+    command -v make_api_request >/dev/null 2>&1 || load_api_module >/dev/null 2>&1 || true
     make_api_request "GET" "${NB_API_BASE}/api/nodes?_=$(date +%s)" "$1"
 }
 
@@ -357,6 +362,9 @@ nb_node_obj() {
 }
 
 nb_patch_node_address() {
+    # self-sufficient: this helper may run in a subshell where no flow
+    # loaded the panel API module beforehand
+    command -v make_api_request >/dev/null 2>&1 || load_api_module >/dev/null 2>&1 || true
     local token="$1" uuid="$2" address="$3" r
     r=$(make_api_request "PATCH" "${NB_API_BASE}/api/nodes" "$token" \
         "{\"uuid\":\"$uuid\",\"address\":\"$address\"}")
@@ -408,6 +416,9 @@ nb_note_old_addr() {
 }
 
 nb_patch_note() {
+    # self-sufficient: this helper may run in a subshell where no flow
+    # loaded the panel API module beforehand
+    command -v make_api_request >/dev/null 2>&1 || load_api_module >/dev/null 2>&1 || true
     local token="$1" uuid="$2" note="$3"
     make_api_request "PATCH" "${NB_API_BASE}/api/nodes" "$token" \
         "{\"uuid\":\"$uuid\",\"note\":$(printf '%s' "$note" | jq -R .)}" >/dev/null 2>&1
@@ -563,20 +574,30 @@ nb_join() {
         kid=${kk%% *}
         key=${kk#* }
     else
-        nb_read_hidden "${LANG[NB_KEY_PROMPT]}" key
-        [ -n "$key" ] || { echo -e "${COLOR_YELLOW}${LANG[NB_KEY_EMPTY]}${COLOR_RESET}"; return 1; }
+        echo -e " ${COLOR_GRAY}${LANG[NB_KEY_HINT]}${COLOR_RESET}"
+        while true; do
+            nb_read_hidden "${LANG[NB_KEY_PROMPT]}" key || return 1
+            [ -n "$key" ] && break
+            echo -e "${COLOR_YELLOW}${LANG[NB_KEY_EMPTY]}${COLOR_RESET}"
+        done
     fi
 
     hn_def=$(printf '%s' "$(hostname -s)" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9-' '-' | cut -c1-63)
-    reading "$(printf "${LANG[NB_HOSTNAME_PROMPT]}" "$hn_def")" hn
-    hn="${hn:-$hn_def}"
-    printf '%s' "$hn" | grep -qE '^[a-z0-9-]{1,63}$' || { echo -e "${COLOR_RED}${LANG[NB_HOSTNAME_BAD]}${COLOR_RESET}"; return 3; }
+    while true; do
+        reading "$(printf "${LANG[NB_HOSTNAME_PROMPT]}" "$hn_def")" hn || return 1
+        hn="${hn:-$hn_def}"
+        hn=$(printf '%s' "$hn" | tr 'A-Z' 'a-z')
+        printf '%s' "$hn" | grep -qE '^[a-z0-9-]{1,63}$' && break
+        echo -e "${COLOR_RED}${LANG[NB_HOSTNAME_BAD]}${COLOR_RESET}"
+    done
 
-    reading "${LANG[NB_MGMT_PROMPT]}" mgmt
-    if [ -n "$mgmt" ]; then
-        printf '%s' "$mgmt" | grep -qE '^https://[A-Za-z0-9._-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$' \
-            || { echo -e "${COLOR_RED}${LANG[NB_MGMT_BAD]}${COLOR_RESET}"; return 3; }
-    fi
+    echo -e " ${COLOR_GRAY}${LANG[NB_MGMT_HINT]}${COLOR_RESET}"
+    while true; do
+        reading "${LANG[NB_MGMT_PROMPT]}" mgmt || return 1
+        [ -z "$mgmt" ] && break
+        printf '%s' "$mgmt" | grep -qE '^https://[A-Za-z0-9._-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$' && break
+        echo -e "${COLOR_RED}${LANG[NB_MGMT_BAD]}${COLOR_RESET}"
+    done
 
     nb_install_local || return 3
     # The env rides along the install on a fresh machine; an installed but
@@ -627,7 +648,21 @@ nb_join() {
     nb_audit "join host=$(hostname -s) overlay=$ov mgmt=$(nb_mgmt_url)"
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NB_JOIN_DONE]}${COLOR_RESET}"
-    nb_policy_checklist
+    if [ "$(nb_state_get mode)" != "api" ]; then
+        # A fresh join lands in basic mode, where the policy work is manual
+        # and too easy to get wrong. Offer the API funnel first: activate
+        # (PAT -> groups), then the Default-off question with its path
+        # checks. The checklist stays as the fallback for basic mode.
+        local api_now
+        echo -e " ${COLOR_GRAY}${LANG[NB_JOIN_API_HINT]}${COLOR_RESET}"
+        if reading_yn "${LANG[NB_JOIN_API_ASK]}" api_now; then
+            if nb_activate_api; then
+                nb_policies_flow
+                return 0
+            fi
+        fi
+        nb_policy_checklist
+    fi
     return 0
 }
 
@@ -696,10 +731,20 @@ nb_pick_migratable() {
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NB_MG_TITLE]}${COLOR_RESET}"
     echo -e ""
-    local idx=1
+    # Column widths come from the rows themselves: fixed 20/24 columns leave
+    # short names behind a wall of spaces and let long hosts push the
+    # status mark out of line.
+    local rows=() line name host conn nw=0 hw=0 idx=1
     for obj in "${items[@]}"; do
-        printf '%s\n' "$obj" | jq -r '"\(.name)\t\(.address)\t\(.isConnected)"' | \
-            awk -v i="$idx" -F'\t' '{ printf "  %d. %-20s %-24s %s\n", i, $1, $2, ($3=="true"?"✓":"✗") }'
+        line=$(printf '%s' "$obj" | jq -r '"\(.name)\t\(.address)\t\(.isConnected)"')
+        rows+=("$line")
+        IFS=$'\t' read -r name host conn <<<"$line"
+        [ "${#name}" -gt "$nw" ] && nw=${#name}
+        [ "${#host}" -gt "$hw" ] && hw=${#host}
+    done
+    for line in "${rows[@]}"; do
+        printf '%s\n' "$line" | awk -v i="$idx" -v nw="$((nw + 2))" -v hw="$((hw + 2))" -F'\t' \
+            '{ printf "  %d. %-*s %-*s %s\n", i, nw, $1, hw, $2, ($3=="true"?"✓":"✗") }'
         idx=$((idx + 1))
     done
     reading "$(printf "${LANG[NB_MG_PICK]}" "$((idx - 1))")" pick || return 1
@@ -789,8 +834,8 @@ nb_migrate() {
                 echo -e "${COLOR_YELLOW}$(printf "${LANG[NB_MG_RESUME]}" "$name" "$st")${COLOR_RESET}"
                 reading "${LANG[NB_MG_RESUME_PROMPT]}" r_resume || return 1
                 case "$r_resume" in
-                    r) nb_rollback_one "$token" "$uuid" "$panel_ov"; return $? ;;
-                    c) ;;
+                    в|r) nb_rollback_one "$token" "$uuid" "$panel_ov"; return $? ;;
+                    п|c) ;;
                     *) return 1 ;;
                 esac
                 ;;
@@ -1256,11 +1301,32 @@ nb_fix_flags() {
 # ---------------------------------------------------------------------------
 
 nb_update_self() {
-    local cur ver
+    local cur ver cand
     cur=$(nb_client_version)
-    reading "$(printf "${LANG[NB_UPD_VERSION]}" "${cur:-?}")" ver
+    # The pinned client must not float on apt upgrades, so the path to the
+    # latest version runs through here: look it up in the repo and make it
+    # the default answer.
+    step_do "${LANG[NB_UPD_LOOKUP]}"
+    apt-get -o DPkg::Lock::Timeout=300 update -qq >/dev/null 2>&1
+    cand=$(apt-cache policy netbird 2>/dev/null | sed -n 's/^[[:space:]]*Candidate:[[:space:]]*//p' | head -n1)
+    [ "$cand" = "(none)" ] && cand=""
+    if [ -n "$cand" ]; then
+        step_ok "$(printf "${LANG[NB_UPD_LATEST_OK]}" "$cand")"
+    else
+        echo -e "${COLOR_YELLOW}${LANG[NB_UPD_LATEST_FAIL]}${COLOR_RESET}"
+    fi
+    if [ -n "$cand" ]; then
+        reading "$(printf "${LANG[NB_UPD_VERSION_LATEST]}" "$cand")" ver || return 1
+        [ -n "$ver" ] || ver="$cand"
+    else
+        reading "$(printf "${LANG[NB_UPD_VERSION]}" "${cur:-?}")" ver || return 1
+    fi
     [ -n "$ver" ] || return 1
     printf '%s' "$ver" | grep -qE '^[0-9]+(\.[0-9]+){1,3}$' || { echo -e "${COLOR_RED}${LANG[NB_UPD_BAD]}${COLOR_RESET}"; return 1; }
+    if [ "$ver" = "$cur" ]; then
+        echo -e "${COLOR_GREEN}$(printf "${LANG[NB_UPD_ALREADY]}" "$cur")${COLOR_RESET}"
+        return 0
+    fi
     echo -e "${COLOR_YELLOW}${LANG[NB_UPD_WARN]}${COLOR_RESET}"
     reading_yn "${LANG[NB_UPD_CONFIRM]}" upd_go || return 1
     step_do "$(printf "${LANG[NB_UPD_RUNNING]}" "$ver")"
@@ -1340,6 +1406,155 @@ nb_disable() {
     netbird down >/dev/null 2>&1
     nb_audit "disable local"
     echo -e "${COLOR_GREEN}${LANG[NB_OFF_DONE]}${COLOR_RESET}"
+    return 0
+}
+
+# Remove the client from a machine the module installed it on (nodes, and
+# later sub/checker hosts): down, logout, package purge, config wipe. rc=0
+# only when the client is really gone.
+nb_remote_netbird_uninstall() {
+    re_run_host_n "$1" 'netbird down >/dev/null 2>&1
+netbird logout >/dev/null 2>&1
+systemctl stop netbird >/dev/null 2>&1
+apt-mark unhold netbird >/dev/null 2>&1
+apt-get -o DPkg::Lock::Timeout=300 purge -y netbird >/dev/null 2>&1
+rm -rf /etc/netbird 2>/dev/null
+command -v netbird >/dev/null 2>&1 && exit 1
+exit 0'
+}
+
+# Delete every account peer whose name or hostname matches; echoes the count.
+nb_peer_delete_by_name() {
+    local name="$1" pid removed=0
+    while read -r pid; do
+        [ -n "$pid" ] || continue
+        nb_nb_api DELETE "/api/peers/$pid" >/dev/null 2>&1 && removed=$((removed + 1))
+    done < <(nb_nb_api GET /api/peers 2>/dev/null | jq -r --arg n "$name" '.[]? | select(.name == $n or .hostname == $n) | .id' 2>/dev/null)
+    echo "$removed"
+    return 0
+}
+
+# Full teardown for fresh-from-scratch runs. Guards refuse while any part of
+# the scheme still rides the network (panel nodes, subscription, checker);
+# the sweep removes the client from the node machines over SSH and deletes
+# their peers from the account; finally the local client and the module
+# state go. Groups and policies in the account stay — a new join reuses
+# them.
+nb_purge() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[NB_PURGE_TITLE]}${COLOR_RESET}"
+    echo -e ""
+
+    if [ -s "$NB_DIR/sub.json" ]; then
+        echo -e "${COLOR_RED}${LANG[NB_PURGE_SUB_LEFT]}${COLOR_RESET}"
+        return 1
+    fi
+    if [ -s "$NB_DIR/checker.json" ]; then
+        echo -e "${COLOR_RED}${LANG[NB_PURGE_CHK_LEFT]}${COLOR_RESET}"
+        return 1
+    fi
+
+    if panel_is_installed; then
+        local token count=0 prefix obj
+        nb_load_api 2>/dev/null || true
+        token=""
+        [ -s "${DIR_REMNAWAVE}token" ] && token=$(cat "${DIR_REMNAWAVE}token")
+        prefix=$(nb_state_get network_cidr)
+        [ -n "$prefix" ] || prefix=$(nb_overlay_prefix)
+        if [ -n "$token" ] && [ -n "$prefix" ]; then
+            while read -r obj; do
+                nb_cidr_holds "$obj" "$prefix" && count=$((count + 1))
+            done < <(nb_api_nodes "$token" | jq -r '.response[]?.address // empty' 2>/dev/null)
+            [ "$count" -gt 0 ] && {
+                echo -e "${COLOR_RED}$(printf "${LANG[NB_OFF_NODES_LEFT]}" "$count")${COLOR_RESET}"
+                return 1
+            }
+        fi
+    fi
+
+    # Node-only box: same stranding guard as disable — remnanode running
+    # without a public 2222 fallback must not lose its management path.
+    if ! panel_is_installed && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnanode; then
+        local has_public=""
+        if command -v ufw >/dev/null 2>&1 && ufw show added 2>/dev/null | grep "${NB_NODE_PORT}" | grep -qv "in on ${NB_IFACE}"; then
+            has_public=1
+        fi
+        if [ -z "$has_public" ]; then
+            echo -e "${COLOR_RED}${LANG[NB_OFF_LOCAL_BLOCK]}${COLOR_RESET}"
+            return 1
+        fi
+    fi
+
+    # Machines the module installed the client on. Node records survive the
+    # unwind; the sub/checker revert flows forget their hosts, so those
+    # clients are covered by the manual note in the confirm text.
+    local sweep=() sf host name sweep_go=n swept_names="" failed=""
+    while IFS= read -r sf; do
+        [ -f "$sf" ] || continue
+        host=$(jq -r '.public_host // empty' "$sf" 2>/dev/null)
+        name=$(jq -r '.name // empty' "$sf" 2>/dev/null)
+        [ -n "$host" ] && sweep+=("$host|${name:-}")
+    done < <(ls "${NB_NODES_DIR}"/*.json 2>/dev/null)
+
+    echo -e "${COLOR_WHITE}${LANG[NB_PURGE_ORDER]}${COLOR_RESET}"
+    if [ "${#sweep[@]}" -gt 0 ]; then
+        echo -e " ${COLOR_GRAY}$(printf "${LANG[NB_PURGE_REMOTE_LIST]}" "${#sweep[@]}")${COLOR_RESET}"
+        reading_yn "${LANG[NB_PURGE_REMOTE_ASK]}" sweep_go || sweep_go=n
+    fi
+    reading_yn "${LANG[NB_PURGE_CONFIRM]}" purge_go || return 1
+
+    if [ "$sweep_go" = "y" ]; then
+        nb_need_re || { echo -e "${COLOR_RED}${LANG[NB_ERR_RE]}${COLOR_RESET}"; return 1; }
+        local entry
+        for entry in "${sweep[@]}"; do
+            host=${entry%%|*}
+            name=${entry#*|}
+            [ -n "$name" ] || name=""
+            step_do "$(printf "${LANG[NB_PURGE_REMOTE_STEP]}" "$host")"
+            if nb_remote_netbird_uninstall "$host"; then
+                step_ok "${LANG[NB_PURGE_REMOTE_OK]}"
+                [ -n "$name" ] && swept_names="$swept_names $name"
+            else
+                echo -e "${COLOR_RED}$(printf "${LANG[NB_PURGE_REMOTE_FAIL]}" "$host")${COLOR_RESET}"
+                failed="$failed $host"
+            fi
+        done
+    fi
+
+    step_do "${LANG[NB_PURGE_STEP_DOWN]}"
+    netbird down >/dev/null 2>&1
+    netbird logout >/dev/null 2>&1
+    systemctl stop netbird >/dev/null 2>&1
+    step_ok "${LANG[NB_PURGE_STEP_DOWN_OK]}"
+
+    # A fresh join registers a new peer, so old entries would linger offline
+    # forever; remove this machine's and the swept nodes' peers while the
+    # stored token still works.
+    if nb_pat_stored; then
+        local gone=0 rn
+        gone=$((gone + $(nb_peer_delete_by_name "$(hostname -s)")))
+        for rn in $swept_names; do
+            gone=$((gone + $(nb_peer_delete_by_name "$rn")))
+        done
+        [ "$gone" -gt 0 ] && echo -e " ${COLOR_GRAY}$(printf "${LANG[NB_PURGE_PEER_GONE]}" "$gone")${COLOR_RESET}"
+    fi
+
+    step_do "${LANG[NB_PURGE_STEP_PKG]}"
+    apt-mark unhold netbird >/dev/null 2>&1
+    if ! apt-get -o DPkg::Lock::Timeout=300 purge -y netbird >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[NB_PURGE_PKG_FAIL]}${COLOR_RESET}"
+        return 1
+    fi
+    step_ok "${LANG[NB_PURGE_STEP_PKG_OK]}"
+    rm -rf /etc/netbird 2>/dev/null
+
+    step_do "${LANG[NB_PURGE_STEP_STATE]}"
+    nb_audit "purge: client removed, module state wiped${swept_names:+, swept:$(printf '%s' "$swept_names")}"
+    rm -rf "$NB_DIR"
+    step_ok "${LANG[NB_PURGE_STEP_STATE_OK]}"
+
+    [ -n "$failed" ] && echo -e "${COLOR_YELLOW}$(printf "${LANG[NB_PURGE_REMOTE_LEFT]}" "$failed")${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[NB_PURGE_DONE]}${COLOR_RESET}"
     return 0
 }
 
@@ -1970,6 +2185,9 @@ nb_listener_status() {
 # nothing — no wildcard fallback. An admin login JWT may be passed: the
 # saved API token gets 403 on /api/tokens (only admin JWTs may mint).
 nb_sub_mint_token() {
+    # self-sufficient: this helper may run in a subshell where no flow
+    # loaded the panel API module beforehand
+    command -v make_api_request >/dev/null 2>&1 || load_api_module >/dev/null 2>&1 || true
     local jwt="${1:-}" token body resp
     if [ -n "$jwt" ]; then
         token="$jwt"
@@ -2230,6 +2448,9 @@ NB_XCHK_MONITOR_USER="xray-checker"
 NB_XCHK_IMAGE="kutovoys/xray-checker:latest"
 
 nb_xchk_assign_squads() {
+    # self-sufficient: this helper may run in a subshell where no flow
+    # loaded the panel API module beforehand
+    command -v make_api_request >/dev/null 2>&1 || load_api_module >/dev/null 2>&1 || true
     local token="$1" response squads squads_json
     response=$(make_api_request "GET" "http://127.0.0.1:3000/api/internal-squads?_=$(date +%s)" "$token")
     squads=$(echo "$response" | jq -r '[.response.internalSquads[]?.uuid] | join(" ")' 2>/dev/null)
@@ -2435,13 +2656,9 @@ nb_nodes_flow() {
         case "$pick" in
             1)
                 nb_migrate
-                echo -e ""
-                read -rp "$(printf %b " ${COLOR_GRAY}${LANG[NB_RETURN]}${COLOR_RESET}")" _ || return 0
                 ;;
             2)
                 nb_import
-                echo -e ""
-                read -rp "$(printf %b " ${COLOR_GRAY}${LANG[NB_RETURN]}${COLOR_RESET}")" _ || return 0
                 ;;
             0) return 0 ;;
             *) printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" 2 ;;
@@ -2482,10 +2699,11 @@ nb_header() {
 }
 
 nb_menu() {
-    local last=0
-    local opt_join=99 opt_nodes=99 opt_bg=99 opt_sub=99 opt_xchk=99 opt_diag=99 opt_pol=99 opt_set=99 opt_flags=99 opt_upd=99 opt_off=99
+    local last=0 submenu=0
+    local opt_join=99 opt_nodes=99 opt_bg=99 opt_sub=99 opt_xchk=99 opt_diag=99 opt_pol=99 opt_set=99 opt_flags=99 opt_upd=99 opt_off=99 opt_purge=99
     while true; do
         last=0
+        submenu=0
         echo -e ""
         nb_header
 
@@ -2522,6 +2740,8 @@ nb_menu() {
             echo -e "${COLOR_YELLOW}${last}. ${LANG[NB_MENU_UPDATE]}${COLOR_RESET}"
             last=$((last + 1)); opt_off=$last
             echo -e "${COLOR_YELLOW}${last}. ${LANG[NB_MENU_OFF]}${COLOR_RESET}"
+            last=$((last + 1)); opt_purge=$last
+            echo -e "${COLOR_YELLOW}${last}. ${LANG[NB_MENU_PURGE]}${COLOR_RESET}"
         fi
 
         echo -e ""
@@ -2534,18 +2754,23 @@ nb_menu() {
         if [ "$pick" = "$opt_join" ]; then
             nb_join
         elif [ "$pick" = "$opt_nodes" ] && [ "$opt_nodes" != 99 ]; then
+            submenu=1
             nb_nodes_flow
         elif [ "$pick" = "$opt_bg" ] && [ "$opt_bg" != 99 ]; then
             nb_breakglass
         elif [ "$pick" = "$opt_sub" ] && [ "$opt_sub" != 99 ]; then
+            submenu=1
             nb_sub_flow
         elif [ "$pick" = "$opt_xchk" ] && [ "$opt_xchk" != 99 ]; then
+            submenu=1
             nb_checker_flow
         elif [ "$pick" = "$opt_diag" ]; then
             nb_diag
         elif [ "$pick" = "$opt_pol" ] && [ "$opt_pol" != 99 ]; then
+            submenu=1
             nb_policies_flow
         elif [ "$pick" = "$opt_set" ]; then
+            submenu=1
             nb_settings_flow
         elif [ "$pick" = "$opt_flags" ] && [ "$opt_flags" != 99 ]; then
             nb_fix_flags
@@ -2553,11 +2778,18 @@ nb_menu() {
             nb_update
         elif [ "$pick" = "$opt_off" ] && [ "$opt_off" != 99 ]; then
             nb_disable
+        elif [ "$pick" = "$opt_purge" ] && [ "$opt_purge" != 99 ]; then
+            nb_purge
         else
             printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
         fi
-        echo -e ""
-        read -rp "$(printf %b " ${COLOR_GRAY}${LANG[NB_RETURN]}${COLOR_RESET}")" _ || return 0
+        # Submenu flows loop and redraw on their own and their output stays
+        # on screen above the header; pausing after an exit chosen with 0
+        # would demand a second Enter for nothing.
+        if [ "$submenu" -eq 0 ]; then
+            echo -e ""
+            read -rp "$(printf %b " ${COLOR_GRAY}${LANG[NB_RETURN]}${COLOR_RESET}")" _ || return 0
+        fi
     done
 }
 
