@@ -1475,8 +1475,33 @@ ensure_cron() {
     return 0
 }
 
+# A freshly reinstalled box spends its first minutes running
+# unattended-upgrades, which holds the dpkg lock; the -o timeout flag on our
+# own apt calls cannot reach the nested apt invocations inside get.docker.com.
+# A global apt.conf.d entry makes every apt on the box wait for the lock.
+configure_apt_lock_wait() {
+    mkdir -p /etc/apt/apt.conf.d 2>/dev/null || return 0
+    printf '# remnawave-reverse-proxy: apt waits out the dpkg lock (fresh-boot unattended-upgrades)\nDPkg::Lock::Timeout "600";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null || true
+}
+
+# Visible wait while another process owns the dpkg lock: with the config
+# above apt itself also waits, but silently.
+wait_for_dpkg_lock() {
+    local waited=0
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        [ "$waited" -eq 0 ] && echo -e "${COLOR_YELLOW}${LANG[APT_WAIT_UPDATES]}${COLOR_RESET}"
+        sleep 10
+        waited=$((waited + 10))
+        [ "$waited" -ge 600 ] && break
+    done
+    return 0
+}
+
 install_packages() {
     echo -e "${COLOR_YELLOW}${LANG[INSTALL_PACKAGES]}${COLOR_RESET}"
+
+    configure_apt_lock_wait
+    wait_for_dpkg_lock
 
     if ! apt-get -o DPkg::Lock::Timeout=300 update -y; then
         echo -e "${COLOR_RED}${LANG[ERROR_UPDATE_LIST]}${COLOR_RESET}" >&2
@@ -1514,6 +1539,8 @@ install_packages() {
             echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
             return 1
         fi
+
+        wait_for_dpkg_lock
 
         if ! sh "$docker_script"; then
             echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRROR_RETRY]}${COLOR_RESET}"
