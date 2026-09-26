@@ -1481,19 +1481,36 @@ ensure_cron() {
 # A global apt.conf.d entry makes every apt on the box wait for the lock.
 configure_apt_lock_wait() {
     mkdir -p /etc/apt/apt.conf.d 2>/dev/null || return 0
-    printf '# remnawave-reverse-proxy: apt waits out the dpkg lock (fresh-boot unattended-upgrades)\nDPkg::Lock::Timeout "600";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null || true
+    printf '# remnawave-reverse-proxy: apt waits out the dpkg lock (fresh-boot unattended-upgrades)\nDPkg::Lock::Timeout "300";\n' > /etc/apt/apt.conf.d/99remnawave-lock-wait 2>/dev/null || true
 }
 
-# Visible wait while another process owns the dpkg lock: with the config
-# above apt itself also waits, but silently.
+# Wait out the dpkg lock: patiently for up to 2 minutes, then a graceful
+# SIGTERM to the system update units (dpkg finishes the current package; the
+# timer re-runs the updates on its own later). A lock still held after that
+# falls through to the silent apt.conf.d wait.
 wait_for_dpkg_lock() {
     local waited=0
     while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
         [ "$waited" -eq 0 ] && echo -e "${COLOR_YELLOW}${LANG[APT_WAIT_UPDATES]}${COLOR_RESET}"
-        sleep 10
-        waited=$((waited + 10))
-        [ "$waited" -ge 600 ] && break
+        sleep 5
+        waited=$((waited + 5))
+        [ "$waited" -ge 120 ] && break
     done
+
+    if fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+        echo -e "${COLOR_YELLOW}${LANG[APT_STOP_UPDATES]}${COLOR_RESET}"
+        systemctl kill --kill-who=all --signal=SIGTERM apt-daily.service apt-daily-upgrade.service unattended-upgrades.service >/dev/null 2>&1
+        local stopped=0
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+            sleep 5
+            stopped=$((stopped + 5))
+            [ "$stopped" -ge 120 ] && break
+        done
+        # a SIGTERM'd dpkg can leave a package half-configured (observed
+        # live: grub-pc mid-postinst); the next apt run would complete it,
+        # but finish it here so the state we hand over is clean
+        dpkg --configure -a >/dev/null 2>&1 || true
+    fi
     return 0
 }
 
