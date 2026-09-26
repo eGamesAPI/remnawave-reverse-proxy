@@ -208,6 +208,7 @@ LANG[IPV6_CHECK_PAUSE]="Check the address in another terminal (ip -6 addr) and p
 LANG[IPV6_REFRESH_SKIP]="Skipped. The IPv6 address may appear after a reboot or a manual network refresh (netplan apply)."
 #Remna
 LANG[INSTALL_PACKAGES]="Installing required packages..."
+LANG[APT_WAIT_UPDATES]="System updates are running, waiting for them to finish. This can take a few minutes"
 LANG[INSTALLING]="Installing panel and node"
 LANG[INSTALLING_PANEL]="Installing panel"
 LANG[INSTALLING_NODE]="Installing node"

@@ -208,6 +208,7 @@ LANG[IPV6_CHECK_PAUSE]="Проверьте адрес в другом терми
 LANG[IPV6_REFRESH_SKIP]="Пропущено. IPv6-адрес может появиться после перезагрузки или ручного обновления сети (netplan apply)."
 #Remna
 LANG[INSTALL_PACKAGES]="Установка необходимых пакетов..."
+LANG[APT_WAIT_UPDATES]="Идут автоматические обновления системы, ждём их завершения. Это может занять несколько минут"
 LANG[INSTALLING]="Установка панели и ноды"
 LANG[INSTALLING_PANEL]="Установка панели"
 LANG[INSTALLING_NODE]="Установка ноды"
