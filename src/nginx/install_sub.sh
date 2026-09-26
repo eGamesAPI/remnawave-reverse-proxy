@@ -118,6 +118,7 @@ services:
     network_mode: host
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+${SUB_CERT_MOUNTS}
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -221,12 +222,17 @@ installation_sub() {
     declare -A domains_to_check
     domains_to_check["$SUB_DOMAIN"]=1
 
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" || return 1
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" true || return 1
 
     # The certificate directory is the lineage that actually covers the
     # domain — a wildcard base or a -0001 renewal suffix, not a guess from
     # the issuance method
     SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
+    # Cert bind-mounts belong inside the nginx service volumes; the old
+    # handle_certificates append landed after the wrong list (and on a file
+    # that did not exist yet at that point in the flow).
+    SUB_CERT_MOUNTS="$(printf '      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro
+      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro' "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN")"
 
     # Secrets land in both files — root-only from the first byte on.
     mkdir -p /opt/subscription
