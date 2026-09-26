@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.5.76"
+SCRIPT_VERSION="Dev 3.6.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -602,43 +602,75 @@ update_remnawave_reverse() {
     fi
 }
 
+# Best-effort cleanup of everything the script left outside its own dir:
+# cron jobs with soon-dead paths, the ssh key installed on managed machines
+# and the long-lived panel token. Failures are warnings, never aborts.
+remove_script_cleanup() {
+    local out
+    out=$(crontab -l 2>/dev/null | grep -vE 'node-cert-sync\.sh|ruex-update\.sh|cert-notify\.sh')
+    if [ -n "$out" ]; then
+        printf '%s\n' "$out" | crontab - 2>/dev/null
+    else
+        crontab -r 2>/dev/null
+    fi
+    rm -f "${DIR_REMNAWAVE}node-cert-sync.sh" "${DIR_REMNAWAVE}node-cert-sync.list" \
+        "${DIR_REMNAWAVE}cert-notify.sh" "${DIR_REMNAWAVE}server-routing/ruex-update.sh" 2>/dev/null
+
+    if load_remote_exec_module 2>/dev/null; then
+        local name
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            if re_target_load "$name" 2>/dev/null; then
+                re_revoke_target >/dev/null 2>&1 \
+                    || echo -e "${COLOR_YELLOW}$(printf "${LANG[REMOVE_KEY_FAIL]}" "$name")${COLOR_RESET}"
+            fi
+        done < <(re_targets_list 2>/dev/null)
+    fi
+
+    if [ -s "${DIR_REMNAWAVE}token" ] && load_api_module 2>/dev/null; then
+        local token uuid
+        token=$(cat "${DIR_REMNAWAVE}token" 2>/dev/null)
+        for uuid in $(make_api_request "GET" "http://127.0.0.1:3000/api/tokens" "$token" 2>/dev/null \
+            | jq -r '.response.tokens[]? | select(.name == "remnawave-reverse-proxy") | .uuid' 2>/dev/null); do
+            make_api_request "DELETE" "http://127.0.0.1:3000/api/tokens/$uuid" "$token" >/dev/null 2>&1 \
+                || echo -e "${COLOR_YELLOW}${LANG[REMOVE_TOKEN_FAIL]}${COLOR_RESET}"
+        done
+    fi
+    return 0
+}
+
 remove_script() {
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[MENU_10]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[MENU_11]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[REMOVE_SCRIPT_ONLY]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[REMOVE_SCRIPT_AND_PANEL]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[CERT_PROMPT1]}" SUB_OPTION
+    reading "${LANG[CERT_PROMPT1]}" SUB_OPTION || return 0
 
     case $SUB_OPTION in
         1)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_SCRIPT]}${COLOR_RESET}"
-            read_yn confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                return 0
-            fi
+            read_yn confirm || { echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"; return 0; }
 
+            remove_script_cleanup
             rm -rf /usr/local/remnawave_reverse 2>/dev/null
             rm -f /usr/local/bin/remnawave_reverse 2>/dev/null
-            
+
             echo -e "${COLOR_GREEN}${LANG[SCRIPT_REMOVED]}${COLOR_RESET}"
             exit 0
             ;;
         2)
             echo -e "${COLOR_RED}${LANG[CONFIRM_REMOVE_ALL]}${COLOR_RESET}"
-            read_yn confirm
-            if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-                return 0
-            fi
+            read_yn confirm || { echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"; return 0; }
 
+            remove_script_cleanup
             wipe_compose_dir /opt/remnawave
             wipe_compose_dir /opt/remnanode
             wipe_compose_dir /opt/subscription
+            wipe_compose_dir /opt/xray-checker
             docker image prune -f > /dev/null 2>&1 &
             spinner $! "${LANG[WAITING]}"
             rm -rf /usr/local/remnawave_reverse 2>/dev/null
@@ -886,12 +918,17 @@ show_menu() {
     echo -e "${COLOR_YELLOW}9. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
     echo -e "${COLOR_YELLOW}10. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
     echo -e ""
-    if [[ "$UPDATE_AVAILABLE" == true ]]; then
-        echo -e "${COLOR_YELLOW}11. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
-    else
-        echo -e "${COLOR_YELLOW}11. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+    # The whole NetBird entry disappears when the feature is switched off; the
+    # dispatcher branch answers "disabled" so the hidden number stays inert.
+    if [ -z "${RRP_DISABLE_NETBIRD:-}" ]; then
+        echo -e "${COLOR_YELLOW}11. ${LANG[MENU_13]}${COLOR_RESET}" # NetBird overlay
     fi
-    echo -e "${COLOR_YELLOW}12. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
+    if [[ "$UPDATE_AVAILABLE" == true ]]; then
+        echo -e "${COLOR_YELLOW}12. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
+    else
+        echo -e "${COLOR_YELLOW}12. ${LANG[MENU_10]}${COLOR_RESET}" # Check for updates
+    fi
+    echo -e "${COLOR_YELLOW}13. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
@@ -956,7 +993,7 @@ show_node_extensions_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NODE_EXTENSIONS_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NODE_EXTENSIONS_OPTION || return 0
 
     case $NODE_EXTENSIONS_OPTION in
         1)
@@ -1019,7 +1056,7 @@ show_install_menu() {
 
 manage_install() {
     show_install_menu
-    reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION
+    reading "${LANG[INSTALL_PROMPT]}" INSTALL_OPTION || return 0
     case $INSTALL_OPTION in
         1)
             echo -e ""
@@ -1260,7 +1297,7 @@ show_reinstall_options() {
 
 choose_reinstall_type() {
     show_reinstall_options
-    reading "${LANG[REINSTALL_PROMPT]}" REINSTALL_OPTION
+    reading "${LANG[REINSTALL_PROMPT]}" REINSTALL_OPTION || return 0
     case $REINSTALL_OPTION in
         1|2|3|4)
                 echo -e "${COLOR_RED}${LANG[REINSTALL_WARNING]}${COLOR_RESET}"
@@ -1805,35 +1842,38 @@ load_module() {
             cp "$module_file" "$backup_file"
         fi
 
-        # Use download_with_mirrors for reliable download
-        if download_with_mirrors "$module_url" "$module_file" "module"; then
-            rm -f "$backup_file"
+        # Everything downloads to a staged file and is syntax-checked before
+        # it may replace the cached module: a 404 page or an empty body used
+        # to stay in the cache and get sourced on every later run.
+        local staged="${module_file}.new" fetched=""
+        rm -f "$staged"
+        if download_with_mirrors "$module_url" "$staged" "module" && [ -s "$staged" ] && bash -n "$staged" 2>/dev/null; then
+            fetched=1
         else
-            # Fallback: try direct download if mirrors fail
+            rm -f "$staged"
             if command -v curl &> /dev/null; then
                 local http_code
-                http_code=$(curl -sL $CURL_IP_FLAGS -w "%{http_code}" "$module_url" -o "$module_file" 2>/dev/null)
-                if [ "$http_code" != "200" ] || [ ! -s "$module_file" ]; then
-                    if [ -f "$backup_file" ]; then
-                        mv "$backup_file" "$module_file"
-                    fi
-                    return 1
+                http_code=$(curl -sL $CURL_IP_FLAGS -w "%{http_code}" "$module_url" -o "$staged" 2>/dev/null)
+                if [ "$http_code" = "200" ] && [ -s "$staged" ] && bash -n "$staged" 2>/dev/null; then
+                    fetched=1
                 fi
             elif command -v wget &> /dev/null; then
-                wget $WGET_IP_FLAGS -q "$module_url" -O "$module_file" 2>/dev/null
-                if [ ! -s "$module_file" ]; then
-                    if [ -f "$backup_file" ]; then
-                        mv "$backup_file" "$module_file"
-                    fi
-                    return 1
+                wget $WGET_IP_FLAGS -q "$module_url" -O "$staged" 2>/dev/null
+                if [ -s "$staged" ] && bash -n "$staged" 2>/dev/null; then
+                    fetched=1
                 fi
-            else
-                if [ -f "$backup_file" ]; then
-                    mv "$backup_file" "$module_file"
-                fi
-                return 1
             fi
+        fi
+
+        if [ "$fetched" = "1" ]; then
+            mv -f "$staged" "$module_file"
             rm -f "$backup_file"
+        else
+            rm -f "$staged"
+            if [ -f "$backup_file" ]; then
+                mv "$backup_file" "$module_file"
+            fi
+            return 1
         fi
     fi
 
@@ -1870,6 +1910,7 @@ load_tinyauth_module() { load_module "tinyauth" "modules" "${1:-false}"; }
 load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
 load_xray_checker_module() { load_module "xray_checker" "modules" "${1:-false}"; }
+load_netbird_module() { load_module "netbird" "modules" "${1:-false}"; }
 
 detect_broken_ipv6
 
@@ -1919,27 +1960,39 @@ case $OPTION in
         choose_reinstall_type
         ;;
     3)
-        load_manage_panel_module
-        show_manage_panel_menu
+        if load_manage_panel_module; then
+            show_manage_panel_menu
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" manage_panel
+        fi
         ;;
     4)
         show_node_extensions_menu
         ;;
     5)
-        load_xray_checker_module
-        manage_xray_checker
+        if load_xray_checker_module; then
+            manage_xray_checker
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" xray_checker
+        fi
         sleep 2
         remnawave_reverse
         ;;
     6)
-        load_legiz_module
-        manage_custom_legiz
+        if load_legiz_module; then
+            manage_custom_legiz
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" legiz
+        fi
         sleep 2
         remnawave_reverse
         ;;
     7)
-        load_warp_module
-        manage_warp_native
+        if load_warp_module; then
+            manage_warp_native
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" warp
+        fi
         sleep 2
         remnawave_reverse
         ;;
@@ -1953,23 +2006,40 @@ case $OPTION in
         remnawave_reverse
         ;;
     9)
-        load_ipv6_module
-        manage_ipv6
+        if load_ipv6_module; then
+            manage_ipv6
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" ipv6
+        fi
         sleep 2
         remnawave_reverse
         ;;
     10)
-        load_certificates_module
-        manage_certificates
+        if load_certificates_module; then
+            manage_certificates
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" certificates
+        fi
         sleep 2
         remnawave_reverse
         ;;
     11)
-        update_remnawave_reverse
+        if [ -n "${RRP_DISABLE_NETBIRD:-}" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[NB_DISABLED]}${COLOR_RESET}"
+        elif load_netbird_module; then
+            manage_netbird
+        else
+            echo -e "${COLOR_RED}${LANG[NB_LOAD_FAIL]}${COLOR_RESET}"
+        fi
         sleep 2
         remnawave_reverse
         ;;
     12)
+        update_remnawave_reverse
+        sleep 2
+        remnawave_reverse
+        ;;
+    13)
         remove_script
         ;;
     0)
