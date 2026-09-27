@@ -1,30 +1,39 @@
 #!/bin/bash
 # Module: Install Subscription Page Only (nginx)
 
-install_sub_nginx() {
-    mkdir -p /opt/subscription && cd /opt/subscription
+install_sub_collect() {
+    if [ "${SUB_NONINTERACTIVE:-0}" = "1" ]; then
+        if [ -z "${SUB_DOMAIN:-}" ] || [ -z "${SUB_API_TOKEN:-}" ] \
+           || { [ -z "${PANEL_DOMAIN:-}" ] && [ -z "${SUB_PANEL_URL:-}" ]; }; then
+            echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
+            return 1
+        fi
+        SUB_AUTH_ENV="${SUB_AUTH_ENV:-}"
+        return 0
+    fi
 
-    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN
+    reading "${LANG[ENTER_SUB_DOMAIN]}" SUB_DOMAIN || return 1
     check_domain "$SUB_DOMAIN" true true
     local sub_check_result=$?
     if [ $sub_check_result -eq 2 ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN
+    reading "${LANG[ENTER_PANEL_DOMAIN]}" PANEL_DOMAIN || return 1
     if [ -z "$PANEL_DOMAIN" ]; then
         echo -e "${COLOR_RED}${LANG[ABORT_MESSAGE]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
-    reading "${LANG[ENTER_SUB_API_TOKEN]}" SUB_API_TOKEN
+    reading "${LANG[ENTER_SUB_API_TOKEN]}" SUB_API_TOKEN || return 1
     if [ -z "$SUB_API_TOKEN" ]; then
         echo -e "${COLOR_RED}${LANG[EMPTY_TOKEN_ERROR]}${COLOR_RESET}"
-        exit 1
+        return 1
     fi
 
     SUB_AUTH_ENV=""
+    local sub_auth_choice
     while true; do
         echo -e ""
         echo -e "${COLOR_GREEN}${LANG[PANEL_AUTH_PROMPT]}${COLOR_RESET}"
@@ -33,11 +42,11 @@ install_sub_nginx() {
         echo -e "${COLOR_YELLOW}2. ${LANG[PANEL_AUTH_OPT_TINYAUTH]}${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}3. ${LANG[PANEL_AUTH_OPT_CADDY_MFA]}${COLOR_RESET}"
         echo -e ""
-        reading "${LANG[SUB_PANEL_AUTH_CHOOSE]}" sub_auth_choice
+        reading "${LANG[SUB_PANEL_AUTH_CHOOSE]}" sub_auth_choice || return 1
         case "$sub_auth_choice" in
             1)
                 while true; do
-                    reading "${LANG[ENTER_SUB_PANEL_COOKIE]}" SUB_EGAMES_COOKIE
+                    reading "${LANG[ENTER_SUB_PANEL_COOKIE]}" SUB_EGAMES_COOKIE || return 1
                     if [[ "$SUB_EGAMES_COOKIE" =~ ^[A-Za-z0-9_]+=[A-Za-z0-9_]+$ ]]; then
                         break
                     fi
@@ -48,8 +57,8 @@ install_sub_nginx() {
                 ;;
             2)
                 while true; do
-                    reading "${LANG[ENTER_TINYAUTH_LOGIN]}" SUB_TINYAUTH_LOGIN
-                    reading "${LANG[ENTER_TINYAUTH_PASSWORD]}" SUB_TINYAUTH_PASSWORD
+                    reading "${LANG[ENTER_TINYAUTH_LOGIN]}" SUB_TINYAUTH_LOGIN || return 1
+                    reading "${LANG[ENTER_TINYAUTH_PASSWORD]}" SUB_TINYAUTH_PASSWORD || return 1
                     if [ -n "$SUB_TINYAUTH_LOGIN" ] && [ -n "$SUB_TINYAUTH_PASSWORD" ]; then
                         break
                     fi
@@ -60,8 +69,8 @@ install_sub_nginx() {
                 ;;
             3)
                 while true; do
-                    reading "${LANG[ENTER_SUB_CADDY_KEY]}" SUB_CADDY_KEY
-                    if [[ -n "$SUB_CADDY_KEY" && ! "$SUB_CADDY_KEY" =~ [[:space:]] ]]; then
+                    reading "${LANG[ENTER_SUB_CADDY_KEY]}" SUB_CADDY_KEY || return 1
+                    if [ -n "$SUB_CADDY_KEY" ] && [[ ! "$SUB_CADDY_KEY" =~ [[:space:]] ]]; then
                         break
                     fi
                     echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
@@ -72,8 +81,12 @@ install_sub_nginx() {
             *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
         esac
     done
+}
 
-    cat > docker-compose.yml <<EOL
+# Pure renderer: the whole compose, both services in one document.
+sub_ng_render_compose() {
+    local panel_url="${SUB_PANEL_URL:-https://$PANEL_DOMAIN}"
+    cat <<EOL
 x-common: &common
   ulimits:
     nofile:
@@ -97,29 +110,7 @@ services:
     network_mode: host
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-EOL
-}
-
-installation_sub() {
-    check_sub_not_running
-    check_port_443_free
-    load_certificates_module
-    echo -e "${COLOR_YELLOW}${LANG[INSTALLING_SUB]}${COLOR_RESET}"
-    sleep 1
-
-    install_sub_nginx
-
-    declare -A domains_to_check
-    domains_to_check["$SUB_DOMAIN"]=1
-
-    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" || return 1
-
-    # The certificate directory is the lineage that actually covers the
-    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
-    # the issuance method
-    SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
-
-    cat >> /opt/subscription/docker-compose.yml <<EOL
+${SUB_CERT_MOUNTS}
 
   remnawave-subscription-page:
     image: remnawave/subscription-page:latest
@@ -127,14 +118,17 @@ installation_sub() {
     hostname: remnawave-subscription-page
     <<: [*common, *logging]
     environment:
-      - REMNAWAVE_PANEL_URL=https://$PANEL_DOMAIN
+      - REMNAWAVE_PANEL_URL=$panel_url
       - APP_PORT=3010
       - REMNAWAVE_API_TOKEN=$SUB_API_TOKEN${SUB_AUTH_ENV}
     ports:
       - '127.0.0.1:3010:3010'
 EOL
+}
 
-    cat > /opt/subscription/nginx.conf <<EOL
+# Pure renderer: the site config.
+sub_ng_render_conf() {
+    cat <<EOL
 server_names_hash_bucket_size 64;
 
 # Gzip Compression
@@ -206,14 +200,47 @@ server {
     ssl_reject_handshake on;
 }
 EOL
+}
+
+installation_sub() {
+    check_sub_not_running
+    check_port_443_free
+    load_certificates_module
+    echo -e "${COLOR_YELLOW}${LANG[INSTALLING_SUB]}${COLOR_RESET}"
+    sleep 1
+
+    install_sub_collect || return 1
+
+    declare -A domains_to_check
+    domains_to_check["$SUB_DOMAIN"]=1
+
+    handle_certificates domains_to_check "$CERT_METHOD" "$LETSENCRYPT_EMAIL" "/opt/subscription" true || return 1
+
+    # The certificate directory is the lineage that actually covers the
+    # domain — a wildcard base or a -0001 renewal suffix, not a guess from
+    # the issuance method
+    SUB_CERT_DOMAIN=$(resolve_certificate_domain "$SUB_DOMAIN") || return 1
+    # Cert bind-mounts belong inside the nginx service volumes; the old
+    # handle_certificates append landed after the wrong list (and on a file
+    # that did not exist yet at that point in the flow).
+    SUB_CERT_MOUNTS="$(printf '      - /etc/letsencrypt/live/%s/fullchain.pem:/etc/nginx/ssl/%s/fullchain.pem:ro
+      - /etc/letsencrypt/live/%s/privkey.pem:/etc/nginx/ssl/%s/privkey.pem:ro' "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN" "$SUB_CERT_DOMAIN")"
+
+    # Secrets land in both files — root-only from the first byte on.
+    mkdir -p /opt/subscription
+    umask 077
+    sub_ng_render_compose > /opt/subscription/docker-compose.yml
+    sub_ng_render_conf > /opt/subscription/nginx.conf
+    chmod 600 /opt/subscription/docker-compose.yml /opt/subscription/nginx.conf 2>/dev/null
 
     echo -e "${COLOR_YELLOW}${LANG[STARTING_SUB]}${COLOR_RESET}"
     sleep 3
-    cd /opt/subscription
-    docker compose up -d > /dev/null 2>&1 &
+    (cd /opt/subscription && docker compose up -d) > /dev/null 2>&1 &
 
     spinner $! "${LANG[WAITING]}"
 
+    # https://DOMAIN proves nginx + TLS + DNS (the app itself 502s on / even
+    # when healthy);
     printf "${COLOR_YELLOW}${LANG[SUB_CHECK]}${COLOR_RESET}\n" "$SUB_DOMAIN"
     local max_attempts=5
     local attempt=1
@@ -221,14 +248,15 @@ EOL
 
     while [ $attempt -le $max_attempts ]; do
         printf "${COLOR_YELLOW}${LANG[SUB_ATTEMPT]}${COLOR_RESET}\n" "$attempt" "$max_attempts"
-        if curl -s -o /dev/null --max-time 10 "https://$SUB_DOMAIN"; then
+        if curl -s -o /dev/null --max-time 10 "https://$SUB_DOMAIN" \
+           && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnawave-subscription-page; then
             step_ok "${LANG[SUB_LAUNCHED]}"
             break
         else
             printf "${COLOR_RED}${LANG[SUB_UNAVAILABLE]}${COLOR_RESET}\n" "$attempt"
             if [ $attempt -eq $max_attempts ]; then
                 printf "${COLOR_RED}${LANG[SUB_NOT_CONNECTED]}${COLOR_RESET}\n" "$max_attempts"
-                exit 1
+                return 1
             fi
             sleep $delay
         fi

@@ -1,0 +1,210 @@
+---
+title: "NetBird: the script module (automation)"
+description: "Connecting the Remnawave panel, nodes, subscription page and Xray Checker to a NetBird mesh through the script module"
+---
+
+import { Steps, Aside, LinkCard } from '@astrojs/starlight/components';
+
+NetBird is a WireGuard-based mesh: machines connect to each other directly while a management server hands out addresses and keys. Once joined, the panel reaches its nodes at overlay addresses instead of public ones. Node management no longer depends on public ports and IPs, while the public `2222` path stays open as a fallback: if the NetBird cloud is unreachable, the panel still reaches its nodes.
+
+Everything below is done by the script module, the **`NetBird: mesh network for nodes and panel`** item in the main menu. The manual setup without the script is described in [a separate article](/configuration/netbird/) and works for everyone.
+
+## What you need
+
+- A Remnawave panel installed on this machine and a NetBird account (cloud at [app.netbird.io](https://app.netbird.io/) or your own management server).
+- A setup key from the NetBird account for the first connection.
+- To move nodes and manage the subscription page: SSH access from the panel to those machines, configured by the [SSH access](/configuration/ssh-remote-access/) extension.
+- For API mode (recommended): an access token of a NetBird service user.
+
+## How it works
+
+The module moves service traffic into a private network without breaking anything on the public path. Every connection gets its own route:
+
+| Connection | Usual path | Over NetBird |
+|---|---|---|
+| Panel → nodes (management) | public address, port `2222` | node's overlay address, same port |
+| Subscription page → panel | panel's public address | dedicated panel port from 3100 up, closed from the internet |
+| Checker → panel (subscription) | public subscription | same port, `/api/sub/` only |
+| Panel → checker metrics | public port `2112` | checker's overlay address, behind a password |
+
+Guarantees the module keeps at every step:
+
+- The public path of every node stays open as a fallback and is never closed by the migration.
+- Nothing binds to the overlay address and no Docker port is published on it: a service bound that way would not survive a machine reboot.
+- A node's panel address changes only after a live path check from inside the panel container.
+- Every step is reversible: break-glass returns all nodes in one command, the subscription page and the checker return through their own menu item.
+
+## Preparing the NetBird account
+
+<Steps>
+
+1. Register at [app.netbird.io](https://app.netbird.io/).
+
+2. In **Settings → Setup Keys** create a key:
+
+    - type **Reusable**, any expiry: the key is only needed at join time, the module never asks for it later, making it unlimited is not required.
+    - the key is shown once, copy it.
+
+3. If you plan to use API mode (recommended): in **Team → Service Users** press **Create Service User**, pick a name and the **Admin** role. Then open the created user and press **Create Access Token** — the token is shown once, copy it. Pick the longest available expiry (Expires in): the token is stored on the panel server and used by the module permanently, and once it expires, API mode stops working until you enter a fresh token in the module settings.
+
+</Steps>
+
+<Aside type="caution" title="The Default policy">
+
+A fresh account ships with the `Default` policy (All↔All): every peer can reach every port of every machine. In API mode the module creates one-directional policies (panel → nodes, tcp/2222 and friends) and, on your command, disables `Default` after checking that every needed path survives. The policy body is saved and comes back with one command. In basic mode disable `Default` by hand after the groups are set up.
+
+</Aside>
+
+## Connecting the panel
+
+Run on the panel server:
+
+```bash
+remnawave_reverse
+```
+
+<Steps>
+
+1. Pick `NetBird: mesh network for nodes and panel`.
+
+2. Pick `Connect this machine to NetBird`.
+
+3. Paste the setup key (input is hidden) and confirm the machine name.
+
+4. The module installs the NetBird client, pins the package version, disables on-demand connections (lazy) and registers the server in the network. At the end you see the panel's overlay address, for example `100.88.10.7/16`.
+
+5. The module offers to enable API mode right away: it creates the groups and one-directional policies itself, then asks whether to disable the `Default` policy (after checking the node paths survive). You can decline — the module prints a short manual policy checklist instead, and API mode can be enabled later through `Settings`.
+
+</Steps>
+
+The client joins with mandatory settings: NetBird DNS is off (the host `/etc/resolv.conf` is never touched), the client's routes and firewall do not interfere with the server, the connection stays permanent. If the machine was joined manually before the module, the `Restore the correct client settings` item reapplies them.
+
+<Aside type="note" title="Why the version is pinned">
+
+The package version is pinned right after install so background upgrades never restart the client on their own: a restart recreates the overlay interface and briefly cuts management of every migrated node at once, at a random moment. Updates live in the menu, one machine at a time.
+
+</Aside>
+
+## API mode: groups, keys, the Default policy
+
+In `Module settings (access token, API mode)` enter the service user's access token. The module:
+
+- creates the `rrp-…-panel`, `rrp-…-nodes` groups and a one-directional panel → nodes tcp/2222 policy.
+- mints one-off setup keys for every machine and revokes them right after use, no more pasting keys.
+- in `Policies and the Default policy` shows the access state and, on confirmation, disables `Default` (auto-restoring it if any path dies).
+
+Without API mode the module still works, but keys for new machines have to be created and pasted manually, and policies are yours to manage.
+
+## Moving nodes onto the network
+
+Every node needs SSH access from the panel (the "SSH access" extension). The module connects machines over their public address only: after the move, the overlay address becomes the panel's main path to the node.
+
+<Steps>
+
+1. In the NetBird menu pick `Nodes: move to the NetBird network…`, then `Moving a node to the NetBird network`, and choose the node.
+
+2. Confirm the plan. The module joins the machine to NetBird, checks the path to `2222` from inside the panel container, and only then switches the node's panel address to the overlay one.
+
+3. Wait for the confirmed reconnection. The public `2222` rule stays in place as the fallback.
+
+</Steps>
+
+If the path check fails, the node address does not change, and the module suggests likely causes (policies, on-demand connections, node plugins). Any unfinished move can be resumed or rolled back from the same menu item.
+
+Nodes already joined to NetBird by hand are adopted through `Importing nodes…` in the same submenu.
+
+<Aside type="tip" title="A node born on the network">
+
+When adding a new node to the panel (automatic mode), the module offers to deploy it straight onto the network: the client lands on the node server, the panel record is created with the overlay address, and the public `2222` opens as the fallback. That saves one move when the machine is known in advance.
+
+</Aside>
+
+## Subscription page
+
+The `Subscription page on a separate server` item targets a subscription page that already runs on a separate machine. The module:
+
+- opens a dedicated panel port from the 3100+ range, closed from the internet, allowlisted to the subscription server's overlay address only.
+- joins the subscription machine to NetBird if the client is not there yet.
+- rewrites its compose for the panel's overlay address: `EGAMES_COOKIE` and auth gates leave the compose, panel traffic no longer crosses the public internet.
+- snapshots the public config before the change and verifies the result live: the container stays up, the panel answers.
+
+While the page rides the network, the same item offers the return to the public path instead (the config is restored from the snapshot, the access cookie is refreshed to the current panel, the public path is verified) or a re-migrate after manual edits.
+
+## Xray Checker
+
+The `Xray Checker through the NetBird network` item moves the checker inside the network:
+
+- the checker pulls its subscription through `/api/sub/` alone, no public subscription needed.
+- metrics and the monitoring page answer behind a password and to network machines only, invisible from the internet.
+- before the move the module snapshots the checker's public config, if there was one.
+
+The return to the public path goes through the same item: a found public-checker snapshot is restored and verified, and without one the module-installed minimal stack is stopped and removed — a public checker is then the Xray Checker module's job.
+
+## Break-glass and diagnostics
+
+- `Emergency return of nodes to public addresses` returns every node to its public address in one command, NetBird itself stays untouched.
+- `Diagnostics and address drift check` compares the addresses recorded by the module with the actual ones (an address can change after a reconnect) and reports client health and paths.
+
+## Disable
+
+`Disable NetBird (full rollback)` stops the client on this machine, the install and module state remain. When unwinding the setup: return the nodes to public addresses first (emergency return or one by one), then move the subscription and checker back, disable the panel last. While the panel still has nodes on network addresses, or the subscription page and checker still ride the network, the module refuses to disable it.
+
+## Full removal
+
+The `Remove NetBird completely` item tears down the whole scheme, not just the panel machine. While anything still rides the network (panel nodes, the subscription server, the checker), the module refuses and tells you what to return to the public path first. Then, optionally, the client is removed from the nodes the module installed it on: over SSH it is stopped, logged out and purged, and those machines' old peer entries are deleted from the account. After that the same happens on the panel itself: client, registration and module state (mode, access token, node records). Groups and policies stay in the account. The one manual leftover: a client on the subscription or checker server that already returned to the public path (their hosts are forgotten after the return) — run `apt purge netbird` there yourself. This is the way to start fresh runs: after removal, the `Connect this machine to NetBird` item offers the very first join again.
+
+## Module menu: what each item does
+
+The menu composition depends on the machine state: before the client is installed only the join item is visible; some items appear only on the panel or in API mode. The menu header shows the client (version and pin), the network address, connectivity and the working mode.
+
+### Connecting
+
+- **`Connect this machine to NetBird`** — the machine's first connection: client install, registration with the key, checks that NetBird did not touch the server's DNS and routes. Afterwards the module offers to enable API mode.
+- **`Module settings (access token, API mode)`** — entering and storing the access token, enabling and disabling API mode, rotating the subscription server's token.
+- **`Policies and the Default policy (API mode)`** — API mode only: the module creates the groups and the panel → nodes policy, lists foreign peers and offers to turn Default off (after checking the node paths survive; rolls it back if they do not).
+
+### Nodes
+
+- **`Nodes: move to the NetBird network, import manual setup, status`** — the nodes submenu:
+    - **`Moving a node to the NetBird network`** — moves one node: the client is installed over SSH, the path is verified from inside the panel container, the panel address is switched to the network address, reconnection is confirmed. The public 2222 path stays as a fallback; an unfinished move can be resumed or rolled back.
+    - **`Importing nodes set up by hand (the wiki guide)`** — for nodes connected before the module: it finds panel nodes with addresses inside your NetBird network and adds them to the module state.
+- **`Emergency return of nodes to public addresses`** — returns all nodes to public addresses in one command, NetBird stays connected.
+- **`Subscription page on a separate server`** — opens a dedicated panel port (closed from the internet) and moves the subscription server's traffic to the panel through the NetBird network. When the page already rides the network, the item first offers returning it to the public path (snapshot restore with a public-path check) or re-migrating after manual edits.
+- **`Xray Checker through the NetBird network`** — the checker takes the subscription only through the network; metrics and the monitoring page answer only to machines inside the network. The return to the public path goes through the same item: a public-checker snapshot is restored, without one the module's stack is stopped and removed.
+
+### Service items
+
+- **`Diagnostics and address verification`** — client state and mandatory settings, recorded vs actual addresses, warnings about foreign settings and an unpinned package.
+- **`Restore the correct client settings`** — restarts the client with the mandatory settings: needed after a manual pre-module setup or when diagnostics reports a mismatch.
+- **`Update the NetBird client (one machine at a time)`** — looks up the latest version in the repository, Enter installs it. Reports when the latest is already installed. The version is pinned so background upgrades never restart the client on their own.
+- **`Disable NetBird (full rollback)`** — reversible shutdown: stops the client, the install and module state remain.
+- **`Remove NetBird completely (client and module state)`** — full teardown for from-scratch runs (see above).
+
+## Manual setup (without the module)
+
+If the module is unavailable, the minimal manual set is below — with every caveat the module handles automatically:
+
+```bash
+# on the panel and on the node
+curl -fsSL https://pkgs.netbird.io/install.sh | sh
+apt-mark hold netbird
+
+# pass the key through a file only, never the command line (argv is visible in ps and history)
+install -m600 /dev/null /run/nbkey
+printf '%s' 'YOUR-SETUP-KEY' > /run/nbkey
+netbird up --setup-key-file /run/nbkey --disable-dns=true --disable-client-routes=true \
+    --disable-server-routes=true --block-inbound=false --disable-firewall=false
+rm -f /run/nbkey
+netbird service reconfigure --service-env NB_LAZY_CONN=off
+```
+
+Then set the node's overlay address in the "Address" field of its panel card. Remember: without one-directional policies traffic between peers is unrestricted (`Default` = all to all), and UFW rules on the `wt0` interface do not apply — access is filtered by NetBird policies alone.
+
+## Summary
+
+- Panel and nodes are tied by an encrypted tunnel, public `2222` stays as the fallback.
+- Subscription and monitoring ride the NetBird network, their ports are closed from the internet.
+- Everything returns to public addresses at any moment: nodes with one command, the subscription page and the checker through their own menu items.
+
+<LinkCard title="NetBird by hand" description="The same result without the script: client install, keys and policies manually, for any server." href="/configuration/netbird/" />
+<LinkCard title="SSH access to machines" description="Keys and targets for a second machine: the NetBird module needs them to move nodes and the subscription page." href="/configuration/ssh-remote-access/" />

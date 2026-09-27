@@ -6,6 +6,8 @@ description: A guide on installing and configuring Netbird to link servers
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 
+This is the manual guide and it works for everyone. If you use our `remnawave-reverse-proxy` script, its module does all of this automatically: [NetBird: the script module](/configuration/netbird-module/).
+
 Netbird is an open-source platform based on WireGuard that allows you to easily create secure private networks. In this guide, we will walk through how to install and configure Netbird to link your Remnawave panel and nodes so they can communicate securely with each other.
 
 ## Registering on Netbird
@@ -107,7 +109,7 @@ Copy the key and save it in a safe place for future use.
 3. Launch Netbird with the key you copied earlier. Execute the command to connect using the saved key (you will have your own key):
 
     ```bash
-    netbird up --setup-key AE53280D-88CC-4250-9228-401AB1C7C041
+    netbird up --setup-key YOUR-COPIED-KEY
     ```
 
     ![Netbird setup](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/netbird/setup_netbird2.png)

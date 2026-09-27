@@ -165,6 +165,7 @@ The panel remains invisible without the correct authentication parameter.
 - **IPv6 Management**: Vulnerability prevention measures
 - **TCP Optimization**: BBR congestion control algorithm
 - **Masking**: Random website template selection
+- **NetBird Overlay**: panel-to-node traffic over a WireGuard mesh with one-directional policies, one-off setup keys and a public fallback path
 
 ---
 

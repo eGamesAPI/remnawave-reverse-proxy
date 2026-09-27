@@ -570,14 +570,16 @@ sr_unpatch_public_profile() {
 # --- remote side ---------------------------------------------------------------
 
 sr_panel_public_ip() {
-    curl -s --connect-timeout 8 --max-time 12 -4 ifconfig.me 2>/dev/null \
-        || curl -s --connect-timeout 8 --max-time 12 -4 api.ipify.org 2>/dev/null
+    get_public_ipv4
 }
 
-# Public IPv4 or nothing.
+# Public IPv4 or nothing. The CGNAT range is excluded on purpose: a NetBird
+# overlay address (100.64.0.0/10) must never become a ufw source — the real
+# traffic arrives from the node's public IP and the rule would be dead while
+# looking applied.
 sr_public_ipv4() {
     local addr="$1"
-    echo "$addr" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|169\.254\.)'
+    echo "$addr" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)'
 }
 
 # Raw addresses of the nodes a profile is active on, no filtering. A
@@ -676,7 +678,11 @@ sr_remote_deploy_node() {
 
     panel_ip=$(sr_panel_public_ip)
     if [ -n "$panel_ip" ]; then
-        if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required             "ufw allow from $panel_ip to any port 2222 proto tcp; ufw allow from $panel_ip to any port $ss_port")" >/dev/null 2>&1; then
+        # One rule per call, rc each: a `;`-glued chain reports only the last
+        # command. The SS port rule carries no proto clause on purpose — the
+        # tunnel runs UDP DNS on the same port.
+        if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $panel_ip to any port 2222 proto tcp")" >/dev/null 2>&1 \
+           || ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $panel_ip to any port $ss_port")" >/dev/null 2>&1; then
             echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_OPEN_FAIL]}" "$ss_port")${COLOR_RESET}" >&2
         fi
     fi
@@ -748,7 +754,9 @@ sr_remote_adopt_node() {
     # The container is already up; only the firewall may need a reminder.
     panel_ip=$(sr_panel_public_ip)
     if [ -n "$panel_ip" ]; then
-        if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required             "ufw allow from $panel_ip to any port 2222 proto tcp; ufw allow from $panel_ip to any port $ss_port")" >/dev/null 2>&1; then
+        # One rule per call with its own rc — see sr_remote_deploy_node.
+        if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $panel_ip to any port 2222 proto tcp")" >/dev/null 2>&1 \
+           || ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $panel_ip to any port $ss_port")" >/dev/null 2>&1; then
             echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_OPEN_FAIL]}" "$ss_port")${COLOR_RESET}" >&2
         fi
     fi
@@ -836,23 +844,35 @@ sr_remote_install_node() {
 }
 
 # ufw on the DE box: the SS port for every RU egress address we know of.
+# Rules go out one per ssh call with the rc watched per rule — a `;`-glued
+# chain reports only the last command's exit code and a failed middle rule
+# reads as success.
 sr_remote_open_bridge_port() {
     local host="$1" port="$2"
     shift 2
-    local sources=("$@") src cmd="" ufw_state
+    local sources=("$@") src rule_rc
+    local applied=0 failed=0 missing_ufw=0
     step_do "$(printf "${LANG[SR_UFW_OPEN]}" "$host")"
-    for src in "${sources[@]}"; do
-        [ -n "$src" ] || continue
-        cmd="${cmd:+$cmd; }ufw allow from $src to any port $port"
-    done
-    [ -n "$cmd" ] || return 0
+    [ "${#sources[@]}" -gt 0 ] || return 0
     # An inactive ufw still takes the rule (it fires the day ufw gets
     # enabled) — but the report must be honest about the port being open
     # to everyone right now.
     ufw_state=$(re_run_host_n "$host" "ufw status 2>/dev/null | head -n1" 2>/dev/null)
-    local rc=0
-    re_run_host_n "$host" "$(re_remote_ufw_cmd required "$cmd")" >/dev/null 2>&1 || rc=$?
-    if [ "$rc" = 0 ]; then
+    for src in "${sources[@]}"; do
+        [ -n "$src" ] || continue
+        rule_rc=0
+        re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $src to any port $port")" >/dev/null 2>&1 || rule_rc=$?
+        case "$rule_rc" in
+            0)   applied=$((applied + 1)) ;;
+            127) missing_ufw=1 ;;
+            *)   failed=$((failed + 1)) ;;
+        esac
+    done
+    if [ "$missing_ufw" = 1 ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_NO_UFW]}" "$host" "$port")${COLOR_RESET}"
+        return 0
+    fi
+    if [ "$applied" -gt 0 ]; then
         case "$ufw_state" in
             *inactive*)
                 echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_INACTIVE]}" "$host")${COLOR_RESET}"
@@ -862,11 +882,9 @@ sr_remote_open_bridge_port() {
                 step_ok "${LANG[SR_UFW_OPEN_OK]}"
                 ;;
         esac
-    elif [ "$rc" = 127 ]; then
-        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_NO_UFW]}" "$host" "$port")${COLOR_RESET}"
-    else
-        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_OPEN_FAIL]}" "$port")${COLOR_RESET}"
     fi
+    [ "$failed" -gt 0 ] && echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_OPEN_FAIL]}" "$port")${COLOR_RESET}"
+    return 0
 }
 
 # An inactive ufw enforces nothing — the machine is open to the world.
@@ -895,18 +913,24 @@ sr_ufw_offer_enable() {
     fi
 
     if [ -n "$list" ]; then
-        cmd="ufw allow $ssh_port/tcp"
+        echo -e " ${COLOR_GRAY}${LANG[SR_UFW_AUTO_KEEP]}${COLOR_RESET}"
+        echo "$list"
+        # The operator's way back lands FIRST and is verified before enable
+        # runs: in a `;`-glued chain a failed ssh-port allow was invisible
+        # and enable still fired — a lockout reported as success.
+        if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow $ssh_port/tcp")" >/dev/null 2>&1; then
+            echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
+            return 1
+        fi
         local pp
         while read -r pp _; do
             [ -n "$pp" ] || continue
             case " ${pp%%/*} " in
                 " $ssh_port "|" 2222 "|" $port ") continue ;;
             esac
-            cmd="$cmd; ufw allow $pp"
+            re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow $pp")" >/dev/null 2>&1
         done <<< "$list"
-        echo -e " ${COLOR_GRAY}${LANG[SR_UFW_AUTO_KEEP]}${COLOR_RESET}"
-        echo "$list"
-        if re_run_host_n "$host" "$(re_remote_ufw_cmd required "$cmd"); echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1" 2>/dev/null | grep -q active; then
+        if re_run_host_n "$host" "$(re_remote_ufw_cmd required "echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1")" 2>/dev/null | grep -q active; then
             if re_run_host_n "$host" "echo ok" >/dev/null 2>&1; then
                 step_ok "${LANG[SR_UFW_ENABLE_OK]}"
             else
@@ -920,7 +944,11 @@ sr_ufw_offer_enable() {
 
     # ss gave nothing to work with — never enable blind.
     reading_yn "$(printf "${LANG[SR_UFW_ENABLE_ASK]}" "$host" "$ssh_port" "$port")" confirm_ufw_enable || return 0
-    if ! re_run_host_n "$host" "ufw allow $ssh_port/tcp >/dev/null 2>&1; echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1" 2>/dev/null | grep -q active; then
+    if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow $ssh_port/tcp")" >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
+        return 1
+    fi
+    if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1")" 2>/dev/null | grep -q active; then
         echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
         return 1
     fi
@@ -935,13 +963,12 @@ sr_ufw_offer_enable() {
 sr_remote_close_bridge_port() {
     local host="$1" port="$2"
     shift 2
-    local sources=("$@") src cmd=""
+    local sources=("$@") src
     for src in "${sources[@]}"; do
         [ -n "$src" ] || continue
-        cmd="${cmd:+$cmd; }ufw delete allow from $src to any port $port"
+        re_run_host_n "$host" "$(re_remote_ufw_cmd optional "ufw delete allow from $src to any port $port")" >/dev/null 2>&1
     done
-    [ -n "$cmd" ] || return 0
-    re_run_host "$host" "$(re_remote_ufw_cmd optional "$cmd")" >/dev/null 2>&1
+    return 0
 }
 
 # TCP reachability of the bridge port from this box.
@@ -1204,7 +1231,7 @@ sr_provision_exit() {
             # The same dead run may have left the machine itself without its
             # node — finish the deployment with a fresh link key when the
             # remnanode container is not running there.
-            if ! re_run_host "$host" "docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnanode"; then
+            if ! re_run_host_n "$host" "docker ps --format '{{.Names}}' 2>/dev/null | grep -qx remnanode"; then
                 local response link_secret
                 step_do "${LANG[SR_REMOTE_KEYGEN]}" >&2
                 response=$(sr_api "GET" "/api/keygen")
@@ -1390,7 +1417,9 @@ sr_setup() {
     done < <(sr_profile_node_addresses "$SR_PICKED_PROFILE")
     panel_ip=$(sr_panel_public_ip)
     [ -n "$panel_ip" ] && sources+=("$panel_ip")
-    sr_state_set ufw_sources "$(printf '%s ' "${sources[@]}")"
+    # One source per line: a space-joined value reads back as a single
+    # "a b c" source and `ufw delete allow from a b c` can never match.
+    sr_state_set ufw_sources "$(printf '%s\n' "${sources[@]}")"
     sr_remote_open_bridge_port "$host" "$ss_port" "${sources[@]}"
 
     # --- verify -----------------------------------------------------------------
@@ -1472,12 +1501,12 @@ sr_attach_profile() {
     done < <(sr_profile_node_addresses "$SR_PICKED_PROFILE")
     panel_ip=$(sr_panel_public_ip)
     [ -n "$panel_ip" ] && sources+=("$panel_ip")
+    # Newline-separated, like sr_setup writes it.
     merged=$(sr_state_get ufw_sources)
     for addr in "${sources[@]}"; do
-        case " $merged " in
-            *" $addr "*) ;;
-            *) merged="${merged:+$merged }$addr" ;;
-        esac
+        [ -n "$addr" ] || continue
+        printf '%s\n' "$merged" | grep -qxF "$addr" || merged="${merged:+$merged
+}$addr"
     done
     sr_state_set ufw_sources "$merged"
     sr_remote_open_bridge_port "$host" "$port" "${sources[@]}"
@@ -1712,9 +1741,11 @@ sr_teardown() {
             echo -e "${COLOR_GRAY}${LANG[SR_TEARDOWN_EXIT_SHARED]}${COLOR_RESET}"
         else
             local sources=() src
+            # tr normalizes states written by older versions (space-joined
+            # single line) into one source per line.
             while read -r src; do
                 [ -n "$src" ] && sources+=("$src")
-            done <<< "$(sr_state_get ufw_sources)"
+            done <<< "$(sr_state_get ufw_sources | tr ' ' '\n')"
             if [ "${#sources[@]}" -gt 0 ]; then
                 step_do "${LANG[SR_TEARDOWN_UFW]}"
                 sr_remote_close_bridge_port "$host" "$port" "${sources[@]}" && step_ok "${LANG[SR_TEARDOWN_UFW_OK]}"
@@ -1768,7 +1799,10 @@ sr_xray_version_on() {
         return 0
     fi
     if re_target_load_by_host "$addr"; then
-        re_run_host "$addr" "docker exec remnanode xray -version 2>/dev/null | head -n1" 2>/dev/null | head -n1
+        # -n: this runs inside a `while read` over the profile's node list —
+        # a data-less ssh without it eats the remaining addresses and every
+        # later node went unchecked (B-41).
+        re_run_host_n "$addr" "docker exec remnanode xray -version 2>/dev/null | head -n1" 2>/dev/null | head -n1
         return 0
     fi
     return 3
@@ -2213,7 +2247,7 @@ sr_setup_route() {
             src_label=$(sed -n 's|^bridge_name=||p' "$sf" | head -n1)
             [ -n "$src_label" ] || src_label="$src_slug"
             if [ -z "$host" ] || [ -z "$ss_port" ] || [ -z "$inbound_uuid" ]; then
-                echo -e "${COLOR_RED}$(printf "${LANG[SR_EXIT_REUSE_STATE_BAD}" "$(sr_cap_first "$src_label")")${COLOR_RESET}"
+                echo -e "${COLOR_RED}$(printf "${LANG[SR_EXIT_REUSE_STATE_BAD]}" "$(sr_cap_first "$src_label")")${COLOR_RESET}"
                 return 1
             fi
             exit_shared=yes
@@ -2517,9 +2551,11 @@ sr_teardown_route() {
         else
             load_remote_exec_module
             local sources=() src
+            # tr normalizes states written by older versions (space-joined
+            # single line) into one source per line.
             while read -r src; do
                 [ -n "$src" ] && sources+=("$src")
-            done <<< "$(sr_state_get ufw_sources)"
+            done <<< "$(sr_state_get ufw_sources | tr ' ' '\n')"
             if [ "${#sources[@]}" -gt 0 ]; then
                 step_do "${LANG[SR_TEARDOWN_UFW]}"
                 sr_remote_close_bridge_port "$host" "$port" "${sources[@]}" && step_ok "${LANG[SR_TEARDOWN_UFW_OK]}"
@@ -2672,6 +2708,9 @@ sr_ruex_compose_del() {
 # inherits the outbound the profile already sends geoip:ru traffic to.
 sr_ruex_switch_rules() {
     local on_off="$1" slug profile profiles merged count=0 ob
+    # Every rules re-run is also the cheap moment to bring a stale cron
+    # updater up to the current marker (fixes reach boxes enabled long ago).
+    [ "$on_off" = "on" ] && sr_ruex_ensure_updater
     while IFS= read -r slug; do
         [ -n "$slug" ] || continue
         # Geo bridges only — see sr_ruex_entry_nodes for the dangling-tag
@@ -2707,120 +2746,160 @@ sr_ruex_switch_rules() {
 # re-implements the small pieces it needs (mirrors+sha download, per-target
 # ssh from remote-exec state files, node restart through the saved panel
 # token). Restarts happen ONLY when a file actually changed.
+# The version marker makes fixes reach already-installed boxes: any flow that
+# re-runs the rules regenerates the script when the marker differs.
+SR_RUEX_UPDATER_MARKER="rrp-ruex-update v2"
 sr_ruex_write_updater() {
-    cat > "${SR_CONF_DIR}/ruex-update.sh" <<'UPD'
+    cat > "${SR_CONF_DIR}/ruex-update.sh" <<UPD
 #!/bin/bash
-# Auto-generated by remnawave-reverse-proxy (server routing, extended RU lists).
+# ${SR_RUEX_UPDATER_MARKER} — auto-generated by remnawave-reverse-proxy
+# (server routing, extended RU lists). Manual edits are lost on regen.
 DIR=/usr/local/remnawave_reverse
-STATE="$DIR/server-routing/ruex.state"
-KEY="$DIR/ssh/id_ed25519"
-KH="$DIR/ssh/known_hosts"
-LOG="$DIR/server-routing/ruex-update.log"
+STATE="\$DIR/server-routing/ruex.state"
+KEY="\$DIR/ssh/id_ed25519"
+KH="\$DIR/ssh/known_hosts"
+LOG="\$DIR/server-routing/ruex-update.log"
 BASE="https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download"
 FILE="geosite-ruex.dat"
-TMP=$(mktemp -d)
+TMP=\$(mktemp -d)
 
 log() {
-    echo "$(date '+%F %T') $*" >> "$LOG"
-    tail -n 50 "$LOG" > "$LOG.t" 2>/dev/null && mv "$LOG.t" "$LOG"
+    echo "\$(date '+%F %T') \$*" >> "\$LOG"
+    tail -n 50 "\$LOG" > "\$LOG.t" 2>/dev/null && mv "\$LOG.t" "\$LOG"
 }
 
-# ssh target for an address from the remote-exec state files
+# ssh target for an address from the remote-exec state files. A node moved
+# onto the NetBird overlay carries its overlay IP in the panel; the target
+# file holds it as the overlay= alias while host= stays the public address
+# ssh must actually use.
 tgt_for() {
-    local f h p u
-    for f in "$DIR"/remote-exec/*.target; do
-        [ -f "$f" ] || continue
-        h=$(sed -n 's|^host=||p' "$f" | head -n1)
-        [ "$h" = "$1" ] || continue
-        p=$(sed -n 's|^port=||p' "$f" | head -n1); [ -n "$p" ] || p=22
-        u=$(sed -n 's|^user=||p' "$f" | head -n1); [ -n "$u" ] || u=root
-        echo "$u@$1 -p $p"
+    local f h p u ov
+    for f in "\$DIR"/remote-exec/*.target; do
+        [ -f "\$f" ] || continue
+        h=\$(sed -n 's|^host=||p' "\$f" | head -n1)
+        ov=\$(sed -n 's|^overlay=||p' "\$f" | head -n1)
+        { [ "\$h" = "\$1" ] || [ "\$ov" = "\$1" ]; } || continue
+        p=\$(sed -n 's|^port=||p' "\$f" | head -n1); [ -n "\$p" ] || p=22
+        u=\$(sed -n 's|^user=||p' "\$f" | head -n1); [ -n "\$u" ] || u=root
+        echo "\$u@\$h -p \$p"
         return 0
     done
     return 1
 }
 
-cd "$TMP" || exit 1
+# Node uuid by panel address, with the netbird module state as the fallback:
+# an overlay node's .address is its overlay IP, which the ruex state never
+# held — the overlay→uuid map lives in netbird/nodes/*.json.
+uuid_for() {
+    local addr="\$1" u nf ov
+    u=\$(echo "\$resp" | jq -r --arg a "\$addr" '.response[]? | select(.address == \$a) | .uuid' 2>/dev/null | head -n1)
+    [ -n "\$u" ] && { echo "\$u"; return 0; }
+    for nf in "\$DIR"/netbird/nodes/*.json; do
+        [ -f "\$nf" ] || continue
+        ov=\$(jq -r '.overlay // empty' "\$nf" 2>/dev/null)
+        if [ "\$ov" = "\$addr" ]; then
+            jq -r '.uuid // empty' "\$nf" 2>/dev/null
+            return 0
+        fi
+    done
+    return 1
+}
+
+cd "\$TMP" || exit 1
 ok=0
-for m in "$BASE" "https://gh-proxy.com/$BASE" "https://ghfast.top/$BASE" "https://ghproxy.net/$BASE"; do
-    if curl -fsSL --connect-timeout 15 --max-time 180 "$m/geosite.dat" -o geosite.dat 2>/dev/null \
-       && curl -fsSL --connect-timeout 10 --max-time 30 "$m/geosite.dat.sha256sum" -o geosite.dat.sha256sum 2>/dev/null \
+for m in "\$BASE" "https://gh-proxy.com/\$BASE" "https://ghfast.top/\$BASE" "https://ghproxy.net/\$BASE"; do
+    if curl -fsSL --connect-timeout 15 --max-time 180 "\$m/geosite.dat" -o geosite.dat 2>/dev/null \\
+       && curl -fsSL --connect-timeout 10 --max-time 30 "\$m/geosite.dat.sha256sum" -o geosite.dat.sha256sum 2>/dev/null \\
        && [ -s geosite.dat ]; then
         ok=1
         break
     fi
 done
-if [ "$ok" != 1 ]; then
+if [ "\$ok" != 1 ]; then
     log "download failed from all mirrors"
-    rm -rf "$TMP"
+    rm -rf "\$TMP"
     exit 1
 fi
-want=$(grep -oE '^[0-9a-fA-F]{64}' geosite.dat.sha256sum | head -n1)
-got=$(sha256sum geosite.dat | cut -d' ' -f1)
-if [ -n "$want" ] && [ "$want" != "$got" ]; then
+want=\$(grep -oE '^[0-9a-fA-F]{64}' geosite.dat.sha256sum | head -n1)
+got=\$(sha256sum geosite.dat | cut -d' ' -f1)
+if [ -n "\$want" ] && [ "\$want" != "\$got" ]; then
     log "checksum mismatch"
-    rm -rf "$TMP"
+    rm -rf "\$TMP"
     exit 1
 fi
 
 changed=""
 local_dir=""
 for d in /opt/remnanode /opt/remnawave; do
-    if [ -f "$d/docker-compose.yml" ] && grep -q '^[[:space:]]*remnanode:' "$d/docker-compose.yml" 2>/dev/null; then
-        local_dir="$d"
+    if [ -f "\$d/docker-compose.yml" ] && grep -q '^[[:space:]]*remnanode:' "\$d/docker-compose.yml" 2>/dev/null; then
+        local_dir="\$d"
         break
     fi
 done
-if [ -n "$local_dir" ] && [ -f "$local_dir/$FILE" ]; then
-    cur=$(sha256sum "$local_dir/$FILE" | cut -d' ' -f1)
-    if [ "$cur" != "$got" ]; then
-        if cp -f geosite.dat "$local_dir/$FILE"; then
+if [ -n "\$local_dir" ] && [ -f "\$local_dir/\$FILE" ]; then
+    cur=\$(sha256sum "\$local_dir/\$FILE" | cut -d' ' -f1)
+    if [ "\$cur" != "\$got" ]; then
+        if cp -f geosite.dat "\$local_dir/\$FILE"; then
             changed="local"
             log "local file updated"
         fi
     fi
 fi
 
-nodes=$(sed -n 's|^nodes=||p' "$STATE" | head -n1)
-for addr in $nodes; do
-    [ -n "$addr" ] || continue
-    tgt=$(tgt_for "$addr") || continue
-    cur=$(cat geosite.dat | ssh -i "$KEY" $tgt -o BatchMode=yes -o ConnectTimeout=10 \
-        -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KH" -o IdentitiesOnly=yes \
-        "sha256sum /opt/remnanode/$FILE 2>/dev/null | cut -d' ' -f1" 2>/dev/null)
-    [ "$cur" = "$got" ] && continue
-    if cat geosite.dat | ssh -i "$KEY" $tgt -o BatchMode=yes -o ConnectTimeout=10 \
-        -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KH" -o IdentitiesOnly=yes \
-        "cat > /opt/remnanode/$FILE" 2>/dev/null; then
-        changed="$changed $addr"
-        log "remote $addr updated"
+nodes=\$(sed -n 's|^nodes=||p' "\$STATE" | head -n1)
+for addr in \$nodes; do
+    [ -n "\$addr" ] || continue
+    tgt=\$(tgt_for "\$addr") || continue
+    cur=\$(cat geosite.dat | ssh -i "\$KEY" \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
+        -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="\$KH" -o IdentitiesOnly=yes \\
+        "sha256sum /opt/remnanode/\$FILE 2>/dev/null | cut -d' ' -f1" 2>/dev/null)
+    [ "\$cur" = "\$got" ] && continue
+    if cat geosite.dat | ssh -i "\$KEY" \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
+        -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="\$KH" -o IdentitiesOnly=yes \\
+        "cat > /opt/remnanode/\$FILE" 2>/dev/null; then
+        changed="\$changed \$addr"
+        log "remote \$addr updated"
     fi
 done
-rm -rf "$TMP"
+rm -rf "\$TMP"
 
 # xray reads geodata at config load: restart the nodes only when a file
 # changed, quiet days cost nothing.
-[ -n "$changed" ] || exit 0
-TOKEN=$(cat "$DIR/token" 2>/dev/null)
-if [ -z "$TOKEN" ]; then
+[ -n "\$changed" ] || exit 0
+TOKEN=\$(cat "\$DIR/token" 2>/dev/null)
+if [ -z "\$TOKEN" ]; then
     log "file updated, panel token missing — restart skipped until any config change"
     exit 0
 fi
 # Same headers as make_api_request: the panel's JWT guard rejects the saved
-# login token without the browser client-type header.
-resp=$(curl -s --connect-timeout 10 --max-time 30 \n    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \n    -H "X-Forwarded-For: 127.0.0.1" -H "X-Forwarded-Proto: https" \n    -H "X-Remnawave-Client-Type: browser" \n    "http://127.0.0.1:3000/api/nodes" 2>/dev/null)
-if ! echo "$resp" | jq -e '.response' >/dev/null 2>&1; then
-    log "panel node list failed - restart skipped, answer: ${resp:0:200}"
+# login token without the browser client-type header. The token rides in a
+# header file, not argv.
+resp=\$(curl -s --connect-timeout 10 --max-time 30 \\
+    -H @<(printf 'Authorization: Bearer %s\nContent-Type: application/json\nX-Forwarded-For: 127.0.0.1\nX-Forwarded-Proto: https\nX-Remnawave-Client-Type: browser\n' "\$TOKEN") \\
+    "http://127.0.0.1:3000/api/nodes" 2>/dev/null)
+if ! echo "\$resp" | jq -e '.response' >/dev/null 2>&1; then
+    log "panel node list failed - restart skipped, answer: \${resp:0:200}"
     exit 1
 fi
-for addr in $nodes; do
-    [ -n "$addr" ] || continue
-    uuid=$(echo "$resp" | jq -r --arg a "$addr" '.response[]? | select(.address == $a) | .uuid' 2>/dev/null | head -n1)
-    [ -n "$uuid" ] || continue
-    curl -sf --max-time 30 -X POST \n        -H "Authorization: Bearer $TOKEN" -H "X-Forwarded-For: 127.0.0.1" \n        -H "X-Forwarded-Proto: https" -H "X-Remnawave-Client-Type: browser" \n        "http://127.0.0.1:3000/api/nodes/$uuid/actions/restart" >/dev/null 2>&1 \n        && log "node $addr restarted" || log "node $addr restart failed"
+for addr in \$nodes; do
+    [ -n "\$addr" ] || continue
+    uuid=\$(uuid_for "\$addr")
+    [ -n "\$uuid" ] || continue
+    curl -sf --max-time 30 -X POST \\
+        -H @<(printf 'Authorization: Bearer %s\nX-Forwarded-For: 127.0.0.1\nX-Forwarded-Proto: https\nX-Remnawave-Client-Type: browser\n' "\$TOKEN") \\
+        "http://127.0.0.1:3000/api/nodes/\$uuid/actions/restart" >/dev/null 2>&1 \\
+        && log "node \$addr restarted" || log "node \$addr restart failed"
 done
 UPD
     chmod 700 "${SR_CONF_DIR}/ruex-update.sh"
+}
+
+# Regenerate the updater when its marker is stale; called wherever ruex rules
+# re-run, so fixes reach boxes that enabled ruex long ago.
+sr_ruex_ensure_updater() {
+    [ -f "${SR_CONF_DIR}/ruex-update.sh" ] || return 0
+    head -3 "${SR_CONF_DIR}/ruex-update.sh" 2>/dev/null | grep -qF "$SR_RUEX_UPDATER_MARKER" && return 0
+    sr_ruex_write_updater
 }
 
 sr_ruex_enable() {
@@ -2859,12 +2938,12 @@ sr_ruex_enable() {
             else
                 echo -e "${COLOR_RED}$(printf "${LANG[SR_RUEX_MOUNT_FAIL]}" "$addr")${COLOR_RESET}"
             fi
-        elif re_target_load_by_host "$addr" && re_run_host "$addr" "test -f /opt/remnanode/docker-compose.yml"; then
+        elif re_target_load_by_host "$addr" && re_run_host_n "$addr" "test -f /opt/remnanode/docker-compose.yml"; then
             step_do "$(printf "${LANG[SR_RUEX_MOUNT_REMOTE]}" "$addr")"
             if cat "$tmpd/geosite.dat" | re_run_host "$addr" "cat > /opt/remnanode/${SR_RUEX_FILE}" \
-               && re_run_host "$addr" "grep -q geosite-ruex /opt/remnanode/docker-compose.yml || sed -i '\|/var/log/remnanode|i\\      - ./${SR_RUEX_FILE}:/usr/local/share/xray/${SR_RUEX_FILE}' /opt/remnanode/docker-compose.yml" \
-               && re_run_host "$addr" "cd /opt/remnanode && docker compose up -d" >/dev/null 2>&1 \
-               && re_run_host "$addr" "docker exec remnanode test -s /usr/local/share/xray/${SR_RUEX_FILE}" >/dev/null 2>&1; then
+               && re_run_host_n "$addr" "grep -q geosite-ruex /opt/remnanode/docker-compose.yml || sed -i '\|/var/log/remnanode|i\\      - ./${SR_RUEX_FILE}:/usr/local/share/xray/${SR_RUEX_FILE}' /opt/remnanode/docker-compose.yml" \
+               && re_run_host_n "$addr" "cd /opt/remnanode && docker compose up -d" >/dev/null 2>&1 \
+               && re_run_host_n "$addr" "docker exec remnanode test -s /usr/local/share/xray/${SR_RUEX_FILE}" >/dev/null 2>&1; then
                 touched="${touched:+$touched }$addr"
             else
                 echo -e "${COLOR_RED}$(printf "${LANG[SR_RUEX_MOUNT_FAIL]}" "$addr")${COLOR_RESET}"

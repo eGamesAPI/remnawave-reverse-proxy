@@ -1548,7 +1548,7 @@ show_xray_checker_menu() {
     echo -e ""
 
     local xchk_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" xchk_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" xchk_option || return 0
 
     if xchk_installed; then
         case $xchk_option in

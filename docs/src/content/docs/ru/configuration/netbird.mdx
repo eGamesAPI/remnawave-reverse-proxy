@@ -6,6 +6,8 @@ description: Инструкция по установке и настройке 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 
+Эта инструкция — ручная и подходит всем. Если вы пользуетесь нашим скриптом `remnawave-reverse-proxy`, всё то же самое делает его модуль автоматически: [NetBird: модуль скрипта](/ru/configuration/netbird-module/).
+
 Netbird — это open-source платформа на базе WireGuard, которая позволяет легко создавать защищённые частные сети. В этом руководстве мы разберём, как установить и настроить Netbird для связывания вашей панели Remnawave и последующих нод, чтобы они могли безопасно взаимодействовать друг с другом.
 
 ## Регистрация в Netbird
@@ -107,7 +109,7 @@ Netbird — это open-source платформа на базе WireGuard, ко�
 3. Запустите Netbird с ключом, который вы скопировали ранее. Выполните команду для подключения с использованием сохранённого ключа (у вас будет свой ключ):
 
     ```bash
-    netbird up --setup-key AE53280D-88CC-4250-9228-401AB1C7C041
+    netbird up --setup-key ВАШ-СКОПИРОВАННЫЙ-КЛЮЧ
     ```
 
     ![Netbird setup](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/netbird/setup_netbird2.png)

@@ -1262,13 +1262,16 @@ eg_preset_apply_private() {
     local was_on="false"
     eg_is_on && was_on="true"
 
-    local old_private merged
+    local old_private merged current
     old_private=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
-    merged=$(printf '%s\n%s\n' "$(eg_ip_entries | sed '/^$/d' | sort -u)" \
-        "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u)
+    current=$(eg_ip_entries | sed '/^$/d' | sort -u)
+    # Subtract the old preset BEFORE merging the new one — the preset list is
+    # constant, so union-then-subtract removed on every re-run the very
+    # ranges it claimed to apply (private nets silently left the blocklist).
     if [ -n "$old_private" ]; then
-        merged=$(comm -23 <(printf '%s\n' "$merged" | sort -u) <(printf '%s\n' "$old_private" | sort -u))
+        current=$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$old_private"))
     fi
+    merged=$(printf '%s\n%s\n' "$current" "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u)
 
     if ! eg_apply "$merged" "$(eg_port_entries | sed '/^$/d' | sort -n -u)"; then
         return 1
