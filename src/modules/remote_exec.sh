@@ -122,6 +122,29 @@ re_forget_host_key() {
     return 0
 }
 
+re_reset_changed_host_key() {
+    local host="$1" port="$2" user="$3" out type fp
+    re_ensure_dirs
+    out=$(ssh -n -p "$port" \
+        -o BatchMode=yes \
+        -o ConnectTimeout=8 \
+        -o StrictHostKeyChecking=accept-new \
+        -o UserKnownHostsFile="$RE_KNOWN_HOSTS" \
+        -o PubkeyAuthentication=no \
+        "$user@$host" true 2>&1)
+    case "$out" in
+        *"REMOTE HOST IDENTIFICATION HAS CHANGED"*) ;;
+        *) return 1 ;;
+    esac
+    type=$(printf '%s\n' "$out" | sed -n 's/^The fingerprint for the \([A-Z0-9]*\) key sent by the remote host is.*/\1/p' | head -n1)
+    fp=$(printf '%s\n' "$out" | grep -o 'SHA256:[A-Za-z0-9+/]*' | head -n1)
+    echo -e "${COLOR_YELLOW}$(printf "${LANG[RE_HOSTKEY_CHANGED]}" "$host" "$port")${COLOR_RESET}"
+    echo -e "${COLOR_GRAY}$(printf "${LANG[RE_HOSTKEY_FP]}" "$type" "$fp")${COLOR_RESET}"
+    echo -e "${COLOR_WHITE}ssh-keygen -lf /etc/ssh/ssh_host_${type,,}_key.pub${COLOR_RESET}"
+    reading_yn "${LANG[RE_HOSTKEY_FORGET]}" confirm_forget || return 1
+    re_forget_host_key "$host" "$port"
+}
+
 # Load the active (last used) target; with exactly one configured target
 # that one wins even without the pointer.
 re_load_state() {
@@ -439,13 +462,16 @@ re_bootstrap() {
     while IFS= read -r candidate; do
         keys+=("$candidate")
     done < <(re_candidate_keys)
-    for candidate in "${keys[@]}"; do
-        if re_try_key "$host" "$port" "$user" "$candidate"; then
-            step_ok "$(printf "${LANG[RE_TRYING_OK]}" "$candidate")"
-            re_target_write "$host" "$port" "$user" "$candidate" "$label"
-            echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
-            return 0
-        fi
+    while true; do
+        for candidate in "${keys[@]}"; do
+            if re_try_key "$host" "$port" "$user" "$candidate"; then
+                step_ok "$(printf "${LANG[RE_TRYING_OK]}" "$candidate")"
+                re_target_write "$host" "$port" "$user" "$candidate" "$label"
+                echo -e "${COLOR_GREEN}$(printf "${LANG[RE_SAVED]}" "$user" "$host" "$port")${COLOR_RESET}"
+                return 0
+            fi
+        done
+        re_reset_changed_host_key "$host" "$port" "$user" || break
     done
     echo -e "${COLOR_YELLOW}${LANG[RE_TRYING_FAIL]}${COLOR_RESET}"
 
