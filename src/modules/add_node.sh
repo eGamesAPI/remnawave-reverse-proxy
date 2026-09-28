@@ -513,6 +513,7 @@ an_auto_deploy() {
     # the node's IP — Reality breaks behind a proxied record, so no
     # Cloudflare proxy tolerance here.
     load_dns_records_module
+    load_certificates_module
     base_domain=$(extract_domain "$domain")
     dns_saved_credentials_load
     # The provider of a zone the panel already holds a certificate for is
@@ -527,7 +528,8 @@ an_auto_deploy() {
         gcore)      [ -n "$GCORE_API_KEY" ] || zone_prov="" ;;
         bunny)      [ -n "$BUNNY_API_KEY" ] || zone_prov="" ;;
     esac
-    if ! dns_record_points_here "$domain" "$node_ip" false; then
+    if ! dns_record_points_here "$domain" "$node_ip" false \
+        || { [ "$ws" != "caddy" ] && [ -z "$zone_prov" ] && ! resolve_certificate_domain "$domain" >/dev/null; }; then
         if [ -n "$zone_prov" ]; then
             step_do "$(printf "${LANG[AN_DNS_STEP]}" "$domain" "$node_ip")" >&2
             case "$zone_prov" in
@@ -605,7 +607,6 @@ an_auto_deploy() {
     # renews it on its own from then on. The caddy variant opts out of the
     # whole branch: caddy provisions and renews its own certificate over
     # ACME on the open port 80, so there is nothing to copy or sync.
-    load_certificates_module
     if [ "$ws" = "caddy" ]; then
         :
     elif lineage=$(resolve_certificate_domain "$domain"); then
