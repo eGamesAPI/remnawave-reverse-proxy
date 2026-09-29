@@ -7,13 +7,22 @@ show_ipv6_status() {
     local iface global_addr
     iface=$(ipv6_default_iface)
 
-    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" -eq 1 ]; then
+    # ipv6.disable=1 on the kernel command line removes the whole sysctl
+    # tree: sysctl -n prints nothing, which is not "enabled"
+    if [ ! -d /proc/sys/net/ipv6 ]; then
+        echo -e ""
+        echo -e "${COLOR_RED}${LANG[IPV6_STATUS_BOOT_OFF]}${COLOR_RESET}"
+        return
+    fi
+
+    # String comparisons: an empty value must not trip [ -eq ]
+    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" = "1" ]; then
         echo -e ""
         echo -e "${COLOR_RED}${LANG[IPV6_STATUS_OFF]}${COLOR_RESET}"
         return
     fi
 
-    if [ -n "$iface" ] && [ "$(sysctl -n "net.ipv6.conf.$iface.disable_ipv6" 2>/dev/null)" -eq 1 ]; then
+    if [ -n "$iface" ] && [ "$(sysctl -n "net.ipv6.conf.$iface.disable_ipv6" 2>/dev/null)" = "1" ]; then
         echo -e "${COLOR_RED}$(printf "${LANG[IPV6_STATUS_IFACE_OFF]}" "$iface")${COLOR_RESET}"
         return
     fi
@@ -79,25 +88,40 @@ ipv6_default_iface() {
 # a per-interface disable_ipv6=1 keeps the interface dead even at all=0
 ipv6_is_enabled() {
     local iface="$1"
-    [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" -eq 0 ] || return 1
+    [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" = "0" ] || return 1
     [ -z "$iface" ] && return 0
-    [ "$(sysctl -n "net.ipv6.conf.$iface.disable_ipv6" 2>/dev/null)" -eq 0 ]
+    [ "$(sysctl -n "net.ipv6.conf.$iface.disable_ipv6" 2>/dev/null)" = "0" ]
 }
+
+# The setting lives in its own sysctl.d drop-in: Debian 13 no longer reads
+# /etc/sysctl.conf at boot, so a value kept there silently reverted after
+# a reboot. The name sorts after provider drop-ins (99-disable-ipv6.conf
+# and the like); set_ipv6_sysctl also strips these keys from sysctl.conf,
+# so nothing overrides the drop-in at boot.
+IPV6_SYSCTL_CONF="/etc/sysctl.d/99-remnawave-ipv6.conf"
 
 set_ipv6_sysctl() {
     local value="$1" iface="$2"
 
-    sed -i '/net\.ipv6\.conf\.all\.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net\.ipv6\.conf\.default\.disable_ipv6/d' /etc/sysctl.conf
-    sed -i '/net\.ipv6\.conf\.lo\.disable_ipv6/d' /etc/sysctl.conf
-    [ -n "$iface" ] && sed -i "\|net\.ipv6\.conf\.$iface\.disable_ipv6|d" /etc/sysctl.conf
+    # Older runs appended the keys to /etc/sysctl.conf; where that file is
+    # still honoured, leftovers there would contradict the drop-in
+    if [ -f /etc/sysctl.conf ]; then
+        sed -i '/net\.ipv6\.conf\.all\.disable_ipv6/d' /etc/sysctl.conf
+        sed -i '/net\.ipv6\.conf\.default\.disable_ipv6/d' /etc/sysctl.conf
+        sed -i '/net\.ipv6\.conf\.lo\.disable_ipv6/d' /etc/sysctl.conf
+        [ -n "$iface" ] && sed -i "\|net\.ipv6\.conf\.$iface\.disable_ipv6|d" /etc/sysctl.conf
+    fi
 
-    echo "net.ipv6.conf.all.disable_ipv6 = $value" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.default.disable_ipv6 = $value" >> /etc/sysctl.conf
-    echo "net.ipv6.conf.lo.disable_ipv6 = $value" >> /etc/sysctl.conf
-    [ -n "$iface" ] && echo "net.ipv6.conf.$iface.disable_ipv6 = $value" >> /etc/sysctl.conf
+    mkdir -p "$(dirname "$IPV6_SYSCTL_CONF")"
+    {
+        echo "# Managed by remnawave-reverse-proxy (IPv6 menu)"
+        echo "net.ipv6.conf.all.disable_ipv6 = $value"
+        echo "net.ipv6.conf.default.disable_ipv6 = $value"
+        echo "net.ipv6.conf.lo.disable_ipv6 = $value"
+        [ -n "$iface" ] && echo "net.ipv6.conf.$iface.disable_ipv6 = $value"
+    } > "$IPV6_SYSCTL_CONF"
 
-    sysctl -p > /dev/null 2>&1
+    sysctl -p "$IPV6_SYSCTL_CONF" > /dev/null 2>&1
 }
 
 enable_ipv6() {
@@ -159,7 +183,10 @@ enable_ipv6() {
 }
 
 disable_ipv6() {
-    if [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6)" -eq 1 ]; then
+    # No /proc/sys/net/ipv6: the kernel booted with ipv6.disable=1, IPv6 is
+    # off already and there is nothing for sysctl to write
+    if [ ! -d /proc/sys/net/ipv6 ] \
+        || [ "$(sysctl -n net.ipv6.conf.all.disable_ipv6 2>/dev/null)" = "1" ]; then
         echo -e "${COLOR_YELLOW}${LANG[IPV6_ALREADY_DISABLED]}${COLOR_RESET}"
         return 0
     fi

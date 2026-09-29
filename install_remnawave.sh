@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.6.2"
+SCRIPT_VERSION="3.7.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -187,30 +187,50 @@ download_script_file() {
     [ -s "$dest_file" ]
 }
 
+# Download an executable script so that no single mirror can tamper with
+# it: the file is kept only when two independent sources (the direct one
+# and/or the GitHub proxies) served byte-identical copies. With fewer
+# than two agreeing sources the answer is "no file": running an
+# unverified script as root is not an option.
+download_script_verified() {
+    local url="$1" dest_file="$2" shebang="$3"
+    local check_file="${dest_file}.check"
+    local prefixes=( "" "https://gh-proxy.com/" "https://ghfast.top/" "https://ghproxy.net/" )
+    local prefix sum first_sum="" agreed=0
+
+    rm -f "$dest_file" "$check_file"
+    for prefix in "${prefixes[@]}"; do
+        rm -f "$check_file"
+        if download_script_file "${prefix}${url}" "$check_file" \
+            && head -1 "$check_file" | grep -q "^#!${shebang}"; then
+            sum=$(sha256sum "$check_file" 2>/dev/null | cut -d' ' -f1)
+            if [ -z "$first_sum" ]; then
+                first_sum="$sum"
+                agreed=1
+            elif [ "$sum" = "$first_sum" ]; then
+                agreed=$((agreed + 1))
+            fi
+            [ "$agreed" -ge 2 ] && break
+        fi
+    done
+
+    if [ "$agreed" -ge 2 ]; then
+        mv -f "$check_file" "$dest_file"
+        return 0
+    fi
+    rm -f "$check_file"
+    return 1
+}
+
 run_backup_restore() {
     local script_url="https://raw.githubusercontent.com/distillium/remnawave-backup-restore/main/backup-restore.sh"
     local script_file="${HOME}/backup-restore.sh"
 
-    local download_prefixes=(
-        ""
-        "https://gh-proxy.com/"
-        "https://ghfast.top/"
-        "https://ghproxy.net/"
-    )
-    local mirror_prefix script_ok=false
-
-    for mirror_prefix in "${download_prefixes[@]}"; do
-        if download_script_file "${mirror_prefix}${script_url}" "$script_file"; then
-            if head -1 "$script_file" | grep -q "^#!/bin/bash"; then
-                script_ok=true
-                break
-            fi
-        fi
-    done
-
-    if [ "$script_ok" != "true" ]; then
+    # The script runs as root: it goes ahead only when two independent
+    # sources served the same bytes (see download_script_verified).
+    if ! download_script_verified "$script_url" "$script_file" "/bin/bash"; then
         rm -f "$script_file"
-        echo -e "${COLOR_RED}${LANG[BACKUP_SCRIPT_FAIL]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[BACKUP_SCRIPT_UNVERIFIED]}${COLOR_RESET}"
         return 1
     fi
 
@@ -1535,39 +1555,42 @@ install_packages() {
     if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}${LANG[DOCKER_INSTALLING]}${COLOR_RESET}"
 
+        # The official origin is trusted as-is; a mirror copy of install.sh
+        # runs only when two independent sources served identical bytes
+        # (download_script_verified), and anything less verifiable falls
+        # back to the signed distro packages instead of a lone script.
         local docker_script="/tmp/get-docker.sh"
-        local docker_script_urls=(
-            "https://get.docker.com"
-            "https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
-            "https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
-            "https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh"
-        )
-        local docker_url docker_script_ok=false
+        local docker_script_ok=false
 
-        for docker_url in "${docker_script_urls[@]}"; do
-            if download_script_file "$docker_url" "$docker_script" && head -1 "$docker_script" | grep -q "^#!/bin/sh"; then
-                docker_script_ok=true
-                break
-            fi
-        done
+        if download_script_file "https://get.docker.com" "$docker_script" \
+            && head -1 "$docker_script" | grep -q "^#!/bin/sh"; then
+            docker_script_ok=true
+        elif download_script_verified "https://raw.githubusercontent.com/docker/docker-install/master/install.sh" "$docker_script" "/bin/sh"; then
+            docker_script_ok=true
+        fi
 
         if [ "$docker_script_ok" != "true" ]; then
             rm -f "$docker_script"
-            echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
-            return 1
-        fi
-
-        wait_for_dpkg_lock
-
-        if ! sh "$docker_script"; then
-            echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRROR_RETRY]}${COLOR_RESET}"
-            if ! sh "$docker_script" --mirror Aliyun; then
-                rm -f "$docker_script"
-                echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
+            echo -e "${COLOR_YELLOW}${LANG[DOCKER_APT_FALLBACK]}${COLOR_RESET}" >&2
+            wait_for_dpkg_lock
+            if ! apt-get -o DPkg::Lock::Timeout=300 install -y docker.io docker-compose-v2 2>/dev/null \
+                && ! apt-get -o DPkg::Lock::Timeout=300 install -y docker.io; then
+                echo -e "${COLOR_RED}${LANG[ERROR_DOWNLOAD_DOCKER_KEY]}${COLOR_RESET}" >&2
                 return 1
             fi
+        else
+            wait_for_dpkg_lock
+
+            if ! sh "$docker_script"; then
+                echo -e "${COLOR_YELLOW}${LANG[DOCKER_MIRROR_RETRY]}${COLOR_RESET}"
+                if ! sh "$docker_script" --mirror Aliyun; then
+                    rm -f "$docker_script"
+                    echo -e "${COLOR_RED}${LANG[ERROR_INSTALL_DOCKER]}${COLOR_RESET}" >&2
+                    return 1
+                fi
+            fi
+            rm -f "$docker_script"
         fi
-        rm -f "$docker_script"
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -1596,14 +1619,20 @@ install_packages() {
         return 1
     fi
 
-    # BBR
-    if ! grep -q "net.core.default_qdisc = fq" /etc/sysctl.conf; then
-        echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
-    fi
-    if ! grep -q "net.ipv4.tcp_congestion_control = bbr" /etc/sysctl.conf; then
-        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
-    fi
-    sysctl -p >/dev/null
+    # BBR. Same story as the IPv6 module: Debian 13 no longer reads
+    # /etc/sysctl.conf at boot, so the values live in their own sysctl.d
+    # drop-in. The name sorts after provider drop-ins, and the cleanup
+    # below keeps our keys out of sysctl.conf, so nothing overrides it.
+    local bbr_sysctl_conf="/etc/sysctl.d/99-remnawave-bbr.conf"
+    mkdir -p /etc/sysctl.d
+    {
+        echo "net.core.default_qdisc = fq"
+        echo "net.ipv4.tcp_congestion_control = bbr"
+    } > "$bbr_sysctl_conf"
+    # Older runs appended these two lines to /etc/sysctl.conf; drop them so
+    # the drop-in stays the single source of truth.
+    sed -i '/^net\.core\.default_qdisc = fq$/d;/^net\.ipv4\.tcp_congestion_control = bbr$/d' /etc/sysctl.conf 2>/dev/null
+    sysctl -p "$bbr_sysctl_conf" >/dev/null
 
     # UFW
     if ! allow_ssh_ports || ! ufw allow 443/tcp comment 'HTTPS' || ! ufw --force enable; then

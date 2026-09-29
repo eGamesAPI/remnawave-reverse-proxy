@@ -27,21 +27,48 @@ sr_state_get() {
 
 sr_state_set() {
     [ -n "$SR_CURRENT" ] || return 0
-    local file val
+    local file val one
     file=$(sr_state_file)
     mkdir -p "$SR_CONF_DIR"
     chmod 700 "$SR_CONF_DIR" 2>/dev/null
     touch "$file"
     chmod 600 "$file" 2>/dev/null
+    # One line per key: a newline inside the value split it into bare
+    # lines that sr_state_get never reads back, and the sed below died on
+    # it ("unterminated `s' command"). Lists are stored space-separated.
+    one="${2//$'\n'/ }"
     if grep -q "^$1=" "$file"; then
         # The replacement is sed-interpreted: a remark typed with &, | or a
         # backslash would corrupt the state line (and host_remark IS free
         # user input).
-        val=$(printf '%s\n' "$2" | sed -e 's/[\\|&]/\\&/g')
+        val=$(printf '%s\n' "$one" | sed -e 's/[\\|&]/\\&/g')
         sed -i "s|^$1=.*|$1=$val|" "$file"
     else
-        echo "$1=$2" >> "$file"
+        echo "$1=$one" >> "$file"
     fi
+}
+
+# ufw sources of the current bridge, space-separated. States written by
+# the short-lived newline-joined format carry the extra sources as bare
+# lines right after the key — those are collected too.
+sr_ufw_sources_get() {
+    [ -n "$SR_CURRENT" ] || return 0
+    local file
+    file=$(sr_state_file)
+    [ -r "$file" ] || return 0
+    awk '/^ufw_sources=/ { sub(/^ufw_sources=/, ""); print; f = 1; next }
+         f && !/=/ { print; next }
+         { f = 0 }' "$file" | tr -s ' \n' '  ' | sed -e 's/^ *//' -e 's/ *$//'
+}
+
+# Write the ufw sources as one space-separated line; bare leftover lines
+# of the newline-joined format are dropped (the caller has read them).
+sr_ufw_sources_set() {
+    [ -n "$SR_CURRENT" ] || return 0
+    local file
+    file=$(sr_state_file)
+    [ -f "$file" ] && sed -i '/=/!d' "$file"
+    sr_state_set ufw_sources "$1"
 }
 
 sr_state_clear() {
@@ -191,6 +218,7 @@ sr_find_node_by_host() {
     SR_NODE_UUID=""
     SR_NODE_PROFILE=""
     SR_NODE_INBOUNDS=""
+    SR_NODE_PORT=""
     SR_NODE_CONNECTED=false
     sr_fetch_nodes || return 1
     match=$(echo "$SR_NODES_JSON" | jq -c --arg addr "$want" '.[] | select(.address == $addr)' | head -n1)
@@ -226,6 +254,8 @@ sr_find_node_by_host() {
     # "string and object cannot be added") — normalize both to a flat list.
     SR_NODE_INBOUNDS=$(echo "$match" | jq -r '[.configProfile.activeInbounds[]? | if type == "string" then . else (.uuid // empty) end] | join(" ")')
     SR_NODE_CONNECTED=$(echo "$match" | jq -r '.isConnected // false')
+    # The port the panel dials the node on (NODE_PORT, 2222 by default).
+    SR_NODE_PORT=$(echo "$match" | jq -r '.port // empty')
     return 0
 }
 
@@ -419,7 +449,9 @@ sr_ensure_squad() {
         SR_SQUAD_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
         [ -n "$SR_SQUAD_UUID" ] && break
         echo "$response" | grep -q "already exists" || break
-        name="$name $(sr_rand 4)"
+        # A fresh suffix on the BASE name: appending one per attempt pushed
+        # the third try past the panel's 30-character name limit.
+        name="${SR_SQUAD_NAME:-SR Bridge} $(sr_rand 4)"
     done
     SR_SQUAD_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
     if [ -z "$SR_SQUAD_UUID" ]; then
@@ -496,7 +528,7 @@ sr_ensure_user() {
 # outbound and rules in place and never touches anything else in the config.
 # The catch-all rule routes every inbound tag of this profile.
 sr_patch_public_profile() {
-    local profile_uuid="$1" host="$2" port="$3" password="$4" mode="${5:-direct}" merged
+    local profile_uuid="$1" host="$2" port="$3" password="$4" mode="${5:-direct}" merged foreign
     sr_get_profile "$profile_uuid" || return 1
     if [ "$(echo "$SR_PROFILE_TAGS" | jq 'length')" -eq 0 ]; then
         err_msg "${LANG[SR_PROFILE_NO_INBOUNDS]}"
@@ -536,11 +568,36 @@ sr_patch_public_profile() {
         | $cfg + { outbounds: $newobs, routing: (($cfg.routing // {}) + { rules: $rules }) }')
     # Pre-existing RU rules sit earlier in the list and shadow ours in bridge
     # mode — the operator should know instead of wondering why RU leaks.
-    # Our own rules from a previous patch don't count.
+    # Rules of the exact shapes above are replaced by this very merge (a
+    # previous mode's DIRECT rules included), so only the ones that SURVIVE
+    # it count: wider lists carrying geoip:ru / category-ru among others.
     if [ "$mode" = "bridge" ] \
         && echo "$SR_PROFILE_CONFIG" | jq -e --arg ob "$SR_OUTBOUND_TAG" --arg ext "$SR_RUEX_RULE" \
-            'any((.routing.rules // [])[]; (((.ip // []) == ["geoip:ru"]) or ((.domain // []) == ["geosite:category-ru"])) and ((.outboundTag // "") != $ob))' >/dev/null 2>&1; then
+            'def sr_ours:
+                ((.ip // []) == ["geoip:ru"]) or
+                ((.domain // []) == ["geosite:category-ru"]) or
+                ((.domain // []) == [$ext]);
+            any((.routing.rules // [])[];
+                (((.ip // []) | index("geoip:ru")) or ((.domain // []) | index("geosite:category-ru")))
+                and (sr_ours | not) and ((.outboundTag // "") != $ob))' >/dev/null 2>&1; then
         echo -e "${COLOR_YELLOW}${LANG[SR_BRIDGE_MODE_SHADOW]}${COLOR_RESET}"
+    fi
+    # An admin rule of our exact shape pointing somewhere of their own (a
+    # personal RU detour outbound) is replaced by the merge above — on
+    # purpose, it would shadow the bridge — but it used to be lost forever.
+    # Capture it per profile; teardown (sr_unpatch_public_profile) puts it
+    # back. Rules into SR_BRIDGE_SS or DIRECT are ours or behavior-identical
+    # to ours, and every bridge shares the same outbound tag, so those are
+    # never "foreign".
+    foreign=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg ob "$SR_OUTBOUND_TAG" --arg ext "$SR_RUEX_RULE" '
+        def sr_ours:
+            ((.ip // []) == ["geoip:ru"]) or
+            ((.domain // []) == ["geosite:category-ru"]) or
+            ((.domain // []) == [$ext]);
+        [(.routing.rules // [])[]
+            | select(sr_ours and ((.outboundTag // "") != $ob and (.outboundTag // "") != "DIRECT"))]')
+    if [ -n "$foreign" ] && [ "$foreign" != "[]" ]; then
+        sr_state_set "admin_rules_${profile_uuid}" "$foreign"
     fi
     sr_patch_profile_config "$profile_uuid" "$merged" || return 1
     step_ok "$(printf "${LANG[SR_PATCH_PROFILE_OK]}" "$SR_PROFILE_NAME")"
@@ -551,19 +608,26 @@ sr_patch_public_profile() {
 # outbound the geo/ext rules point at — a mode flip or teardown must leave
 # nothing of ours behind.
 sr_unpatch_public_profile() {
-    local profile_uuid="$1" merged
+    local profile_uuid="$1" merged saved
     sr_get_profile "$profile_uuid" || return 1
     step_do "$(printf "${LANG[SR_UNPATCH_PROFILE]}" "$SR_PROFILE_NAME")"
-    merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg ob "$SR_OUTBOUND_TAG" --arg ext "$SR_RUEX_RULE" '
+    # Admin rules the patch replaced (our shape, an outbound of their own)
+    # come back from the per-profile capture taken at patch time.
+    saved=$(sr_state_get "admin_rules_${profile_uuid}")
+    if ! printf '%s' "$saved" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        saved="[]"
+    fi
+    merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg ob "$SR_OUTBOUND_TAG" --arg ext "$SR_RUEX_RULE" --argjson saved "$saved" '
         def sr_ours:
             ((.ip // []) == ["geoip:ru"]) or
             ((.domain // []) == ["geosite:category-ru"]) or
             ((.domain // []) == [$ext]);
         . as $cfg
         | (($cfg.outbounds // []) | map(select(.tag != $ob))) as $obs
-        | (($cfg.routing.rules // []) | map(select((.outboundTag // "") != $ob and (sr_ours | not)))) as $rules
+        | (($cfg.routing.rules // []) | map(select((.outboundTag // "") != $ob and (sr_ours | not))) + $saved) as $rules
         | $cfg + { outbounds: $obs, routing: (($cfg.routing // {}) + { rules: $rules }) }')
     sr_patch_profile_config "$profile_uuid" "$merged" || return 1
+    sr_state_set "admin_rules_${profile_uuid}" ""
     step_ok "$(printf "${LANG[SR_UNPATCH_PROFILE_OK]}" "$SR_PROFILE_NAME")"
 }
 
@@ -580,6 +644,27 @@ sr_panel_public_ip() {
 sr_public_ipv4() {
     local addr="$1"
     echo "$addr" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | grep -vE '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.)'
+}
+
+# Is this node address THIS box? The panel's public IP (literal or by
+# resolve), or any IPv4 bound to a local interface — that covers the
+# docker-gateway placeholder of a single-box install (172.30.0.1 sits on
+# the compose bridge) and this box's own overlay IP. "Not a public IPv4"
+# is NOT the test: a remote node registered by its overlay IP or its
+# selfsteal domain is exactly that, and used to be treated as local.
+sr_addr_is_local() {
+    local addr="$1" local_ip="${2:-}" resolved="" a
+    case "$addr" in
+        *[!0-9.]*) resolved=$(dig +short A "$addr" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1) ;;
+    esac
+    if [ -n "$local_ip" ] && { [ "$addr" = "$local_ip" ] || [ "$resolved" = "$local_ip" ]; }; then
+        return 0
+    fi
+    for a in $(ip -4 -o addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1) $(hostname -I 2>/dev/null); do
+        [ "$a" = "$addr" ] && return 0
+        [ -n "$resolved" ] && [ "$a" = "$resolved" ] && return 0
+    done
+    return 1
 }
 
 # Raw addresses of the nodes a profile is active on, no filtering. A
@@ -850,14 +935,10 @@ sr_remote_install_node() {
 sr_remote_open_bridge_port() {
     local host="$1" port="$2"
     shift 2
-    local sources=("$@") src rule_rc
+    local sources=("$@") src rule_rc ufw_state
     local applied=0 failed=0 missing_ufw=0
     step_do "$(printf "${LANG[SR_UFW_OPEN]}" "$host")"
     [ "${#sources[@]}" -gt 0 ] || return 0
-    # An inactive ufw still takes the rule (it fires the day ufw gets
-    # enabled) — but the report must be honest about the port being open
-    # to everyone right now.
-    ufw_state=$(re_run_host_n "$host" "ufw status 2>/dev/null | head -n1" 2>/dev/null)
     for src in "${sources[@]}"; do
         [ -n "$src" ] || continue
         rule_rc=0
@@ -873,13 +954,27 @@ sr_remote_open_bridge_port() {
         return 0
     fi
     if [ "$applied" -gt 0 ]; then
+        # An inactive ufw still takes the rule (it fires the day ufw gets
+        # enabled) — but the report must be honest about the port being
+        # open to everyone right now. Read AFTER the rules: the first rule
+        # call is what installs ufw on a box that had none (an earlier read
+        # saw an empty state and reported the port as closed). Only an
+        # explicit "Status: active" counts as active, and only an explicit
+        # "Status: inactive" leads to the enable offer: a status read that
+        # failed says nothing, and the auto-enable path allows EVERY
+        # listener — on a box whose ufw is in fact active that would open
+        # ports its admin keeps closed.
+        ufw_state=$(re_run_host_n "$host" "LC_ALL=C ufw status 2>/dev/null | head -n1" 2>/dev/null)
         case "$ufw_state" in
-            *inactive*)
+            "Status: active")
+                step_ok "${LANG[SR_UFW_OPEN_OK]}"
+                ;;
+            "Status: inactive")
                 echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_INACTIVE]}" "$host")${COLOR_RESET}"
                 sr_ufw_offer_enable "$host" "$port"
                 ;;
             *)
-                step_ok "${LANG[SR_UFW_OPEN_OK]}"
+                echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_UFW_STATE_UNKNOWN]}" "$host")${COLOR_RESET}"
                 ;;
         esac
     fi
@@ -892,14 +987,40 @@ sr_remote_open_bridge_port() {
 # the enable ONLY if it stays allowed, so every current listener gets its
 # own allow rule automatically (a port that listened was public anyway),
 # ufw turns on without questions, and everything not yet listening stays
-# closed. The bridge port and 2222 stay SOURCE-restricted (the rules added
-# above) — they are not re-opened to the world. No listener list at all
-# (ss failed) means we cannot enumerate what to keep — a question instead
-# of a blind enable.
+# closed. The bridge port and the node port stay SOURCE-restricted — they
+# are not re-opened to the world. The panel→node rule is NOT guaranteed by
+# the flows above (an exit node installed by other means gets the SS port
+# only), so it is added here, verified, before any enable: without it the
+# enable cuts the panel off the node. No panel IP, no enable. No listener
+# list at all (ss failed) means we cannot enumerate what to keep — a
+# question instead of a blind enable.
+sr_ufw_allow_panel() {
+    local host="$1" node_port="$2" panel_ip
+    panel_ip=$(sr_panel_public_ip)
+    if [ -z "$panel_ip" ] \
+       || ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow from $panel_ip to any port $node_port proto tcp")" >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}$(printf "${LANG[SR_UFW_PANEL_RULE_FAIL]}" "${panel_ip:-?}" "$node_port" "$host")${COLOR_RESET}"
+        return 1
+    fi
+    return 0
+}
+
+# ufw status is read with LC_ALL=C and matched as a whole line: a plain
+# `grep active` also matched "Status: inactive" and reported a failed
+# enable as success.
+sr_ufw_enable_cmd() {
+    re_remote_ufw_cmd required "echo y | ufw enable >/dev/null 2>&1; LC_ALL=C ufw status | head -n1"
+}
+
 sr_ufw_offer_enable() {
-    local host="$1" port="$2" ssh_port raw list cmd=""
+    local host="$1" port="$2" ssh_port raw list cmd="" node_port=2222
     re_target_load_by_host "$host" >/dev/null 2>&1
     ssh_port="${RE_PORT:-22}"
+    # The port the panel dials, from the node record (NODE_PORT may differ
+    # from the default 2222).
+    if sr_find_node_by_host "$host" >/dev/null 2>&1 && [ -n "$SR_NODE_PORT" ]; then
+        node_port="$SR_NODE_PORT"
+    fi
     raw=$(re_run_host_n "$host" "ss -tulnp 2>/dev/null")
     list=""
     if [ -n "$raw" ]; then
@@ -922,15 +1043,16 @@ sr_ufw_offer_enable() {
             echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
             return 1
         fi
+        sr_ufw_allow_panel "$host" "$node_port" || return 1
         local pp
         while read -r pp _; do
             [ -n "$pp" ] || continue
             case " ${pp%%/*} " in
-                " $ssh_port "|" 2222 "|" $port ") continue ;;
+                " $ssh_port "|" $node_port "|" $port ") continue ;;
             esac
             re_run_host_n "$host" "$(re_remote_ufw_cmd required "ufw allow $pp")" >/dev/null 2>&1
         done <<< "$list"
-        if re_run_host_n "$host" "$(re_remote_ufw_cmd required "echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1")" 2>/dev/null | grep -q active; then
+        if re_run_host_n "$host" "$(sr_ufw_enable_cmd)" 2>/dev/null | grep -qx 'Status: active'; then
             if re_run_host_n "$host" "echo ok" >/dev/null 2>&1; then
                 step_ok "${LANG[SR_UFW_ENABLE_OK]}"
             else
@@ -948,7 +1070,8 @@ sr_ufw_offer_enable() {
         echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
         return 1
     fi
-    if ! re_run_host_n "$host" "$(re_remote_ufw_cmd required "echo y | ufw enable >/dev/null 2>&1; ufw status | head -n1")" 2>/dev/null | grep -q active; then
+    sr_ufw_allow_panel "$host" "$node_port" || return 1
+    if ! re_run_host_n "$host" "$(sr_ufw_enable_cmd)" 2>/dev/null | grep -qx 'Status: active'; then
         echo -e "${COLOR_RED}${LANG[SR_UFW_ENABLE_FAIL]}${COLOR_RESET}"
         return 1
     fi
@@ -980,9 +1103,33 @@ sr_port_reachable() {
 # --- naming --------------------------------------------------------------------
 
 # Latin/dash slug from any input (SSH labels may carry spaces or Cyrillic).
+# 18 characters: node/profile/squad names are "<Slug>-bridge" or
+# "<Slug> bridge" plus a 5-character collision suffix, and the panel caps
+# those names at 30.
 sr_name_slug() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' \
-        | sed -e 's/^-*//' -e 's/-*$//' | cut -c1-24
+        | sed -e 's/^-*//' -e 's/-*$//' | cut -c1-18 | sed -e 's/-*$//'
+}
+
+# SS port for the bridge inbound: digits only, 1-65535, never the node
+# port the panel dials (2222). Sets SR_ASKED_PORT (leading zeros dropped —
+# the value goes into JSON as a number); rc=1 on EOF.
+sr_ask_port() {
+    local p
+    while true; do
+        reading "$(printf "${LANG[SR_PORT_PROMPT]}" "$SR_DEFAULT_PORT")" p || return 1
+        [ -n "$p" ] || p=$SR_DEFAULT_PORT
+        case "$p" in
+            ''|*[!0-9]*) ;;
+            *)
+                if [ "${#p}" -le 5 ] && [ "$((10#$p))" -ge 1 ] && [ "$((10#$p))" -le 65535 ] && [ "$((10#$p))" -ne 2222 ]; then
+                    SR_ASKED_PORT=$((10#$p))
+                    return 0
+                fi
+                ;;
+        esac
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_PORT_INVALID]}" "$p")${COLOR_RESET}"
+    done
 }
 
 sr_cap_first() {
@@ -1024,7 +1171,7 @@ sr_pick_bridge_host() {
     done < <(re_targets_list)
 
     if [ "${#names[@]}" -eq 0 ]; then
-        reading "${LANG[SR_BRIDGE_HOST_PROMPT]}" SR_HOST
+        reading "${LANG[SR_BRIDGE_HOST_PROMPT]}" SR_HOST || return 1
         [ -n "$SR_HOST" ] || return 1
         return 0
     fi
@@ -1048,13 +1195,13 @@ sr_pick_bridge_host() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick || return 1
     [ -z "$pick" ] && pick=1
     if [ "$pick" = "0" ]; then
         return 1
     fi
     if [ "$pick" = "$last" ]; then
-        reading "${LANG[SR_BRIDGE_HOST_PROMPT]}" SR_HOST
+        reading "${LANG[SR_BRIDGE_HOST_PROMPT]}" SR_HOST || return 1
         [ -n "$SR_HOST" ] || return 1
         return 0
     fi
@@ -1125,7 +1272,7 @@ sr_pick_public_profile() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$((i - 1))")" pick
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$((i - 1))")" pick || return 1
     [ -z "$pick" ] && pick=1
     [ "$pick" = "0" ] && return 1
     if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#entries[@]}" ]; then
@@ -1169,7 +1316,7 @@ sr_pick_route_mode() {
         echo -e "${COLOR_YELLOW}2. ${LANG[SR_ROUTE_MODE_BRIDGE]}${COLOR_RESET}"
         echo -e "    ${COLOR_GRAY}${LANG[SR_ROUTE_MODE_BRIDGE_HINT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SR_ROUTE_MODE_PICK
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SR_ROUTE_MODE_PICK || return 1
         case $SR_ROUTE_MODE_PICK in
             1) SR_ROUTE_MODE=direct; return 0 ;;
             2) SR_ROUTE_MODE=bridge; return 0 ;;
@@ -1190,6 +1337,12 @@ sr_provision_exit() {
 
     if sr_find_node_by_host "$host"; then
         node_uuid="$SR_NODE_UUID"
+        # The node port is held by the node process itself in every mode
+        # (add, switch, reuse) — an SS inbound there never binds.
+        if [ "$ss_port" = "${SR_NODE_PORT:-2222}" ]; then
+            err_msg "$(printf "${LANG[SR_PORT_TAKEN]}" "$ss_port" "$host")"
+            return 1
+        fi
 
         # A previous run may have died after creating the node record but
         # before finishing the remote install — it left an SR-Bridge profile
@@ -1274,6 +1427,17 @@ sr_provision_exit() {
             fi
 
             if [ "$mode_choice" = "add" ]; then
+                # The SS inbound joins a live user-facing node: a port
+                # already taken there (another inbound of the profile; the
+                # node port is checked above) keeps Xray from binding and
+                # drops the node's users — and the panel validator does not
+                # check ports.
+                local node_inbounds="$SR_NODE_INBOUNDS"
+                if echo "$SR_PROFILE_CONFIG" | jq -e --arg p "$ss_port" \
+                        'any(.inbounds[]?; ((.port // "") | tostring) == $p)' >/dev/null 2>&1; then
+                    err_msg "$(printf "${LANG[SR_PORT_TAKEN]}" "$ss_port" "$host")"
+                    return 1
+                fi
                 sr_add_ss_inbound "$SR_NODE_PROFILE" "$ss_port" || return 1
                 profile_uuid="$SR_NODE_PROFILE"
                 inbound_uuid="$SR_INBOUND_UUID"
@@ -1281,15 +1445,15 @@ sr_provision_exit() {
                 # The freshly appended inbound must also become ACTIVE on
                 # the node — the panel pushes only the inbounds listed in
                 # the node record (seen live: SS sat in the profile,
-                # port silent). Re-assert the node with the full set.
-                if sr_get_profile "$profile_uuid" >/dev/null 2>&1; then
-                    step_do "${LANG[SR_NODE_ACTIVATE]}" >&2
-                    if sr_set_node_profile "$node_uuid" "$profile_uuid" \
-                        $(echo "$SR_PROFILE_INBOUNDS" | jq -r '.[].uuid'); then
-                        step_ok "${LANG[SR_NODE_ACTIVATE_OK]}" >&2
-                    else
-                        echo -e "${COLOR_YELLOW}${LANG[SR_NODE_ACTIVATE_FAIL]}${COLOR_RESET}" >&2
-                    fi
+                # port silent). The node keeps ITS OWN set plus the SS
+                # inbound: every inbound of a shared profile would start
+                # ones the admin kept off on this node.
+                step_do "${LANG[SR_NODE_ACTIVATE]}" >&2
+                # shellcheck disable=SC2086 # the node set is a uuid list
+                if sr_set_node_profile "$node_uuid" "$profile_uuid" $node_inbounds "$inbound_uuid"; then
+                    step_ok "${LANG[SR_NODE_ACTIVATE_OK]}" >&2
+                else
+                    echo -e "${COLOR_YELLOW}${LANG[SR_NODE_ACTIVATE_FAIL]}${COLOR_RESET}" >&2
                 fi
             else
                 # The last line of defence after two live incidents: a switch
@@ -1355,10 +1519,10 @@ sr_setup() {
     sr_pick_bridge_host || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
     host="$SR_HOST"
 
-    reading "$(printf "${LANG[SR_PORT_PROMPT]}" "$SR_DEFAULT_PORT")" ss_port
-    [ -n "$ss_port" ] || ss_port=$SR_DEFAULT_PORT
+    sr_ask_port || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
+    ss_port="$SR_ASKED_PORT"
 
-    sr_pick_route_mode
+    sr_pick_route_mode || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
     sr_pick_bridge_name
 
     re_require_access_host "$host" || { echo -e "${COLOR_RED}$(printf "${LANG[SR_SSH_FAIL]}" "$host")${COLOR_RESET}"; return 1; }
@@ -1417,9 +1581,9 @@ sr_setup() {
     done < <(sr_profile_node_addresses "$SR_PICKED_PROFILE")
     panel_ip=$(sr_panel_public_ip)
     [ -n "$panel_ip" ] && sources+=("$panel_ip")
-    # One source per line: a space-joined value reads back as a single
-    # "a b c" source and `ufw delete allow from a b c` can never match.
-    sr_state_set ufw_sources "$(printf '%s\n' "${sources[@]}")"
+    # Space-separated on ONE state line; teardown splits it back into one
+    # source per `ufw delete` (the newline-joined value broke the state).
+    sr_ufw_sources_set "${sources[*]}"
     sr_remote_open_bridge_port "$host" "$ss_port" "${sources[@]}"
 
     # --- verify -----------------------------------------------------------------
@@ -1448,10 +1612,12 @@ sr_setup() {
     echo -e "${COLOR_GRAY}${LANG[SR_DONE_SQUAD_NOTE]}${COLOR_RESET}"
 
     # Extended RU lists are global; a fresh bridge is a natural moment to
-    # offer them. When they are already on, a re-setup just makes sure the
-    # (possibly new) profile carries the rule too.
+    # offer them. When they are already on, a re-setup makes sure the
+    # (possibly new) profile carries the rule too — after its nodes got the
+    # file (sr_ruex_sync mounts first, the rule follows only where every
+    # node of the profile has it).
     if sr_ruex_enabled; then
-        sr_ruex_switch_rules on
+        sr_ruex_sync
     elif reading_yn "${LANG[SR_RUEX_SETUP_ASK]}" confirm_ruex_setup; then
         sr_ruex_enable
     fi
@@ -1484,14 +1650,16 @@ sr_attach_profile() {
     sr_patch_public_profile "$SR_PICKED_PROFILE" "$host" "$port" "$password" "${mode:-direct}" || return 1
     [ -n "$SR_REPOINTED_FROM" ] && sr_detach_profile_from_others "$SR_PICKED_PROFILE"
 
-    # A profile attached while the extended lists are on must carry the rule
-    # too, not only the ones patched at enable time.
-    sr_ruex_enabled && sr_ruex_switch_rules on
-
     case " $ru_list " in
         *" $SR_PICKED_PROFILE "*) ;;
         *) sr_state_set ru_profiles "${ru_list:+$ru_list }$SR_PICKED_PROFILE" ;;
     esac
+
+    # A profile attached while the extended lists are on must carry the rule
+    # too, not only the ones patched at enable time. Runs AFTER the profile
+    # joined ru_profiles (the rules pass walks that list), and mounts the
+    # file on the profile's nodes before the rule may reference it.
+    sr_ruex_enabled && sr_ruex_sync
 
     # New profile may mean new egress nodes — merge their addresses into the
     # stored ufw sources instead of overwriting (teardown closes them all).
@@ -1501,14 +1669,16 @@ sr_attach_profile() {
     done < <(sr_profile_node_addresses "$SR_PICKED_PROFILE")
     panel_ip=$(sr_panel_public_ip)
     [ -n "$panel_ip" ] && sources+=("$panel_ip")
-    # Newline-separated, like sr_setup writes it.
-    merged=$(sr_state_get ufw_sources)
+    # Space-separated, like sr_setup writes it.
+    merged=$(sr_ufw_sources_get)
     for addr in "${sources[@]}"; do
         [ -n "$addr" ] || continue
-        printf '%s\n' "$merged" | grep -qxF "$addr" || merged="${merged:+$merged
-}$addr"
+        case " $merged " in
+            *" $addr "*) ;;
+            *) merged="${merged:+$merged }$addr" ;;
+        esac
     done
-    sr_state_set ufw_sources "$merged"
+    sr_ufw_sources_set "$merged"
     sr_remote_open_bridge_port "$host" "$port" "${sources[@]}"
     return 0
 }
@@ -1592,12 +1762,15 @@ sr_rename_bridge() {
             mode=$(sr_state_get route_mode)
             ru=$(sr_state_get ru_profiles)
             swap_ok=yes
+            local patched="" old_pass back_ok=yes
             for p in $ru; do
                 if [ "$btype" = "route" ]; then
                     sr_patch_profile_route "$p" "$host" "$port" "$new_pass" \
-                        "$(sr_state_get route_no)" "$(sr_bridge_outbound_tag "$SR_CURRENT")" || swap_ok=no
+                        "$(sr_state_get route_no)" "$(sr_bridge_outbound_tag "$SR_CURRENT")" \
+                        && patched="$patched $p" || swap_ok=no
                 else
-                    sr_patch_public_profile "$p" "$host" "$port" "$new_pass" "${mode:-direct}" || swap_ok=no
+                    sr_patch_public_profile "$p" "$host" "$port" "$new_pass" "${mode:-direct}" \
+                        && patched="$patched $p" || swap_ok=no
                 fi
             done
             if [ "$swap_ok" = "yes" ]; then
@@ -1606,11 +1779,31 @@ sr_rename_bridge() {
                 sr_state_set user_name "$new_name"
                 sr_state_set ss_password "$new_pass"
             else
-                # The old user still feeds the profile config — drop the
-                # half-created replacement instead and report the failure.
-                sr_api "DELETE" "/api/users/$new_id" >/dev/null 2>&1
+                # The old user still feeds the unpatched profiles. The ones
+                # already patched carry the NEW password — put the old one
+                # back before the replacement goes, or their tunnel dies on
+                # SS auth. When that roll-back fails too, the replacement
+                # user stays: a spare squad member is harmless, a deleted
+                # one kills the tunnel of every profile still pointing at it.
+                old_pass=$(sr_state_get ss_password)
+                for p in $patched; do
+                    if [ "$btype" = "route" ]; then
+                        sr_patch_profile_route "$p" "$host" "$port" "$old_pass" \
+                            "$(sr_state_get route_no)" "$(sr_bridge_outbound_tag "$SR_CURRENT")" || back_ok=no
+                    else
+                        sr_patch_public_profile "$p" "$host" "$port" "$old_pass" "${mode:-direct}" || back_ok=no
+                    fi
+                done
+                if [ "$back_ok" = "yes" ]; then
+                    sr_api "DELETE" "/api/users/$new_id" >/dev/null 2>&1
+                else
+                    echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_RENAME_USER_KEPT]}" "$new_name")${COLOR_RESET}"
+                fi
                 failed="${failed:+$failed, }${LANG[SR_WORD_USER]}"
             fi
+            # The geo re-patch strips the ext: rule with the rest of ours;
+            # put it back where the lists are on.
+            [ "$btype" != "route" ] && sr_ruex_enabled && sr_ruex_switch_rules on
         else
             failed="${failed:+$failed, }${LANG[SR_WORD_USER]}"
         fi
@@ -1704,14 +1897,47 @@ sr_exit_shared_now() {
     return 1
 }
 
+# DELETE with an honest outcome. The panel answers a delete with an empty
+# body, and an empty body is also exactly what a dead panel gives — curl's
+# own rc tells them apart. A JSON error is a failure, except "not found":
+# already gone is what a delete wants. The panel's error body carries no
+# statusCode ({timestamp, path, message, errorCode}), so a 404 is known by
+# its message ("User not found", "Host not found", "Internal squad not
+# found") — without that, an object removed by hand kept the teardown
+# failing forever.
+sr_api_delete() {
+    local response rc=0
+    response=$(sr_api "DELETE" "$1") || rc=$?
+    [ "$rc" -eq 0 ] || return 1
+    [ -n "$response" ] || return 0
+    echo "$response" | jq -e '((.statusCode // 0) == 404)
+        or ((.message // "") | if type == "string" then (ascii_downcase | contains("not found")) else false end)' >/dev/null 2>&1 && return 0
+    # Older panels answer {response: {isDeleted: true}}; any other body (a
+    # JSON error, a non-JSON error page) is a failure.
+    echo "$response" | jq -e 'type == "object" and has("response") and (has("errorCode") | not)
+        and ((.response | if type == "object" then .isDeleted else null end) != false)' >/dev/null 2>&1
+}
+
+# A profile whose rules could not be stripped still sends traffic into the
+# bridge: deleting the service user under it kills that traffic, and a
+# cleared state leaves no menu entry to retry from. Stop unless the
+# operator insists (a profile deleted by hand can never be unpatched).
+sr_teardown_unpatch_gate() {
+    local failed_list="$1"
+    [ -n "$failed_list" ] || return 0
+    reading_yn "$(printf "${LANG[SR_TEARDOWN_FORCE_ASK]}" "$failed_list")" confirm_teardown_force && return 0
+    echo -e "${COLOR_YELLOW}${LANG[SR_TEARDOWN_KEPT]}${COLOR_RESET}"
+    return 1
+}
+
 sr_teardown() {
     # Route bridges have their own teardown: hosts to delete, a different
     # unpatch shape, and shared-exit objects that must survive.
     if [ "$(sr_bridge_type "$SR_CURRENT")" = "route" ]; then
         sr_teardown_route
-        return 0
+        return $?
     fi
-    local host port ru_list uuid response user_id squad_uuid src
+    local host port ru_list uuid user_id squad_uuid src unpatch_failed="" del_failed=""
     host=$(sr_state_get host)
     port=$(sr_state_get port)
     ru_list=$(sr_state_get ru_profiles)
@@ -1719,21 +1945,33 @@ sr_teardown() {
     load_remote_exec_module
 
     for uuid in $ru_list; do
-        sr_unpatch_public_profile "$uuid" || echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_PARTIAL]}" "$uuid")${COLOR_RESET}"
+        if ! sr_unpatch_public_profile "$uuid"; then
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_PARTIAL]}" "$uuid")${COLOR_RESET}"
+            unpatch_failed="${unpatch_failed:+$unpatch_failed, }$uuid"
+        fi
     done
+    sr_teardown_unpatch_gate "$unpatch_failed" || return 1
 
     user_id=$(sr_state_get user_id)
     if [ -n "$user_id" ]; then
         step_do "${LANG[SR_TEARDOWN_USER]}"
-        response=$(sr_api "DELETE" "/api/users/$user_id")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_USER_OK]}"
+        if sr_api_delete "/api/users/$user_id"; then
+            sr_state_set user_id ""
+            step_ok "${LANG[SR_TEARDOWN_USER_OK]}"
+        else
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_USER]}"
+        fi
     fi
 
     squad_uuid=$(sr_state_get squad_uuid)
     if [ -n "$squad_uuid" ]; then
         step_do "${LANG[SR_TEARDOWN_SQUAD]}"
-        response=$(sr_api "DELETE" "/api/internal-squads/$squad_uuid")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_SQUAD_OK]}"
+        if sr_api_delete "/api/internal-squads/$squad_uuid"; then
+            sr_state_set squad_uuid ""
+            step_ok "${LANG[SR_TEARDOWN_SQUAD_OK]}"
+        else
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_SQUAD]}"
+        fi
     fi
 
     if [ -n "$host" ] && [ -n "$port" ]; then
@@ -1741,11 +1979,11 @@ sr_teardown() {
             echo -e "${COLOR_GRAY}${LANG[SR_TEARDOWN_EXIT_SHARED]}${COLOR_RESET}"
         else
             local sources=() src
-            # tr normalizes states written by older versions (space-joined
-            # single line) into one source per line.
+            # One source per `ufw delete`; the reader also picks up states
+            # left by the newline-joined format.
             while read -r src; do
                 [ -n "$src" ] && sources+=("$src")
-            done <<< "$(sr_state_get ufw_sources | tr ' ' '\n')"
+            done <<< "$(sr_ufw_sources_get | tr ' ' '\n')"
             if [ "${#sources[@]}" -gt 0 ]; then
                 step_do "${LANG[SR_TEARDOWN_UFW]}"
                 sr_remote_close_bridge_port "$host" "$port" "${sources[@]}" && step_ok "${LANG[SR_TEARDOWN_UFW_OK]}"
@@ -1757,6 +1995,12 @@ sr_teardown() {
     # once the public profiles are stripped, and an unknown previous state
     # makes switching the node back unsafe.
     echo -e "${COLOR_YELLOW}${LANG[SR_TEARDOWN_KEEP_NOTE]}${COLOR_RESET}"
+    # A panel object that failed to go keeps the state: the bridge stays in
+    # the menu and the removal can simply run again.
+    if [ -n "$del_failed" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_DELETE_FAIL]}" "$del_failed")${COLOR_RESET}"
+        return 1
+    fi
     sr_state_clear
     step_ok "${LANG[SR_TEARDOWN_DONE]}"
 }
@@ -1790,11 +2034,12 @@ sr_xray_version_ok() {
 # Xray version of one entry-node machine: local container first, then an
 # SSH-managed remote. Empty output = could not check.
 sr_xray_version_on() {
-    local addr="$1" resolved compose
-    resolved=$(dig +short A "$addr" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
+    local addr="$1" compose
     compose=$(sr_ruex_local_compose)
-    if [ -n "$compose" ] && { [ "$addr" = "$(sr_panel_public_ip)" ] || [ "$resolved" = "$(sr_panel_public_ip)" ] \
-         || ! sr_public_ipv4 "$addr" >/dev/null; }; then
+    # Local only when the address is really this box — an overlay- or
+    # domain-registered REMOTE node must be asked over SSH, not answered
+    # with the local container's version.
+    if [ -n "$compose" ] && sr_addr_is_local "$addr" "$(sr_panel_public_ip)"; then
         docker exec remnanode xray -version 2>/dev/null | head -n1
         return 0
     fi
@@ -1948,7 +2193,7 @@ sr_pick_source_host() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$((i - 1))")" pick
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$((i - 1))")" pick || return 1
     [ "$pick" = "0" ] && return 1
     if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#entries[@]}" ]; then
         SR_SOURCE_HOST_UUID=$(echo "${entries[$((pick - 1))]}" | cut -f1)
@@ -2192,8 +2437,8 @@ sr_setup_route() {
 
     if [ "${#candidates[@]}" -eq 0 ]; then
         sr_pick_bridge_host || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
-        reading "$(printf "${LANG[SR_PORT_PROMPT]}" "$SR_DEFAULT_PORT")" ss_port
-        [ -n "$ss_port" ] || ss_port=$SR_DEFAULT_PORT
+        sr_ask_port || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
+        ss_port="$SR_ASKED_PORT"
         sr_pick_bridge_name
         sr_state_set type route
         SR_ROUTE_EXIT_LABEL="$SR_BRIDGE_SLUG"
@@ -2231,7 +2476,7 @@ sr_setup_route() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" pick || return 1
         [ -z "$pick" ] && pick=1
         [ "$pick" = "0" ] && return 1
         if [ "$pick" -ge 1 ] 2>/dev/null && [ "$pick" -le "${#candidates[@]}" ]; then
@@ -2266,8 +2511,8 @@ sr_setup_route() {
             sr_state_set type route
         elif [ "$pick" = "$last" ]; then
             sr_pick_bridge_host || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
-            reading "$(printf "${LANG[SR_PORT_PROMPT]}" "$SR_DEFAULT_PORT")" ss_port
-            [ -n "$ss_port" ] || ss_port=$SR_DEFAULT_PORT
+            sr_ask_port || { echo -e "${COLOR_YELLOW}${LANG[RE_CANCELLED]}${COLOR_RESET}"; return 1; }
+            ss_port="$SR_ASKED_PORT"
             sr_pick_bridge_name
             sr_state_set type route
             SR_ROUTE_EXIT_LABEL="$SR_BRIDGE_SLUG"
@@ -2346,7 +2591,7 @@ sr_setup_route() {
         def_no=$(sr_next_route_no "$used")
     fi
     while true; do
-        reading "$(printf "${LANG[SR_ROUTE_NO_PROMPT]}" "$def_no")" no_input
+        reading "$(printf "${LANG[SR_ROUTE_NO_PROMPT]}" "$def_no")" no_input || return 1
         no_input="${no_input:-$def_no}"
         case "$no_input" in
             ''|*[!0-9]*)
@@ -2423,7 +2668,7 @@ sr_setup_route() {
     panel_ip=$(sr_panel_public_ip)
     [ -n "$panel_ip" ] && sources+=("$panel_ip")
     if [ "$exit_shared" = "no" ]; then
-        sr_state_set ufw_sources "$(printf '%s ' "${sources[@]}")"
+        sr_ufw_sources_set "${sources[*]}"
     fi
     sr_remote_open_bridge_port "$host" "$ss_port" "${sources[@]}"
 
@@ -2485,7 +2730,7 @@ sr_route_toggle_host() {
 # users fall back to the profile's remaining rules — a stale tail simply
 # matches nothing.
 sr_teardown_route() {
-    local host port ru_list uuid response user_id squad_uuid ob strip_direct=no
+    local host port ru_list uuid user_id squad_uuid ob strip_direct=no
 
     ob=$(sr_bridge_outbound_tag "$SR_CURRENT")
     # The rid=1 direct host is shared per profile (every route bridge on the
@@ -2502,12 +2747,18 @@ sr_teardown_route() {
     fi
     [ -n "$d_uuid" ] && [ "$direct_shared" = "no" ] && strip_direct=yes
     ru_list=$(sr_state_get ru_profiles)
+    local unpatch_failed="" del_failed=""
     for uuid in $ru_list; do
-        sr_unpatch_profile_route "$uuid" "$ob" "$strip_direct" \
-            || echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_PARTIAL]}" "$uuid")${COLOR_RESET}"
+        if ! sr_unpatch_profile_route "$uuid" "$ob" "$strip_direct"; then
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_PARTIAL]}" "$uuid")${COLOR_RESET}"
+            unpatch_failed="${unpatch_failed:+$unpatch_failed, }$uuid"
+        fi
     done
+    sr_teardown_unpatch_gate "$unpatch_failed" || return 1
 
-    local key huuid
+    # Every object that is really gone leaves the state at once, so a
+    # re-run after a partial failure only retries what is still there.
+    local key huuid extra_left=""
     for key in host_uuid_direct host_uuid; do
         huuid=$(sr_state_get "$key")
         [ -n "$huuid" ] || continue
@@ -2515,29 +2766,46 @@ sr_teardown_route() {
             continue
         fi
         step_do "${LANG[SR_TEARDOWN_HOST]}"
-        response=$(sr_api "DELETE" "/api/hosts/$huuid")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_HOST_OK]}"
+        if sr_api_delete "/api/hosts/$huuid"; then
+            sr_state_set "$key" ""
+            step_ok "${LANG[SR_TEARDOWN_HOST_OK]}"
+        else
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_HOST]}"
+        fi
     done
     # Hosts created by «Подключить ещё профиль» on other profiles.
     for huuid in $(sr_state_get host_uuid_extra); do
         [ -n "$huuid" ] || continue
         step_do "${LANG[SR_TEARDOWN_HOST]}"
-        response=$(sr_api "DELETE" "/api/hosts/$huuid")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_HOST_OK]}"
+        if sr_api_delete "/api/hosts/$huuid"; then
+            step_ok "${LANG[SR_TEARDOWN_HOST_OK]}"
+        else
+            extra_left="${extra_left:+$extra_left }$huuid"
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_HOST]}"
+        fi
     done
+    sr_state_set host_uuid_extra "$extra_left"
 
     user_id=$(sr_state_get user_id)
     if [ -n "$user_id" ]; then
         step_do "${LANG[SR_TEARDOWN_USER]}"
-        response=$(sr_api "DELETE" "/api/users/$user_id")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_USER_OK]}"
+        if sr_api_delete "/api/users/$user_id"; then
+            sr_state_set user_id ""
+            step_ok "${LANG[SR_TEARDOWN_USER_OK]}"
+        else
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_USER]}"
+        fi
     fi
 
     squad_uuid=$(sr_state_get squad_uuid)
     if [ -n "$squad_uuid" ]; then
         step_do "${LANG[SR_TEARDOWN_SQUAD]}"
-        response=$(sr_api "DELETE" "/api/internal-squads/$squad_uuid")
-        [ -z "$response" ] && step_ok "${LANG[SR_TEARDOWN_SQUAD_OK]}"
+        if sr_api_delete "/api/internal-squads/$squad_uuid"; then
+            sr_state_set squad_uuid ""
+            step_ok "${LANG[SR_TEARDOWN_SQUAD_OK]}"
+        else
+            del_failed="${del_failed:+$del_failed, }${LANG[SR_WORD_SQUAD]}"
+        fi
     fi
 
     host=$(sr_state_get host)
@@ -2551,17 +2819,20 @@ sr_teardown_route() {
         else
             load_remote_exec_module
             local sources=() src
-            # tr normalizes states written by older versions (space-joined
-            # single line) into one source per line.
+            # One source per `ufw delete` (route states are space-joined).
             while read -r src; do
                 [ -n "$src" ] && sources+=("$src")
-            done <<< "$(sr_state_get ufw_sources | tr ' ' '\n')"
+            done <<< "$(sr_ufw_sources_get | tr ' ' '\n')"
             if [ "${#sources[@]}" -gt 0 ]; then
                 step_do "${LANG[SR_TEARDOWN_UFW]}"
                 sr_remote_close_bridge_port "$host" "$port" "${sources[@]}" && step_ok "${LANG[SR_TEARDOWN_UFW_OK]}"
             fi
             echo -e "${COLOR_YELLOW}${LANG[SR_TEARDOWN_KEEP_NOTE]}${COLOR_RESET}"
         fi
+    fi
+    if [ -n "$del_failed" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_TEARDOWN_DELETE_FAIL]}" "$del_failed")${COLOR_RESET}"
+        return 1
     fi
     sr_state_clear
     step_ok "${LANG[SR_TEARDOWN_DONE]}"
@@ -2704,10 +2975,60 @@ sr_ruex_compose_del() {
     sed -i '\|geosite-ruex.dat|d' "$1"
 }
 
-# Add (on) or remove (off) the ext: rule in every bridged profile. The rule
-# inherits the outbound the profile already sends geoip:ru traffic to.
+# Remote twin of sr_ruex_compose_add, one script run on the node: the
+# indent comes from the anchor line (caddy-installed nodes indent the
+# volume list by 8 spaces, not 6), the compose is backed up first and
+# restored when the result does not parse — a broken YAML fails every
+# later docker compose call on that node, a node update included.
+# A line already present counts only while the compose still parses: the
+# old fixed 6-space insert left caddy-installed nodes with a broken YAML
+# and the line in place — that line is taken out and re-inserted.
+sr_ruex_remote_compose_add_cmd() {
+    cat <<EOL
+f=/opt/remnanode/docker-compose.yml
+if grep -q '${SR_RUEX_FILE}' "\$f"; then
+    (cd /opt/remnanode && { docker compose config -q || docker-compose config -q; }) >/dev/null 2>&1 && exit 0
+fi
+cp -f "\$f" "\$f.ruex-bak" || exit 1
+sed -i '\\|${SR_RUEX_FILE}|d' "\$f"
+ind=\$(grep -m1 '/var/log/remnanode' "\$f" | sed 's/[^[:space:]].*//')
+[ -n "\$ind" ] || ind='      '
+sed -i "\\|/var/log/remnanode|i\\\\\${ind}- ./${SR_RUEX_FILE}:/usr/local/share/xray/${SR_RUEX_FILE}" "\$f"
+if (cd /opt/remnanode && { docker compose config -q || docker-compose config -q; }) >/dev/null 2>&1; then
+    rm -f "\$f.ruex-bak"
+    exit 0
+fi
+mv -f "\$f.ruex-bak" "\$f"
+exit 1
+EOL
+}
+
+# Profile nodes that have no mounted ruex file, comma-joined; empty = all
+# of them do. The mounted list is ruex.state nodes (kept by enable/sync).
+# rc=1 when the node list cannot be read: an empty answer then would read
+# as "every node has the file" and let the rule in unchecked.
+sr_ruex_unmounted_in_profile() {
+    local profile="$1" mounted addr missing=""
+    sr_fetch_nodes >/dev/null 2>&1 || return 1
+    mounted=" $(sr_ruex_state_get nodes) "
+    while IFS= read -r addr; do
+        [ -n "$addr" ] || continue
+        case "$mounted" in
+            *" $addr "*) ;;
+            *) missing="${missing:+$missing, }$addr" ;;
+        esac
+    done < <(echo "$SR_NODES_JSON" | jq -r --arg p "$profile" \
+        '.[] | select(.configProfile.activeConfigProfileUuid == $p) | .address' 2>/dev/null | awk 'NF')
+    printf '%s' "$missing"
+}
+
+# Add (on) or remove (off) the ext: rule in every bridged profile. "on"
+# puts it only into profiles whose EVERY node has the file mounted — Xray
+# refuses a config that references a missing ext: file, and the node
+# drops all its users — and takes it back out of a profile where some node
+# lacks it. The outbound follows the bridge's mode (see below).
 sr_ruex_switch_rules() {
-    local on_off="$1" slug profile profiles merged count=0 ob
+    local on_off="$1" slug profile profiles merged count=0 ob mode missing
     # Every rules re-run is also the cheap moment to bring a stale cron
     # updater up to the current marker (fixes reach boxes enabled long ago).
     [ "$on_off" = "on" ] && sr_ruex_ensure_updater
@@ -2718,17 +3039,37 @@ sr_ruex_switch_rules() {
         # bridge.
         [ "$(sr_bridge_type "$slug")" = "geo" ] || continue
         profiles=$(sed -n 's|^ru_profiles=||p' "${SR_CONF_DIR}/${slug}.bridge" 2>/dev/null | head -n1)
+        mode=$(sed -n 's|^route_mode=||p' "${SR_CONF_DIR}/${slug}.bridge" 2>/dev/null | head -n1)
         for profile in $profiles; do
             sr_get_profile "$profile" || continue
-            # The list means "reachable only from inside RU": unlike the
-            # plain geo rules it needs the RU egress in EVERY mode — in
-            # mode "direct" the bridge is exactly what makes those domains
-            # work instead of dying on the foreign entry.
-            ob="$SR_OUTBOUND_TAG"
+            # The list means "reachable only from inside RU", so it leaves
+            # where RU traffic leaves: mode "bridge" (entry abroad, RU exit)
+            # sends it into the bridge, mode "direct" (entry inside RU,
+            # everything else goes abroad) sends it DIRECT. It sits right
+            # before the direct-mode catch-all — appended after it, it
+            # never matched.
+            if [ "$mode" = "bridge" ]; then
+                ob="$SR_OUTBOUND_TAG"
+            else
+                ob="DIRECT"
+            fi
+            missing=""
             if [ "$on_off" = "on" ]; then
-                merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg rule "$SR_RUEX_RULE" --arg ob "$ob" '
-                    .routing.rules |= (if any((.domain // []) | index($rule)) then .
-                        else . + [{ domain: [$rule], outboundTag: $ob }] end)')
+                # Node list unreadable: leave this profile exactly as it is
+                # (neither add unchecked nor strip — a PATCH restarts Xray).
+                missing=$(sr_ruex_unmounted_in_profile "$profile") || continue
+            fi
+            if [ -n "$missing" ]; then
+                echo -e "${COLOR_YELLOW}$(printf "${LANG[SR_RUEX_PROFILE_SKIP]}" "$SR_PROFILE_NAME" "$missing")${COLOR_RESET}"
+                merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg rule "$SR_RUEX_RULE" '
+                    .routing.rules |= map(select((.domain // []) | index($rule) | not))')
+            elif [ "$on_off" = "on" ]; then
+                merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg rule "$SR_RUEX_RULE" --arg ob "$ob" --arg sob "$SR_OUTBOUND_TAG" '
+                    .routing.rules |= (
+                        ((. // []) | map(select((.domain // []) | index($rule) | not))) as $r
+                        | ($r | to_entries | map(select(.value.inboundTag != null and ((.value.outboundTag // "") == $sob))) | .[0].key) as $cut
+                        | if $cut == null then $r + [{ domain: [$rule], outboundTag: $ob }]
+                          else $r[0:$cut] + [{ domain: [$rule], outboundTag: $ob }] + $r[$cut:] end)')
             else
                 merged=$(echo "$SR_PROFILE_CONFIG" | jq -c --arg rule "$SR_RUEX_RULE" '
                     .routing.rules |= map(select((.domain // []) | index($rule) | not))')
@@ -2745,10 +3086,11 @@ sr_ruex_switch_rules() {
 # Standalone daily updater for cron: it must not source the menu app, so it
 # re-implements the small pieces it needs (mirrors+sha download, per-target
 # ssh from remote-exec state files, node restart through the saved panel
-# token). Restarts happen ONLY when a file actually changed.
+# token). Restarts happen ONLY on nodes whose file actually changed; a
+# remote file is replaced only after the copy landed intact (sha256).
 # The version marker makes fixes reach already-installed boxes: any flow that
 # re-runs the rules regenerates the script when the marker differs.
-SR_RUEX_UPDATER_MARKER="rrp-ruex-update v2"
+SR_RUEX_UPDATER_MARKER="rrp-ruex-update v3"
 sr_ruex_write_updater() {
     cat > "${SR_CONF_DIR}/ruex-update.sh" <<UPD
 #!/bin/bash
@@ -2771,9 +3113,10 @@ log() {
 # ssh target for an address from the remote-exec state files. A node moved
 # onto the NetBird overlay carries its overlay IP in the panel; the target
 # file holds it as the overlay= alias while host= stays the public address
-# ssh must actually use.
+# ssh must actually use. The key is the target's own key= (a target set up
+# with a custom key never had the shared one), the shared key otherwise.
 tgt_for() {
-    local f h p u ov
+    local f h p u ov k
     for f in "\$DIR"/remote-exec/*.target; do
         [ -f "\$f" ] || continue
         h=\$(sed -n 's|^host=||p' "\$f" | head -n1)
@@ -2781,11 +3124,17 @@ tgt_for() {
         { [ "\$h" = "\$1" ] || [ "\$ov" = "\$1" ]; } || continue
         p=\$(sed -n 's|^port=||p' "\$f" | head -n1); [ -n "\$p" ] || p=22
         u=\$(sed -n 's|^user=||p' "\$f" | head -n1); [ -n "\$u" ] || u=root
-        echo "\$u@\$h -p \$p"
+        k=\$(sed -n 's|^key=||p' "\$f" | head -n1); [ -n "\$k" ] && [ -f "\$k" ] || k="\$KEY"
+        echo "-i \$k \$u@\$h -p \$p"
         return 0
     done
     return 1
 }
+
+# Remote replace that never leaves a cut file behind: the copy lands next
+# to the target, is sha256-checked, and only then written INTO the mounted
+# file (cat >, not mv — a single-file bind mount keeps the old inode).
+PUT='f="/opt/remnanode/'"\$FILE"'"; t="\$f.new"; cat > "\$t" && [ "\$(sha256sum "\$t" | cut -d" " -f1)" = "@WANT@" ] && cat "\$t" > "\$f" && [ "\$(sha256sum "\$f" | cut -d" " -f1)" = "@WANT@" ]; rc=\$?; rm -f "\$t"; exit \$rc'
 
 # Node uuid by panel address, with the netbird module state as the fallback:
 # an overlay node's .address is its overlay IP, which the ruex state never
@@ -2839,26 +3188,35 @@ done
 if [ -n "\$local_dir" ] && [ -f "\$local_dir/\$FILE" ]; then
     cur=\$(sha256sum "\$local_dir/\$FILE" | cut -d' ' -f1)
     if [ "\$cur" != "\$got" ]; then
-        if cp -f geosite.dat "\$local_dir/\$FILE"; then
+        if cp -f geosite.dat "\$local_dir/\$FILE" \\
+           && [ "\$(sha256sum "\$local_dir/\$FILE" | cut -d' ' -f1)" = "\$got" ]; then
             changed="local"
             log "local file updated"
+        else
+            log "local file update failed"
         fi
     fi
 fi
 
 nodes=\$(sed -n 's|^nodes=||p' "\$STATE" | head -n1)
+PUT=\${PUT//@WANT@/\$got}
 for addr in \$nodes; do
     [ -n "\$addr" ] || continue
     tgt=\$(tgt_for "\$addr") || continue
-    cur=\$(cat geosite.dat | ssh -i "\$KEY" \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
+    if ! cur=\$(ssh -n \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
         -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="\$KH" -o IdentitiesOnly=yes \\
-        "sha256sum /opt/remnanode/\$FILE 2>/dev/null | cut -d' ' -f1" 2>/dev/null)
+        "sha256sum /opt/remnanode/\$FILE 2>/dev/null | cut -d' ' -f1" 2>/dev/null); then
+        log "remote \$addr unreachable over ssh - not updated"
+        continue
+    fi
     [ "\$cur" = "\$got" ] && continue
-    if cat geosite.dat | ssh -i "\$KEY" \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
+    if cat geosite.dat | ssh \$tgt -o BatchMode=yes -o ConnectTimeout=10 \\
         -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="\$KH" -o IdentitiesOnly=yes \\
-        "cat > /opt/remnanode/\$FILE" 2>/dev/null; then
+        "\$PUT" 2>/dev/null; then
         changed="\$changed \$addr"
         log "remote \$addr updated"
+    else
+        log "remote \$addr update failed - previous file kept"
     fi
 done
 rm -rf "\$TMP"
@@ -2883,6 +3241,13 @@ if ! echo "\$resp" | jq -e '.response' >/dev/null 2>&1; then
 fi
 for addr in \$nodes; do
     [ -n "\$addr" ] || continue
+    # Only nodes whose file changed: a remote one by its address, the local
+    # one (the only node here without an ssh target) by the "local" mark.
+    case " \$changed " in
+        *" \$addr "*) ;;
+        *" local "*) tgt_for "\$addr" >/dev/null && continue ;;
+        *) continue ;;
+    esac
     uuid=\$(uuid_for "\$addr")
     [ -n "\$uuid" ] || continue
     curl -sf --max-time 30 -X POST \\
@@ -2902,13 +3267,39 @@ sr_ruex_ensure_updater() {
     sr_ruex_write_updater
 }
 
+# ruex is on and the profiles may have gained nodes (a new bridge, an
+# attached profile): mount the file where it is still missing, then the
+# gated rules pass. Nothing missing — only the rules pass.
+sr_ruex_sync() {
+    local addr mounted
+    mounted=" $(sr_ruex_state_get nodes) "
+    for addr in $(sr_ruex_entry_nodes); do
+        case "$mounted" in
+            *" $addr "*) ;;
+            *)
+                sr_ruex_enable missing && return 0
+                # The mount step failed early (download): the gated pass
+                # still runs, so a profile a new node joined loses the rule
+                # that node's Xray cannot load.
+                sr_ruex_switch_rules on
+                return 1
+                ;;
+        esac
+    done
+    sr_ruex_switch_rules on
+}
+
+# "missing" as the argument mounts only the nodes not mounted yet (sync);
+# the mounted list keeps every node that ever got the file, and the rules
+# pass adds the ext: rule only where all nodes of a profile are on it.
 sr_ruex_enable() {
-    local nodes addr resolved local_ip compose tmpd touched=""
+    local only_missing="${1:-}" nodes addr local_ip compose tmpd touched="" mounted sha put
     nodes=$(sr_ruex_entry_nodes)
     if [ -z "$nodes" ]; then
         echo -e "${COLOR_RED}${LANG[SR_RUEX_NO_NODES]}${COLOR_RESET}"
         return 1
     fi
+    mounted=" $(sr_ruex_state_get nodes) "
 
     step_do "${LANG[SR_RUEX_DOWNLOADING]}"
     tmpd=$(mktemp -d)
@@ -2918,17 +3309,23 @@ sr_ruex_enable() {
         return 1
     fi
     step_ok "${LANG[SR_RUEX_DOWNLOAD_OK]}"
+    # Remote write: land next to the target, check the sha, then write INTO
+    # the mounted file — a cut transfer must not leave a truncated file
+    # that the next config load cannot parse.
+    sha=$(sha256sum "$tmpd/geosite.dat" | cut -d' ' -f1)
+    put="f=/opt/remnanode/${SR_RUEX_FILE}; t=\"\$f.new\"; cat > \"\$t\" && [ \"\$(sha256sum \"\$t\" | cut -d' ' -f1)\" = \"$sha\" ] && cat \"\$t\" > \"\$f\"; rc=\$?; rm -f \"\$t\"; exit \$rc"
 
     local_ip=$(sr_panel_public_ip)
     for addr in $nodes; do
-        resolved=$(dig +short A "$addr" 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n1)
-        [ -n "$resolved" ] || resolved="$addr"
+        if [ "$only_missing" = "missing" ]; then
+            case "$mounted" in *" $addr "*) continue ;; esac
+        fi
         compose=$(sr_ruex_local_compose)
-        # Local entry node: the address is this box, or it is private
-        # (docker-gateway placeholder of a single-box install) while this
-        # box does run the node.
-        if [ -n "$compose" ] && { [ "$addr" = "$local_ip" ] || [ "$resolved" = "$local_ip" ] \
-             || ! sr_public_ipv4 "$addr" >/dev/null; }; then
+        # Local entry node: the address is really this box (public IP,
+        # docker-gateway placeholder, own overlay IP) and this box runs
+        # the node. An overlay or domain address of ANOTHER machine goes
+        # the SSH way below.
+        if [ -n "$compose" ] && sr_addr_is_local "$addr" "$local_ip"; then
             step_do "${LANG[SR_RUEX_MOUNT_LOCAL]}"
             cp -f "$tmpd/geosite.dat" "$(dirname "$compose")/${SR_RUEX_FILE}"
             sr_ruex_compose_add "$compose"
@@ -2940,8 +3337,8 @@ sr_ruex_enable() {
             fi
         elif re_target_load_by_host "$addr" && re_run_host_n "$addr" "test -f /opt/remnanode/docker-compose.yml"; then
             step_do "$(printf "${LANG[SR_RUEX_MOUNT_REMOTE]}" "$addr")"
-            if cat "$tmpd/geosite.dat" | re_run_host "$addr" "cat > /opt/remnanode/${SR_RUEX_FILE}" \
-               && re_run_host_n "$addr" "grep -q geosite-ruex /opt/remnanode/docker-compose.yml || sed -i '\|/var/log/remnanode|i\\      - ./${SR_RUEX_FILE}:/usr/local/share/xray/${SR_RUEX_FILE}' /opt/remnanode/docker-compose.yml" \
+            if re_run_host "$addr" "$put" < "$tmpd/geosite.dat" \
+               && re_run_host_n "$addr" "$(sr_ruex_remote_compose_add_cmd)" \
                && re_run_host_n "$addr" "cd /opt/remnanode && docker compose up -d" >/dev/null 2>&1 \
                && re_run_host_n "$addr" "docker exec remnanode test -s /usr/local/share/xray/${SR_RUEX_FILE}" >/dev/null 2>&1; then
                 touched="${touched:+$touched }$addr"
@@ -2954,20 +3351,30 @@ sr_ruex_enable() {
     done
     rm -rf "$tmpd"
 
+    # Mounted list = what already had the file plus what got it now; it
+    # must be saved BEFORE the rules pass, which gates on it.
+    local all_nodes a
+    all_nodes=$(sr_ruex_state_get nodes)
+    for a in $touched; do
+        case " $all_nodes " in
+            *" $a "*) ;;
+            *) all_nodes="${all_nodes:+$all_nodes }$a" ;;
+        esac
+    done
     if [ -z "$touched" ]; then
         echo -e "${COLOR_RED}${LANG[SR_RUEX_MOUNT_FAIL_ALL]}${COLOR_RESET}"
-        return 1
+        [ -n "$all_nodes" ] || return 1
     fi
+    sr_ruex_state_set nodes "$all_nodes"
 
     step_do "${LANG[SR_RUEX_RULES]}"
     sr_ruex_switch_rules on
     step_ok "$(printf "${LANG[SR_RUEX_RULES_OK]}" "$SR_RUEX_SWITCHED")"
 
     sr_ruex_state_set enabled "yes"
-    sr_ruex_state_set nodes "$touched"
     sr_ruex_write_updater
     add_cron_rule "30 4 * * * bash ${SR_CONF_DIR}/ruex-update.sh"
-    step_ok "$(printf "${LANG[SR_RUEX_ON_OK]}" "$touched")"
+    step_ok "$(printf "${LANG[SR_RUEX_ON_OK]}" "$all_nodes")"
     echo -e "${COLOR_GRAY}${LANG[SR_RUEX_CRON_OK]}${COLOR_RESET}"
     return 0
 }
@@ -2979,16 +3386,21 @@ sr_ruex_disable() {
     step_do "${LANG[SR_RUEX_OFF_STEP]}"
     sr_ruex_switch_rules off
 
-    local addr compose
+    local addr compose local_ip
+    local_ip=$(sr_panel_public_ip)
     for addr in $(sr_ruex_state_get nodes); do
         [ -n "$addr" ] || continue
         compose=$(sr_ruex_local_compose)
-        if [ -n "$compose" ]; then
+        # Same local test as enable: with a local node present, every
+        # REMOTE node still has to be cleaned over SSH.
+        if [ -n "$compose" ] && sr_addr_is_local "$addr" "$local_ip"; then
             sr_ruex_compose_del "$compose"
             rm -f "$(dirname "$compose")/${SR_RUEX_FILE}"
             (cd "$(dirname "$compose")" && docker compose up -d) >/dev/null 2>&1
         elif re_target_load_by_host "$addr"; then
-            re_run_host "$addr" "sed -i '\|geosite-ruex.dat|d' /opt/remnanode/docker-compose.yml; rm -f /opt/remnanode/${SR_RUEX_FILE}; cd /opt/remnanode && docker compose up -d" >/dev/null 2>&1
+            # -n: this branch now runs for every remote node, and a plain
+            # ssh would eat the caller's piped answers.
+            re_run_host_n "$addr" "sed -i '\|geosite-ruex.dat|d' /opt/remnanode/docker-compose.yml; rm -f /opt/remnanode/${SR_RUEX_FILE}; cd /opt/remnanode && docker compose up -d" >/dev/null 2>&1
         fi
     done
     rm -f "$SR_RUEX_STATE"
@@ -3041,7 +3453,7 @@ show_server_routing_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SR_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SR_OPTION || return 0
 
     case $SR_OPTION in
         1)
@@ -3082,7 +3494,7 @@ sr_show_geo_menu() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" SR_OPTION
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" SR_OPTION || return 0
 
         case $SR_OPTION in
             1)
@@ -3122,7 +3534,7 @@ sr_show_geo_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" SR_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" SR_OPTION || return 0
 
     case $SR_OPTION in
         0)
@@ -3168,7 +3580,7 @@ sr_show_route_menu() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" SR_OPTION
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" SR_OPTION || return 0
 
         case $SR_OPTION in
             1)
@@ -3207,7 +3619,7 @@ sr_show_route_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" SR_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" SR_OPTION || return 0
 
     case $SR_OPTION in
         0)
@@ -3286,7 +3698,7 @@ sr_route_bridge_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" SR_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" SR_OPTION || return 0
 
     case $SR_OPTION in
         1)
@@ -3360,7 +3772,7 @@ sr_bridge_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" SR_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" SR_OPTION || return 0
 
     case $SR_OPTION in
         1)

@@ -17,11 +17,14 @@ re_target_name() {
 # Unknown keys already in the file survive the rewrite, one host keeps one
 # target — a write with a new port replaces the stale file instead of racing
 # directory collation — and an overlay alias lives on exactly one target.
+# No sixth argument at all (a re-bootstrap of the same machine) keeps the
+# alias the host already carries; only an explicit "" drops it.
 re_target_write() {
     local host="$1" port="$2" user="$3" key="$4" label="${5:-}" overlay="${6:-}"
     local name other file tmp
     name=$(re_target_name "$host" "$port")
     mkdir -p "$RE_CONF_DIR" 2>/dev/null
+    [ "$#" -lt 6 ] && overlay=$(re_host_field "$host" overlay)
 
     while IFS= read -r other; do
         [ "$other" = "$name" ] && continue
@@ -30,11 +33,14 @@ re_target_write() {
         re_target_load "$t" && [ "$RE_HOST" = "$host" ] && printf '%s\n' "$t"
     done)
 
+    # Only a target holding THIS alias gives it up: every other migrated
+    # node keeps its own, or lookups by its overlay address stop matching.
     if [ -n "$overlay" ]; then
         while IFS= read -r other; do
             [ "$other" = "$name" ] && continue
             file="${RE_CONF_DIR}/${other}.target"
-            [ -f "$file" ] && sed -i '/^overlay=/d' "$file"
+            [ -f "$file" ] || continue
+            [ "$(sed -n 's|^overlay=||p' "$file" | head -n1)" = "$overlay" ] && sed -i '/^overlay=/d' "$file"
         done < <(re_targets_list)
     fi
 
@@ -89,6 +95,23 @@ re_target_load() {
     RE_LABEL=$(sed -n 's|^label=||p' "$file" | head -n1)
     RE_OVERLAY=$(sed -n 's|^overlay=||p' "$file" | head -n1)
     [ -n "$RE_HOST" ] && [ -n "$RE_KEY" ]
+}
+
+# One field (overlay or label) of the target already bound to a public
+# host, whatever its port; empty when none. Runs in a subshell: the probe
+# loads every target and must leave the caller's RE_* untouched.
+re_host_field() {
+    local want="$1" field="$2"
+    (
+        while IFS= read -r t; do
+            re_target_load "$t" && [ "$RE_HOST" = "$want" ] || continue
+            case "$field" in
+                overlay) printf '%s' "$RE_OVERLAY" ;;
+                label)   printf '%s' "$RE_LABEL" ;;
+            esac
+            break
+        done < <(re_targets_list)
+    )
 }
 
 # Find the target bound to the address — its public host or its NetBird
@@ -423,7 +446,7 @@ re_setup_paste() {
     echo -e ""
 
     while true; do
-        reading "${LANG[RE_PASTE_CHECK]}" answer
+        reading "${LANG[RE_PASTE_CHECK]}" answer || return 1
         [ "$answer" = "q" ] && return 1
         if re_try_key "$host" "$port" "$user" "$RE_KEY_FILE"; then
             step_ok "${LANG[RE_INSTALL_OK]}"
@@ -455,7 +478,16 @@ re_bootstrap() {
     # and a failed re_target_load_by_host before us has just reset them
     RE_PORT="$port"
     RE_USER="$user"
-    reading "${LANG[RE_LABEL_PROMPT]}" label
+    # Reconfiguring a known machine keeps its name on Enter; the overlay
+    # alias rides along inside re_target_write (no sixth argument below).
+    local old_label
+    old_label=$(re_host_field "$host" label)
+    if [ -n "$old_label" ]; then
+        reading "$(printf "${LANG[RE_LABEL_PROMPT_KEEP]}" "$old_label")" label
+        [ -n "$label" ] || label="$old_label"
+    else
+        reading "${LANG[RE_LABEL_PROMPT]}" label
+    fi
     label=$(re_clean_label "$label")
 
     step_do "${LANG[RE_TRYING]}"
@@ -488,7 +520,8 @@ re_bootstrap() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 3)" choice
+        # EOF (piped answers ran out) cancels instead of spinning here.
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 3)" choice || choice=0
 
         case $choice in
             1)
@@ -629,25 +662,60 @@ if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
     apt-get -o DPkg::Lock::Timeout=300 install -y curl
 fi
-docker_ok=""
-for docker_url in https://get.docker.com \
-    https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
-    https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
-    https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh; do
-    rm -f /tmp/get-docker.sh
+fetch_url() {
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL --connect-timeout 10 "$docker_url" -o /tmp/get-docker.sh
+        curl -fsSL --connect-timeout 10 "$1" -o "$2" 2>/dev/null
     else
-        wget -q --timeout=10 --tries=1 -O /tmp/get-docker.sh "$docker_url"
+        wget -q --timeout=10 --tries=1 -O "$2" "$1" 2>/dev/null
     fi
-    if [ -s /tmp/get-docker.sh ] && head -1 /tmp/get-docker.sh | grep -q "^#!/bin/sh"; then
-        if sh /tmp/get-docker.sh || sh /tmp/get-docker.sh --mirror Aliyun; then
-            docker_ok=1
-            break
+    [ -s "$2" ]
+}
+# The official origin is trusted as-is; a mirror copy of install.sh runs
+# only when two independent sources served identical bytes (sha256), and
+# anything less verifiable falls back to the signed distro packages
+# instead of a lone script from one proxy.
+docker_script=/tmp/get-docker.sh
+docker_check=/tmp/get-docker.check
+docker_verified=""
+rm -f "$docker_script" "$docker_check"
+if fetch_url https://get.docker.com "$docker_script" && head -1 "$docker_script" | grep -q "^#!/bin/sh"; then
+    docker_verified=1
+else
+    docker_first=""
+    docker_agree=0
+    for docker_url in \
+        https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+        https://gh-proxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+        https://ghfast.top/https://raw.githubusercontent.com/docker/docker-install/master/install.sh \
+        https://ghproxy.net/https://raw.githubusercontent.com/docker/docker-install/master/install.sh; do
+        rm -f "$docker_check"
+        if fetch_url "$docker_url" "$docker_check" && head -1 "$docker_check" | grep -q "^#!/bin/sh"; then
+            docker_sum=$(sha256sum "$docker_check" 2>/dev/null | cut -d" " -f1)
+            if [ -z "$docker_first" ]; then
+                docker_first="$docker_sum"
+                cp "$docker_check" "$docker_script"
+                docker_agree=1
+            elif [ "$docker_sum" = "$docker_first" ]; then
+                docker_agree=$((docker_agree + 1))
+            fi
         fi
+        [ "$docker_agree" -ge 2 ] && break
+    done
+    if [ "$docker_agree" -ge 2 ]; then
+        docker_verified=1
+    else
+        rm -f "$docker_script"
+        echo "docker install script could not be verified across independent sources, falling back to distro packages"
     fi
-done
-rm -f /tmp/get-docker.sh
+fi
+rm -f "$docker_check"
+docker_ok=""
+if [ -n "$docker_verified" ]; then
+    if sh "$docker_script" || sh "$docker_script" --mirror Aliyun; then
+        docker_ok=1
+    fi
+fi
+rm -f "$docker_script"
 if [ -z "$docker_ok" ]; then
     apt-get -o DPkg::Lock::Timeout=300 update -y >/dev/null
     apt-get -o DPkg::Lock::Timeout=300 install -y docker.io docker-compose-v2 || apt-get -o DPkg::Lock::Timeout=300 install -y docker.io
@@ -774,7 +842,8 @@ show_remote_exec_menu() {
         echo -e ""
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" REMOTE_EXEC_OPTION
+        # EOF leaves the menu: every branch below re-enters it recursively.
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 1)" REMOTE_EXEC_OPTION || return 0
 
         case $REMOTE_EXEC_OPTION in
             1)
@@ -810,7 +879,7 @@ show_remote_exec_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" REMOTE_EXEC_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$new")" REMOTE_EXEC_OPTION || return 0
 
     case $REMOTE_EXEC_OPTION in
         0)
@@ -857,7 +926,7 @@ re_target_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" REMOTE_EXEC_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 5)" REMOTE_EXEC_OPTION || return 0
 
     case $REMOTE_EXEC_OPTION in
         1)

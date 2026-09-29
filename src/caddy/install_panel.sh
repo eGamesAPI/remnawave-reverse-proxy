@@ -114,7 +114,7 @@ TELEGRAM_NOTIFY_USERS=change_me
 TELEGRAM_NOTIFY_NODES=change_me
 TELEGRAM_NOTIFY_CRM=change_me
 TELEGRAM_NOTIFY_SERVICE=change_me
-TELEGRAM_NOTIFY_TBLOCKER=change_me
+TELEGRAM_NOTIFY_TBLOCKER=
 
 ### PANEL DOMAIN ###
 ### Used to build panel links in Telegram notifications.

@@ -92,11 +92,30 @@ check_api() {
     return 1
 }
 
+# HTTP-01 needs port 80 open while the challenge runs. A rule that already
+# allows 80/tcp belongs to another component (Caddy, the xray-checker
+# sidecar) and must survive the cleanup: succeeds only when this call added
+# the rule, so the caller deletes exactly what it added.
+acme_port80_open() {
+    command -v ufw >/dev/null 2>&1 || return 1
+    ufw status 2>/dev/null | grep -Eq '^80(/tcp)?[[:space:]]+ALLOW( IN)?[[:space:]]+Anywhere' && return 1
+    ufw allow 80/tcp comment 'HTTP for ACME challenge' >/dev/null 2>&1
+}
+
+acme_port80_close() {
+    ufw delete allow 80/tcp >/dev/null 2>&1
+}
+
 get_certificates() {
     local DOMAIN=$1
     local CERT_METHOD=$2
     local LETSENCRYPT_EMAIL=$3
     local BASE_DOMAIN=$(extract_domain "$DOMAIN")
+    # A wildcard covers one label only: panel.vpn.example.com needs
+    # *.vpn.example.com, the registrable *.example.com does not cover it
+    if ! cert_covers_domain "$DOMAIN" "$BASE_DOMAIN"$'\n'"*.$BASE_DOMAIN"; then
+        BASE_DOMAIN="${DOMAIN#*.}"
+    fi
     local WILDCARD_DOMAIN="*.$BASE_DOMAIN"
 
     printf "${COLOR_YELLOW}${LANG[GENERATING_CERTS]}${COLOR_RESET}\n" "$DOMAIN"
@@ -138,13 +157,14 @@ EOL
                 --dns-cloudflare \
                 --dns-cloudflare-credentials ~/.secrets/certbot/cloudflare.ini \
                 --dns-cloudflare-propagation-seconds 60 \
+                --cert-name "$BASE_DOMAIN" \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
                 "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
-                --elliptic-curve secp384r1
+                --elliptic-curve secp384r1 || return 1
             ;;
         4)
             # ACME HTTP-01 (without wildcard)
@@ -154,7 +174,8 @@ EOL
                 docker stop remnawave-nginx > /dev/null
             fi
 
-            ufw allow 80/tcp comment 'HTTP for ACME challenge' > /dev/null 2>&1
+            local port80_added=false
+            acme_port80_open && port80_added=true
 
             certbot certonly \
                 --standalone \
@@ -167,8 +188,9 @@ EOL
                 --elliptic-curve secp384r1
             local certbot_status=$?
 
-            ufw delete allow 80/tcp > /dev/null 2>&1
-            ufw reload > /dev/null 2>&1
+            if [ "$port80_added" = true ]; then
+                acme_port80_close
+            fi
 
             if [ "$nginx_was_running" = true ]; then
                 docker start remnawave-nginx > /dev/null
@@ -216,13 +238,14 @@ EOL
                 --authenticator dns-gcore \
                 --dns-gcore-credentials ~/.secrets/certbot/gcore.ini \
                 --dns-gcore-propagation-seconds 80 \
+                --cert-name "$BASE_DOMAIN" \
                 -d "$BASE_DOMAIN" \
                 -d "$WILDCARD_DOMAIN" \
                 "${email_args[@]}" \
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
-                --elliptic-curve secp384r1
+                --elliptic-curve secp384r1 || return 1
             ;;
         3)
             # Bunny DNS-01 — one wildcard lineage per zone (base + *.base),
@@ -296,7 +319,7 @@ EOL
                 --agree-tos \
                 --non-interactive \
                 --key-type ecdsa \
-                --elliptic-curve secp384r1
+                --elliptic-curve secp384r1 || return 1
             ;;
         *)
             echo -e "${COLOR_RED}${LANG[INVALID_CERT_METHOD]}${COLOR_RESET}"
@@ -304,6 +327,9 @@ EOL
             ;;
     esac
 
+    # Every certbot call above fails the function on its own: an older
+    # lineage that still covers the domain (even an expired one) would
+    # pass the coverage check below and hide a failed issuance.
     # The lineage must actually cover the requested domain — wildcard
     # methods name it after the base zone, ACME after the host itself
     if ! resolve_certificate_domain "$DOMAIN" >/dev/null; then
@@ -422,7 +448,9 @@ update_current_certificates() {
 
         local cert_file="$domain_dir/fullchain.pem"
         local cert_mtime_before
-        cert_mtime_before=$(stat -c %Y "$cert_file" 2>/dev/null || echo 0)
+        # -L: the live file is a symlink the structure fix below recreates;
+        # only the archive file behind it changes on a real renewal
+        cert_mtime_before=$(stat -L -c %Y "$cert_file" 2>/dev/null || echo 0)
 
         # The lineage directory keeps its -0001 suffix — the structure fix
         # must target it, not the stripped base name
@@ -469,7 +497,8 @@ EOL
         elif [ "$cert_method" == "2" ]; then
             # Gcore
             local gcore_credentials_file
-            gcore_credentials_file=$(grep "dns-gcore-credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
+            # certbot stores the option under its dest name with underscores
+            gcore_credentials_file=$(grep -E "dns[-_]gcore[-_]credentials" "$renewal_conf" | cut -d'=' -f2 | tr -d ' ')
             if [ -n "$gcore_credentials_file" ] && [ ! -f "$gcore_credentials_file" ]; then
                 echo -e "${COLOR_RED}${LANG[CERT_GCORE_FILE_NOT_FOUND]}${COLOR_RESET}"
                 if [ -z "$GCORE_API_KEY" ]; then
@@ -501,8 +530,9 @@ EOL
         fi
 
         if [ "$days_left" -le "$renew_threshold" ]; then
+            local port80_added=false
             if [ "$cert_method" == "4" ]; then
-                ufw allow 80/tcp > /dev/null 2>&1 && ufw reload > /dev/null 2>&1
+                acme_port80_open && port80_added=true
             fi
 
             certbot renew --cert-name "$domain" --no-random-sleep-on-renew >> /var/log/letsencrypt/letsencrypt.log 2>&1 &
@@ -511,8 +541,8 @@ EOL
             wait $cert_pid
             local certbot_exit_code=$?
 
-            if [ "$cert_method" == "4" ]; then
-                ufw delete allow 80/tcp > /dev/null 2>&1 && ufw reload > /dev/null 2>&1
+            if [ "$port80_added" = true ]; then
+                acme_port80_close
             fi
 
             if [ "$certbot_exit_code" -ne 0 ]; then
@@ -520,16 +550,16 @@ EOL
                 continue
             fi
 
-            local new_cert_dir
-            new_cert_dir=$(find "$cert_dir" -maxdepth 1 -type d -name "$cert_domain*" | sort -V | tail -n 1)
-            local new_domain
-            new_domain=$(basename "$new_cert_dir")
+            # certbot renew --cert-name renews this very lineage in place:
+            # judge by its own directory — a prefix search also matched
+            # example.co for example.com, and SAN coverage of a directory
+            # name like example.com-0001 always failed
             local cert_mtime_after
-            cert_mtime_after=$(stat -c %Y "$new_cert_dir/fullchain.pem" 2>/dev/null || echo 0)
+            cert_mtime_after=$(stat -L -c %Y "$cert_file" 2>/dev/null || echo 0)
 
-            if check_certificates "$domain" > /dev/null 2>&1 && [ "$cert_mtime_before" != "$cert_mtime_after" ]; then
+            if [ -s "$cert_file" ] && [ "$cert_mtime_before" != "$cert_mtime_after" ]; then
                 local new_days_left
-                new_days_left=$(check_cert_expiry "$new_domain")
+                new_days_left=$(check_cert_expiry "$domain")
                 if [ $? -eq 0 ]; then
                     cert_status["$cert_domain"]="${LANG[UPDATED]}"
                 else
@@ -562,7 +592,8 @@ EOL
 }
 
 generate_new_certificates() {
-    reading "${LANG[CERT_GENERATE_PROMPT]}" NEW_DOMAIN
+    # EOF on stdin (Ctrl+D, closed input) cancels instead of looping below
+    reading "${LANG[CERT_GENERATE_PROMPT]}" NEW_DOMAIN || return 1
 
     echo -e "${COLOR_YELLOW}${LANG[CERT_METHOD_PROMPT]}${COLOR_RESET}"
     echo -e ""
@@ -583,7 +614,7 @@ generate_new_certificates() {
     echo -e ""
 
     while true; do
-        reading "${LANG[CERT_METHOD_CHOOSE]}" CERT_METHOD
+        reading "${LANG[CERT_METHOD_CHOOSE]}" CERT_METHOD || return 1
         case "$CERT_METHOD" in
             0)
                 echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -600,41 +631,44 @@ generate_new_certificates() {
 
     local LETSENCRYPT_EMAIL=""
     if [ "$CERT_METHOD" == "2" ] || [ "$CERT_METHOD" == "3" ] || [ "$CERT_METHOD" == "4" ]; then
-        reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL
+        reading "${LANG[EMAIL_PROMPT]}" LETSENCRYPT_EMAIL || return 1
     fi
 
+    # get_certificates announces the domain itself; a failed issuance must
+    # not pass as success just because an older lineage still covers it
+    local cert_rc=0
     if [ "$CERT_METHOD" == "5" ]; then
         # 5 = own certificate: upload and verify, no certbot involved
         manual_certificate_flow "$NEW_DOMAIN" || return 1
         setup_cert_telegram_notifications
     elif [ "$CERT_METHOD" == "3" ]; then
         # 3 = Bunny DNS-01 — wildcard
-        get_certificates "$NEW_DOMAIN" "3" "$LETSENCRYPT_EMAIL"
+        get_certificates "$NEW_DOMAIN" "3" "$LETSENCRYPT_EMAIL" || cert_rc=1
     elif [ "$CERT_METHOD" == "1" ] || [ "$CERT_METHOD" == "2" ]; then
         # 1 = CF DNS-01, 2 = Gcore DNS-01 — wildcard
-        echo -e "${COLOR_YELLOW}${LANG[GENERATING_WILDCARD_CERT]} *.$NEW_DOMAIN...${COLOR_RESET}"
-        get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL"
+        get_certificates "$NEW_DOMAIN" "$CERT_METHOD" "$LETSENCRYPT_EMAIL" || cert_rc=1
     elif [ "$CERT_METHOD" == "4" ]; then
         # 4 = ACME HTTP-01
-        echo -e "${COLOR_YELLOW}${LANG[GENERATING_CERTS]} $NEW_DOMAIN...${COLOR_RESET}"
-        get_certificates "$NEW_DOMAIN" "4" "$LETSENCRYPT_EMAIL"
+        get_certificates "$NEW_DOMAIN" "4" "$LETSENCRYPT_EMAIL" || cert_rc=1
     else
         echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
         return 1
     fi
 
-    if check_certificates "$NEW_DOMAIN"; then
+    # The real lineage name: wildcard methods name it after the base zone
+    # (Bunny after the asked base), certbot may append -0001
+    local lineage_domain
+    if [ "$cert_rc" -eq 0 ] && lineage_domain=$(resolve_certificate_domain "$NEW_DOMAIN"); then
+        echo -e "${COLOR_GREEN}${LANG[CERT_FOUND]}$lineage_domain${COLOR_RESET}"
         # Wire the renewal hooks right away: without the pre/post hooks a
         # standalone cert cannot renew unattended while nginx holds port 80
-        local lineage_domain="$NEW_DOMAIN"
-        if [ "$CERT_METHOD" = "1" ] || [ "$CERT_METHOD" = "2" ]; then
-            lineage_domain=$(extract_domain "$NEW_DOMAIN")
-        fi
         local renewal_conf="/etc/letsencrypt/renewal/$lineage_domain.conf"
         [ -f "$renewal_conf" ] && configure_certbot_renewal_hooks "$renewal_conf"
         echo -e "${COLOR_GREEN}${LANG[CERT_UPDATE_SUCCESS]}${COLOR_RESET}"
     else
         echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]}${COLOR_RESET}"
+        sleep 2
+        return 1
     fi
 
     sleep 2
@@ -678,13 +712,26 @@ configure_certbot_renewal_hooks() {
         return 1
     fi
 
+    # Only hooks this script owns are rewritten: missing ones or those
+    # aimed at remnawave-nginx. A lineage wired to another container (the
+    # xray-checker sidecar) or to the user's own hooks keeps them.
+    if grep -E '^(pre_hook|post_hook|renew_hook|deploy_hook) = ' "$renewal_conf" | grep -vq 'remnawave-nginx'; then
+        return 0
+    fi
+
     sed -i -E '/^(pre_hook|post_hook|renew_hook|deploy_hook) = /d' "$renewal_conf"
 
     if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$renewal_conf"; then
-        echo "pre_hook = /usr/bin/docker stop remnawave-nginx" >> "$renewal_conf"
-        echo "post_hook = /usr/bin/docker start remnawave-nginx" >> "$renewal_conf"
+        # The hooks open port 80 themselves, so certbot.timer and the cron
+        # line both renew unattended; absolute paths since cron and the
+        # timer run without /usr/sbin in PATH. The rule is deleted only
+        # when the pre hook added it (marker file): a permanent 80/tcp rule
+        # of another component stays. Values are parsed by configobj —
+        # no commas and no hash signs inside.
+        echo "pre_hook = /usr/bin/docker stop remnawave-nginx; if [ -x /usr/sbin/ufw ] && ! /usr/sbin/ufw status | grep -Eq '^80(/tcp)?[[:space:]]+ALLOW( IN)?[[:space:]]+Anywhere'; then /usr/sbin/ufw allow 80/tcp comment 'HTTP for ACME challenge' >/dev/null && touch /run/remnawave-acme-port80; fi" >> "$renewal_conf"
+        echo "post_hook = /usr/bin/docker start remnawave-nginx; if [ -f /run/remnawave-acme-port80 ]; then /usr/sbin/ufw delete allow 80/tcp >/dev/null; rm -f /run/remnawave-acme-port80; fi" >> "$renewal_conf"
     else
-        echo "deploy_hook = /usr/bin/docker restart remnawave-nginx" >> "$renewal_conf"
+        echo "renew_hook = /usr/bin/docker restart remnawave-nginx" >> "$renewal_conf"
     fi
 }
 
@@ -849,12 +896,13 @@ handle_certificates() {
                 echo -e ""
             fi
 
+            # EOF on stdin aborts the flow instead of spinning in the loop
             while true; do
                 if [ -n "$cert_default" ]; then
-                    read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method
+                    read -rei "$cert_default" -p " $(question "${LANG[CERT_METHOD_CHOOSE]}")" cert_method || return 1
                     cert_default=""
                 else
-                    reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method
+                    reading "${LANG[CERT_METHOD_CHOOSE]}" cert_method || return 1
                 fi
                 case "$cert_method" in
                     0)
@@ -865,7 +913,7 @@ handle_certificates() {
                         break
                         ;;
                     2|3|4)
-                        reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email
+                        reading "${LANG[EMAIL_PROMPT]}" letsencrypt_email || return 1
                         break
                         ;;
                     *)
@@ -954,17 +1002,23 @@ handle_certificates() {
     # by file, so without a restart it keeps serving the old inode until
     # it eventually expires.
     local renew_hook="docker restart remnawave-nginx remnawave-caddy 2>/dev/null || true"
-    if [ "$cert_method" == "4" ]; then
-        cron_command="ufw allow 80/tcp >/dev/null 2>&1 && /usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\"; certbot_status=\$?; ufw delete allow 80/tcp >/dev/null 2>&1; ufw reload >/dev/null 2>&1; exit \$certbot_status"
-    else
-        cron_command="/usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\""
+    # HTTP-01 lineages open port 80 in their own pre/post hooks (see
+    # configure_certbot_renewal_hooks), so one line serves every method
+    cron_command="/usr/bin/certbot renew --quiet --deploy-hook \"$renew_hook\""
+    # The old HTTP-01 line called ufw without a path: cron's PATH has no
+    # /usr/sbin, the line failed with 127 before certbot ever ran
+    local legacy_cron=false
+    if crontab -u root -l 2>/dev/null | grep -q "ufw allow 80/tcp.*/usr/bin/certbot renew"; then
+        legacy_cron=true
     fi
 
     if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
         echo -e "${COLOR_YELLOW}${LANG[ADDING_CRON_FOR_EXISTING_CERTS]}${COLOR_RESET}"
         add_cron_rule "0 5 * * 0 $cron_command"
-    elif [ "$min_days_left" -le 30 ] && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then
-        echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
+    elif { [ "$legacy_cron" = true ] || [ "$min_days_left" -le 30 ]; } && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then
+        if [ "$min_days_left" -le 30 ]; then
+            echo -e "${COLOR_YELLOW}${LANG[CERT_EXPIRY_SOON]} $min_days_left ${LANG[DAYS]}${COLOR_RESET}"
+        fi
         echo -e "${COLOR_YELLOW}${LANG[UPDATING_CRON]}${COLOR_RESET}"
         crontab -u root -l 2>/dev/null | grep -v "/usr/bin/certbot renew" | crontab -u root -
         add_cron_rule "0 5 * * 0 $cron_command"
@@ -1177,6 +1231,11 @@ percent_encode_proxy_auth() {
         pass=""
     fi
 
+    # Byte-wise under the C locale: URL encoding works on UTF-8 bytes, while
+    # a UTF-8 locale (the spinner exports C.UTF-8) reads whole characters
+    # and printf "'c" yields the code point — я became %44F, not %D1%8F
+    local LC_ALL=C
+
     while IFS= read -r -n 1 c; do
         [ -z "$c" ] && continue
         case "$c" in
@@ -1234,6 +1293,91 @@ tg_parse_chat() {
     return 0
 }
 
+# Send a message through the Bot API and print the raw reply; the exit
+# code is curl's. The token sits in the URL and the proxy may carry
+# user:password — both reach curl through a config on stdin, never argv,
+# which every local user can read in ps and /proc/<pid>/cmdline. Both are
+# validated on input to hold no quotes or backslashes.
+tg_send_message() {
+    local token="$1" chat="$2" thread="$3" proxy="$4" text="$5"
+    local thread_args=()
+    [ -n "$thread" ] && thread_args=(--data-urlencode "message_thread_id=${thread}")
+    {
+        printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token"
+        [ -n "$proxy" ] && printf 'proxy = "%s"\n' "$proxy"
+    } | curl -s -m 20 -K - \
+        --data-urlencode "chat_id=${chat}" \
+        "${thread_args[@]}" \
+        --data-urlencode "text=${text}" 2>/dev/null
+}
+
+# Language code of the running interface (selected_language: 1 = en, 2 = ru)
+cert_notify_lang() {
+    if [ "$(cat "${LANG_FILE:-${DIR_REMNAWAVE}selected_language}" 2>/dev/null)" = "2" ]; then
+        echo "ru"
+    else
+        echo "en"
+    fi
+}
+
+# (Re)write the daily reminder script. The report texts are baked in from
+# the current interface language — the cron job has no LANG table — and
+# the script is refreshed each time the reminders menu opens, so fixes and
+# a language switch reach existing installs too.
+cert_notify_write_script() {
+    local notify_script="$1" notify_conf="$2" body
+    IFS= read -r -d '' body <<'EOL'
+#!/bin/bash
+# Daily certificate expiry check with Telegram reminders.
+CONF="__NOTIFY_CONF__"
+[ -r "$CONF" ] || exit 0
+. "$CONF"
+: "${TG_TOKEN:?}" "${TG_CHAT:?}"
+TG_PROXY="${TG_PROXY:-}"
+TG_THREAD="${TG_THREAD:-}"
+DAYS="${DAYS:-14}"
+T_HEAD=__REPORT_HEAD__
+T_DAYS=__REPORT_DAYS__
+
+send_tg() {
+    local thread_args=()
+    [ -n "$TG_THREAD" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD}")
+    # Token and proxy credentials reach curl through a config on stdin:
+    # argv is readable by every local user in ps and /proc
+    {
+        printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$TG_TOKEN"
+        [ -n "$TG_PROXY" ] && printf 'proxy = "%s"\n' "$TG_PROXY"
+    } | curl -s -m 30 -K - --get \
+        --data-urlencode "chat_id=${TG_CHAT}" \
+        "${thread_args[@]}" \
+        --data-urlencode "text=$1" >/dev/null 2>&1
+}
+
+report=""
+now_epoch=$(date +%s)
+for dir in /etc/letsencrypt/live/*/; do
+    fc="${dir}fullchain.pem"
+    [ -r "$fc" ] || continue
+    end_date=$(openssl x509 -in "$fc" -enddate -noout 2>/dev/null | cut -d= -f2-)
+    [ -n "$end_date" ] || continue
+    end_epoch=$(TZ=UTC date -d "$end_date" +%s 2>/dev/null) || continue
+    days=$(( (end_epoch - now_epoch) / 86400 ))
+    if [ "$days" -le "$DAYS" ]; then
+        report="${report}$(basename "$dir"): ${days} ${T_DAYS} (${end_date})"$'\n'
+    fi
+done
+
+if [ -n "$report" ]; then
+    send_tg "$(printf '⚠️ %s\n%s' "$T_HEAD" "$report")"
+fi
+EOL
+    body=${body//__NOTIFY_CONF__/"$notify_conf"}
+    body=${body//__REPORT_HEAD__/"$(printf '%q' "${LANG[CERT_TG_REPORT_HEAD]}")"}
+    body=${body//__REPORT_DAYS__/"$(printf '%q' "${LANG[CERT_TG_REPORT_DAYS]}")"}
+    printf '%s' "$body" > "$notify_script"
+    chmod 700 "$notify_script"
+}
+
 # Optional daily Telegram reminders about expiring certificates
 setup_cert_telegram_notifications() {
     local notify_conf="${DIR_REMNAWAVE}cert-notify.conf"
@@ -1250,13 +1394,7 @@ setup_cert_telegram_notifications() {
     local tg_proxy=""
 
     tg_test_send() {
-        local curl_proxy=() thread_args=()
-        [ -n "$tg_proxy" ] && curl_proxy=(--proxy "$tg_proxy")
-        [ -n "$TG_THREAD_ID" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD_ID}")
-        response=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${tg_token}/sendMessage" \
-            --data-urlencode "chat_id=${TG_CHAT_ID}" \
-            "${thread_args[@]}" \
-            --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
+        response=$(tg_send_message "$tg_token" "$TG_CHAT_ID" "$TG_THREAD_ID" "$tg_proxy" "✅ ${LANG[CERT_TG_TEST_TEXT]}")
         tg_curl_rc=$?
         printf '%s' "$response" | grep -q '"ok":true'
     }
@@ -1302,51 +1440,11 @@ TG_CHAT='${TG_CHAT_ID}'
 TG_THREAD='${TG_THREAD_ID}'
 TG_PROXY='$tg_proxy'
 DAYS=14
-LANG_SEL='ru'
+LANG_SEL='$(cert_notify_lang)'
 EOL
     chmod 600 "$notify_conf"
 
-    cat > "$notify_script" <<'EOL'
-#!/bin/bash
-# Daily certificate expiry check with Telegram reminders.
-CONF="__NOTIFY_CONF__"
-[ -r "$CONF" ] || exit 0
-. "$CONF"
-: "${TG_TOKEN:?}" "${TG_CHAT:?}"
-TG_PROXY="${TG_PROXY:-}"
-TG_THREAD="${TG_THREAD:-}"
-DAYS="${DAYS:-14}"
-
-send_tg() {
-    local curl_proxy=() thread_args=()
-    [ -n "$TG_PROXY" ] && curl_proxy=(--proxy "$TG_PROXY")
-    [ -n "$TG_THREAD" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD}")
-    curl -s -m 30 "${curl_proxy[@]}" --get "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-        --data-urlencode "chat_id=${TG_CHAT}" \
-        "${thread_args[@]}" \
-        --data-urlencode "text=$1" >/dev/null 2>&1
-}
-
-report=""
-now_epoch=$(date +%s)
-for dir in /etc/letsencrypt/live/*/; do
-    fc="${dir}fullchain.pem"
-    [ -r "$fc" ] || continue
-    end_date=$(openssl x509 -in "$fc" -enddate -noout 2>/dev/null | cut -d= -f2-)
-    [ -n "$end_date" ] || continue
-    end_epoch=$(TZ=UTC date -d "$end_date" +%s 2>/dev/null) || continue
-    days=$(( (end_epoch - now_epoch) / 86400 ))
-    if [ "$days" -le "$DAYS" ]; then
-        report="${report}$(basename "$dir"): ${days} дн. (${end_date})"$'\n'
-    fi
-done
-
-if [ -n "$report" ]; then
-    send_tg "$(printf "⚠️ Сертификаты истекают:\n%s" "$report")"
-fi
-EOL
-    sed -i "s|__NOTIFY_CONF__|$notify_conf|" "$notify_script"
-    chmod 700 "$notify_script"
+    cert_notify_write_script "$notify_script" "$notify_conf"
 
     if ! crontab -u root -l 2>/dev/null | grep -q "cert-notify.sh"; then
         add_cron_rule "0 9 * * * $notify_script"
@@ -1380,6 +1478,11 @@ manage_cert_notifications() {
 
     . "$notify_conf"
     TG_THREAD="${TG_THREAD:-}"
+
+    # Existing installs pick up the current reminder script (credentials
+    # off argv, texts in the interface language) without a re-setup
+    cert_notify_set LANG_SEL "$(cert_notify_lang)"
+    cert_notify_write_script "${DIR_REMNAWAVE}cert-notify.sh" "$notify_conf"
 
     while true; do
         echo -e ""
@@ -1441,14 +1544,9 @@ manage_cert_notifications() {
                 cert_notify_set DAYS "$value" && DAYS="$value"
                 ;;
             5)
-                local curl_proxy=() thread_args=() response
-                [ -n "$TG_PROXY" ] && curl_proxy=(--proxy "$TG_PROXY")
-                [ -n "$TG_THREAD" ] && thread_args=(--data-urlencode "message_thread_id=${TG_THREAD}")
+                local response
                 echo -e "${COLOR_YELLOW}${LANG[CERT_TG_TESTING]}${COLOR_RESET}"
-                response=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-                    --data-urlencode "chat_id=${TG_CHAT}" \
-                    "${thread_args[@]}" \
-                    --data-urlencode "text=✅ ${LANG[CERT_TG_TEST_TEXT]}" 2>/dev/null)
+                response=$(tg_send_message "$TG_TOKEN" "$TG_CHAT" "$TG_THREAD" "$TG_PROXY" "✅ ${LANG[CERT_TG_TEST_TEXT]}")
                 if printf '%s' "$response" | grep -q '"ok":true'; then
                     echo -e "${COLOR_GREEN}${LANG[CERT_TG_OK]}${COLOR_RESET}"
                 else

@@ -117,7 +117,7 @@ export default defineConfig({
 					label: 'Modules', translations: { ru: 'Модули' },
 					items: [
 					{ label: 'Warp Native', slug: 'configuration/warp-native', translations: { ru: 'Warp Native' } },
-					{ label: 'SSH remote access', slug: 'configuration/ssh-remote-access', translations: { ru: 'SSH-доступ к удалённым машинам' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
+					{ label: 'SSH remote access', slug: 'configuration/ssh-remote-access', translations: { ru: 'SSH-доступ к удалённым серверам' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
 					{ label: 'Server routing (bridge)', slug: 'configuration/server-routing', translations: { ru: 'Серверный роутинг (мост)' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
 					{ label: 'NetBird module', slug: 'configuration/netbird-module', translations: { ru: 'Модуль NetBird' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'note' } },
 					],

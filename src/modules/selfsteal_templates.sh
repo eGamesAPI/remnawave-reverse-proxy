@@ -17,15 +17,17 @@ show_template_source_options() {
 }
 
 manage_selfsteal_templates() {
+    # The caller (the extensions menu) redraws itself once we return; a
+    # nested copy of the whole script here only added a detour through the
+    # main menu on the way back.
     if [[ ! -d "/opt/remnawave" && ! -d "/opt/remnanode" ]]; then
         echo -e "${COLOR_YELLOW}${LANG[NO_PANEL_NODE_INSTALLED]}${COLOR_RESET}"
         sleep 2
-        remnawave_reverse
-        return
+        return 0
     fi
 
     show_template_source_options
-    reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION
+    reading "${LANG[CHOOSE_TEMPLATE_OPTION]}" TEMPLATE_OPTION || return 0
     case $TEMPLATE_OPTION in
         1)
             randomhtml "simple"
@@ -224,7 +226,8 @@ randomhtml_pick_specific() {
 
     local template_pick
     while true; do
-        reading "${LANG[ENTER_TEMPLATE_NUMBER]}" template_pick
+        # EOF would otherwise spin this loop at full CPU.
+        reading "${LANG[ENTER_TEMPLATE_NUMBER]}" template_pick || { randomhtml_fail "${LANG[EXIT]}"; return 1; }
         if [ "$template_pick" = "0" ]; then
             randomhtml_fail "${LANG[EXIT]}"
             return 1
@@ -300,19 +303,34 @@ randomhtml_apply() {
 
     echo "${LANG[SELECT_TEMPLATE]}" "${TEMPLATE_DISPLAY_NAME:-$RandomHTML}"
 
-    mkdir -p "$dest/" || { randomhtml_fail "Failed to create $dest/"; return 1; }
-    rm -rf "$dest"/* "$dest"/.[!.]* "$dest"/..?* 2>/dev/null
+    # Stage first, swap second: the site being served is removed only once
+    # the new one is fully on disk, so a failed copy (a full disk) leaves it
+    # in place. The swap moves entries, not the directory itself — the web
+    # server bind-mounts $dest, and a replaced directory would vanish from
+    # its view. The stage is a sibling, so the moves are plain renames.
+    local stage="${dest%/}.rrp-stage"
+    rm -rf "$stage" 2>/dev/null
+    mkdir -p "$stage" || { randomhtml_fail "Failed to create $stage/"; return 1; }
 
     if [[ -d "${RandomHTML}" ]]; then
-        cp -a "${RandomHTML}"/. "$dest/" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
-        printf "${LANG[TEMPLATE_COPY]}\n" "$dest"
+        cp -a "${RandomHTML}"/. "$stage/" || { rm -rf "$stage"; randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
     elif [[ -f "${RandomHTML}" ]]; then
-        cp "${RandomHTML}" "$dest/index.html" || { randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
-        printf "${LANG[TEMPLATE_COPY]}\n" "$dest"
+        cp "${RandomHTML}" "$stage/index.html" || { rm -rf "$stage"; randomhtml_fail "${LANG[UNPACK_ERROR]}"; return 1; }
     else
+        rm -rf "$stage"
         randomhtml_fail "${LANG[UNPACK_ERROR]}"
         return 1
     fi
+
+    mkdir -p "$dest/" || { rm -rf "$stage"; randomhtml_fail "Failed to create $dest/"; return 1; }
+    rm -rf "${dest:?}"/* "$dest"/.[!.]* "$dest"/..?* 2>/dev/null
+    if ! find "$stage" -mindepth 1 -maxdepth 1 -exec mv -t "$dest/" -- {} +; then
+        rm -rf "$stage"
+        randomhtml_fail "${LANG[UNPACK_ERROR]}"
+        return 1
+    fi
+    rm -rf "$stage"
+    printf "${LANG[TEMPLATE_COPY]}\n" "$dest"
 
     cd /opt/
     rm -rf simple-web-templates-*/ sni-templates-*/ nothing-sni-*/ 2>/dev/null
@@ -362,7 +380,7 @@ randomhtml_clone() {
     local asset_url len total_bytes total_mb html_size main_html
     local confirmed asset_count=0
 
-    reading "${LANG[ENTER_SITE_URL]}" site_url
+    reading "${LANG[ENTER_SITE_URL]}" site_url || return 1
     [[ "$site_url" =~ ^https?:// ]] || site_url="https://$site_url"
 
     clone_root="/opt/site-clone-$(openssl rand -hex 4)"
@@ -384,7 +402,10 @@ randomhtml_clone() {
         -H "Upgrade-Insecure-Requests: 1"
     )
 
-    if ! curl -fsSL "${curl_headers[@]}" --connect-timeout 10 --max-time 60 -o page.html "$site_url" 2>/dev/null; then
+    # The final URL after redirects is what relative asset paths resolve
+    # against (example.com -> https://www.example.com/en/).
+    local page_url
+    if ! page_url=$(curl -fsSL "${curl_headers[@]}" --connect-timeout 10 --max-time 60 -o page.html -w '%{url_effective}' "$site_url" 2>/dev/null); then
         local http_code probe_rc net_reason
         http_code=$(curl -s -o /dev/null -w "%{http_code}" "${curl_headers[@]}" --connect-timeout 10 --max-time 30 "$site_url" 2>/dev/null)
         probe_rc=$?
@@ -420,11 +441,20 @@ randomhtml_clone() {
         return 1
     fi
 
-    host_root=$(printf '%s' "$site_url" | sed -E 's#^(https?://[^/]+).*#\1#')
-    case "$site_url" in
-        */) base_dir="$site_url" ;;
-        *) base_dir="${site_url%/*}/" ;;
-    esac
+    # Query and fragment are not part of the path; a bare origin
+    # (https://example.com) is its own directory — cutting at the last
+    # slash would leave "https://" and lose every relative asset.
+    [[ "$page_url" =~ ^https?:// ]] || page_url="$site_url"
+    page_url="${page_url%%[?#]*}"
+    host_root=$(printf '%s' "$page_url" | sed -E 's#^(https?://[^/]+).*#\1#')
+    if [[ "$page_url" =~ ^https?://[^/]+$ ]]; then
+        base_dir="$page_url/"
+    else
+        case "$page_url" in
+            */) base_dir="$page_url" ;;
+            *) base_dir="${page_url%/*}/" ;;
+        esac
+    fi
 
     total_bytes=$html_size
     while IFS= read -r asset_url; do
@@ -443,7 +473,7 @@ randomhtml_clone() {
         | while IFS= read -r u; do
             case "$u" in
                 http://*|https://*) printf '%s\n' "$u" ;;
-                //*) printf '%s\n' "${site_url%%://*}:$u" ;;
+                //*) printf '%s\n' "${page_url%%://*}:$u" ;;
                 /*) printf '%s\n' "$host_root$u" ;;
                 *) printf '%s\n' "$base_dir$u" ;;
             esac
@@ -510,7 +540,9 @@ randomhtml_clone() {
     downloaded_mb=$(du -sk . 2>/dev/null | cut -f1 | awk '{printf "%.1f", $1/1024}')
     printf "${COLOR_GREEN}${LANG[SITE_CLONE_ACTUAL]}${COLOR_RESET}\n" "${downloaded_mb}M"
 
-    TEMPLATE_DISPLAY_NAME="$site_url"
+    # Local: randomhtml_apply still sees it (dynamic scope), and a template
+    # installed later in the same session no longer shows under this URL.
+    local TEMPLATE_DISPLAY_NAME="$site_url"
     RandomHTML="."
     randomhtml_apply
     local apply_rc=$?

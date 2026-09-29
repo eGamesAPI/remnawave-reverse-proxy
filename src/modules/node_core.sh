@@ -3,13 +3,22 @@
 # Jolymmiles server-focused fork, installed as a bind-mount over the bundled
 # binary. Works purely on the host (docker compose), no panel API involved.
 
+# Legacy state location: the script's own directory, wiped by a reinstall
+# while the mount and the binary stay. Read once to migrate, never written.
 XC_STATE_FILE="${DIR_REMNAWAVE}node-core.state"
 XC_BINARY_NAME="xray-custom"
 XC_MOUNT="./${XC_BINARY_NAME}:/usr/local/bin/xray"
 
-# Known-good pins used when api.github.com is unreachable.
+# Fallback pins used when api.github.com is unreachable. Not a guarantee:
+# the install prompt still shows the tag and warns about releases that
+# change what clients must send (see xc_warn_mlkem).
 XC_PIN_off="v26.9.9"
 XC_PIN_joly="v26.9.5-0936"
+
+# First Xray-core release whose REALITY server rejects a ClientHello without
+# X25519MLKEM768 ahead of X25519: clients on an older uTLS fingerprint are
+# silently sent to the camouflage site instead of getting an error.
+XC_MLKEM_MIN="26.9.8"
 
 xc_repo_of() {
     case "$1" in
@@ -20,9 +29,19 @@ xc_repo_of() {
 
 xc_source_name() {
     case "$1" in
-        off)  echo "XTLS (официальное)" ;;
-        joly) echo "Jolymmiles (форк)" ;;
+        off)  echo "${LANG[XC_SOURCE_OFF_SHORT]}" ;;
+        joly) echo "${LANG[XC_SOURCE_JOLY_SHORT]}" ;;
     esac
+}
+
+# Warn before installing a release at or above XC_MLKEM_MIN. Fork tags carry
+# a build suffix (v26.9.5-0936); the version is compared without it.
+xc_warn_mlkem() {
+    local ver="${1#v}"
+    ver="${ver%%-*}"
+    [[ "$ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] || return 0
+    [ "$(printf '%s\n' "$XC_MLKEM_MIN" "$ver" | sort -V | head -n1)" = "$XC_MLKEM_MIN" ] || return 0
+    echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_MLKEM_WARNING]}" "$1")${COLOR_RESET}"
 }
 
 # Directory holding the compose file with the remnanode service.
@@ -38,17 +57,33 @@ xc_core_dir() {
     return 1
 }
 
+# The state lives next to the compose file and the binary it describes, so
+# removing or reinstalling the script cannot orphan a running custom core.
+xc_state_path() {
+    local dir
+    dir=$(xc_core_dir) || return 1
+    echo "$dir/.${XC_BINARY_NAME}.state"
+}
+
 xc_state_get() {
-    [ -r "$XC_STATE_FILE" ] || return 0
-    sed -n "s|^$1=||p" "$XC_STATE_FILE" | head -n1
+    local file
+    file=$(xc_state_path) || return 0
+    [ -r "$file" ] || file="$XC_STATE_FILE"
+    [ -r "$file" ] || return 0
+    sed -n "s|^$1=||p" "$file" | head -n1
 }
 
 xc_state_set() {
-    printf 'source=%s\nversion=%s\n' "$1" "$2" > "$XC_STATE_FILE"
-    chmod 600 "$XC_STATE_FILE" 2>/dev/null
+    local file
+    file=$(xc_state_path) || return 1
+    ( umask 077 && printf 'source=%s\nversion=%s\n' "$1" "$2" > "$file" )
+    chmod 600 "$file" 2>/dev/null
+    rm -f "$XC_STATE_FILE"
 }
 
 xc_state_clear() {
+    local file
+    file=$(xc_state_path) && rm -f "$file"
     rm -f "$XC_STATE_FILE"
 }
 
@@ -103,7 +138,7 @@ xc_pick_release() {
     if ! xc_list_releases "$repo"; then
         local pinned
         pinned=$(eval "echo \"\$XC_PIN_${source}\"")
-        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_LATEST_FAILED]}" "$pinned")${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_PIN_FALLBACK]}" "$pinned")${COLOR_RESET}"
         XC_PICKED_TAG="$pinned"
         return 0
     fi
@@ -139,14 +174,16 @@ xc_resolve_tag() {
     return 1
 }
 
-# Does the tag exist as a release? rc=2 = could not check (offline).
+# Does the tag exist as a release? rc=1 only on a definite 404; rc=2 = could
+# not check (offline, or 403/429 once the anonymous API rate limit is spent,
+# which says nothing about the tag).
 xc_tag_exists() {
     local repo="$1" tag="$2" code
     code=$(curl -sL -o /dev/null -w "%{http_code}" --connect-timeout 8 --max-time 15 \
         "https://api.github.com/repos/${repo}/releases/tags/${tag}" 2>/dev/null)
     [ "$code" = "200" ] && return 0
-    [ "$code" = "000" ] && return 2
-    return 1
+    [ "$code" = "404" ] && return 1
+    return 2
 }
 
 xc_asset_name() {
@@ -166,22 +203,36 @@ xc_mirror_prefixes() {
     printf '%s\n' "" "https://gh-proxy.com/" "https://ghfast.top/" "https://ghproxy.net/"
 }
 
+# Does a fetched file look like what was asked for? A mirror may answer 200
+# with an HTML error page; that must move on to the next mirror instead of
+# ending as a checksum or unpack failure (or a silently skipped check).
+xc_fetch_ok() { # dest kind
+    [ -s "$1" ] || return 1
+    case "$2" in
+        zip)  [ "$(head -c 2 "$1" 2>/dev/null)" = "PK" ] ;;
+        dgst) grep -q '^SHA2-256=' "$1" 2>/dev/null ;;
+        *)    return 0 ;;
+    esac
+}
+
 # One URL over all mirrors, written straight to a file. The core is a binary
 # zip — it must never pass through a command substitution, bash strips null
-# bytes there and corrupts the archive.
+# bytes there and corrupts the archive. The optional kind (zip, dgst) checks
+# the content, so a mirror's error page is not taken for the file.
 xc_fetch_file() {
-    local url="$1" dest="$2" prefix
+    local url="$1" dest="$2" kind="$3" prefix
     while IFS= read -r prefix; do
         if command -v curl >/dev/null 2>&1; then
-            if curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --max-time 300 -o "$dest" "${prefix}${url}" 2>/dev/null && [ -s "$dest" ]; then
+            if curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --max-time 300 -o "$dest" "${prefix}${url}" 2>/dev/null && xc_fetch_ok "$dest" "$kind"; then
                 return 0
             fi
         else
-            if wget $WGET_IP_FLAGS -q -T 20 -t 1 -O "$dest" "${prefix}${url}" 2>/dev/null && [ -s "$dest" ]; then
+            if wget $WGET_IP_FLAGS -q -T 20 -t 1 -O "$dest" "${prefix}${url}" 2>/dev/null && xc_fetch_ok "$dest" "$kind"; then
                 return 0
             fi
         fi
     done < <(xc_mirror_prefixes)
+    rm -f "$dest"
     return 1
 }
 
@@ -253,22 +304,27 @@ xc_download_core() {
     step_do "$(printf "${LANG[XC_DOWNLOADING]}" "$tag" "$asset")"
     tmpd=$(mktemp -d) || return 1
 
-    if ! xc_fetch_file "$base/$asset" "$tmpd/core.zip"; then
+    if ! xc_fetch_file "$base/$asset" "$tmpd/core.zip" zip; then
         echo -e "${COLOR_RED}${LANG[XC_DOWNLOAD_FAILED]}${COLOR_RESET}"
         rm -rf "$tmpd"
         return 1
     fi
 
-    # SHA2-256 from the .dgst sidecar when it is served
-    if xc_fetch_file "$base/${asset}.dgst" "$tmpd/core.dgst" && [ -s "$tmpd/core.dgst" ]; then
+    # SHA2-256 from the .dgst sidecar when it is served. Every way the check
+    # does not happen is said out loud — an empty hash is a skipped check,
+    # not a passed one.
+    if xc_fetch_file "$base/${asset}.dgst" "$tmpd/core.dgst" dgst; then
         want=$(sed -n 's/^SHA2-256=//p' "$tmpd/core.dgst" | head -n1 | tr -d ' ')
         have=$(sha256sum "$tmpd/core.zip" 2>/dev/null | cut -d' ' -f1)
-        if [ -n "$want" ] && [ "$want" != "$have" ]; then
+        if [ -z "$want" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[XC_CHECKSUM_SKIP]}${COLOR_RESET}"
+        elif [ "$want" != "$have" ]; then
             echo -e "${COLOR_RED}${LANG[XC_CHECKSUM_FAILED]}${COLOR_RESET}"
             rm -rf "$tmpd"
             return 1
+        else
+            echo -e "${COLOR_GREEN}${LANG[XC_CHECKSUM_OK]}${COLOR_RESET}"
         fi
-        [ -n "$want" ] && echo -e "${COLOR_GREEN}${LANG[XC_CHECKSUM_OK]}${COLOR_RESET}"
     else
         echo -e "${COLOR_YELLOW}${LANG[XC_CHECKSUM_SKIP]}${COLOR_RESET}"
     fi
@@ -291,12 +347,16 @@ xc_download_core() {
 
 # Recreate the node container under a spinner, rc captured from the silenced
 # subshell — a failed `up` used to read as success because nothing checked it.
+# Always a real recreate: once the mount exists, a new core changes nothing
+# compose can see, a plain `up -d` leaves the container alone, and the
+# single-file bind mount keeps serving the old binary (install writes a new
+# inode) until some unrelated restart swaps it in.
 xc_recreate_node() {
     local dir="$1" rc_file
     rc_file=$(mktemp)
     (
         cd "$dir" || { echo 1 > "$rc_file"; exit 1; }
-        docker compose up -d remnanode > /dev/null 2>&1
+        docker compose up -d --force-recreate remnanode > /dev/null 2>&1
         echo $? > "$rc_file"
     ) &
     spinner $! "${LANG[WAITING]}"
@@ -304,6 +364,26 @@ xc_recreate_node() {
     rc=$(cat "$rc_file" 2>/dev/null)
     rm -f "$rc_file"
     [ "$rc" = "0" ] || return 1
+    return 0
+}
+
+# Version of the core that actually runs. remnanode >= 3.4 starts Xray
+# through the rw-core symlink, which a panel profile can point at a core of
+# its own; older nodes have no rw-core and run /usr/local/bin/xray directly.
+xc_running_version() {
+    local out
+    out=$(docker exec remnanode /usr/local/bin/rw-core version 2>/dev/null | head -n1)
+    [ -n "$out" ] || out=$(docker exec remnanode xray version 2>/dev/null | head -n1)
+    printf '%s' "$out"
+}
+
+# Prints the core the panel profile switched rw-core to, empty when rw-core
+# still runs /usr/local/bin/xray (our mount) or does not exist. The -L test
+# comes first: readlink -f prints a path even for a missing last component.
+xc_profile_core() {
+    local target
+    target=$(docker exec remnanode sh -c 'l=/usr/local/bin/rw-core; [ -L "$l" ] && readlink -f "$l"' 2>/dev/null)
+    [ -n "$target" ] && [ "$target" != "/usr/local/bin/xray" ] && printf '%s' "$target"
     return 0
 }
 
@@ -319,6 +399,7 @@ xc_install_core() {
     compose="$dir/docker-compose.yml"
 
     echo ""
+    xc_warn_mlkem "$tag"
     if ! reading_yn "$(printf "${LANG[XC_WARNING]}" "$(xc_source_name "$source")" "$tag")" confirm; then
         return 0
     fi
@@ -341,30 +422,48 @@ xc_install_core() {
     fi
     xc_backup_cleanup
 
-    xc_state_set "$source" "$tag"
-
     step_do "${LANG[XC_APPLYING]}"
     if ! xc_recreate_node "$dir"; then
-        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL]}" "$dir")${COLOR_RESET}"
+        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL_RECREATE]}" "$dir")${COLOR_RESET}"
         return 1
     fi
 
     # The version check is the real proof: the freshly installed tag must
     # actually RUN. One immediate exec can hit a still-booting container —
     # retry a few times — and a version that does not match the tag means the
-    # recreate never took (an old container must not read as success).
-    local try running
+    # recreate never took (an old container must not read as success). The
+    # state records the tag only then: a state ahead of the running core
+    # would make the next "Update" answer "already the latest".
+    local try running profile_core
     running=""
     for try in 1 2 3 4 5; do
-        running=$(docker exec remnanode xray version 2>/dev/null | head -n1)
+        running=$(xc_running_version)
         [ -n "$running" ] && break
         sleep 2
     done
-    if echo "$running" | grep -q "${tag#v}"; then
+    profile_core=$(xc_profile_core)
+    if [ -n "$profile_core" ]; then
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_PROFILE_CORE]}" "$profile_core")${COLOR_RESET}"
+        # rw-core runs the profile's core by design, so its version says
+        # nothing about this install: the mounted binary itself is checked.
+        running=$(docker exec remnanode /usr/local/bin/xray version 2>/dev/null | head -n1)
+    fi
+    # Compared as X.Y.Z: fork tags carry a build suffix (v26.9.5-0936) the
+    # binary may not print, and a substring match would take 26.9.1 for
+    # 26.9.12.
+    local want_ver run_ver
+    want_ver="${tag#v}"
+    want_ver="${want_ver%%-*}"
+    run_ver=$(printf '%s\n' "$running" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+    if [ -n "$run_ver" ] && [ "$run_ver" = "$want_ver" ]; then
+        xc_state_set "$source" "$tag"
         step_ok "$(printf "${LANG[XC_INSTALLED_OK]}" "$(xc_source_name "$source")" "$tag")"
     elif [ -n "$running" ]; then
         echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_INSTALLED_MISMATCH]}" "$running")${COLOR_RESET}"
+        return 1
     else
+        # Installed and mounted, only unverified: the state follows the disk.
+        xc_state_set "$source" "$tag"
         echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_INSTALLED_NORUN]}" "$(xc_source_name "$source")" "$tag")${COLOR_RESET}"
     fi
     return 0
@@ -400,14 +499,14 @@ xc_restore_core() {
 
     step_do "${LANG[XC_APPLYING]}"
     if ! xc_recreate_node "$dir"; then
-        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL]}" "$dir")${COLOR_RESET}"
+        echo -e "${COLOR_RED}$(printf "${LANG[XC_APPLY_FAIL_RECREATE]}" "$dir")${COLOR_RESET}"
         return 1
     fi
     step_ok "${LANG[XC_RESTORED_OK]}"
 }
 
 xc_print_status() {
-    local dir mount_present running installed_source installed_tag
+    local dir mount_present running installed_source installed_tag profile_core
     dir=$(xc_core_dir) || {
         echo -e "${COLOR_YELLOW}${LANG[XC_NO_NODE]}${COLOR_RESET}"
         return 1
@@ -419,11 +518,17 @@ xc_print_status() {
 
     if [ "$mount_present" = true ] && [ -n "$installed_tag" ]; then
         echo -e " $(printf "${LANG[XC_STATUS_INSTALLED]}" "$(xc_source_name "$installed_source")" "$installed_tag")"
+    elif [ "$mount_present" = true ]; then
+        # Mounted but no state (lost with an old script directory): still
+        # a custom core, only its origin is unknown.
+        echo -e " ${LANG[XC_STATUS_UNKNOWN]}"
     else
         echo -e " ${COLOR_GRAY}${LANG[XC_STATUS_BUNDLED]}${COLOR_RESET}"
     fi
-    running=$(docker exec remnanode xray version 2>/dev/null | head -n1)
+    running=$(xc_running_version)
     [ -n "$running" ] && echo -e " ${COLOR_GRAY}$(printf "${LANG[XC_STATUS_RUNNING]}" "$running")${COLOR_RESET}"
+    profile_core=$(xc_profile_core)
+    [ -n "$profile_core" ] && echo -e " ${COLOR_YELLOW}$(printf "${LANG[XC_PROFILE_CORE]}" "$profile_core")${COLOR_RESET}"
 }
 
 show_xray_core_menu() {
@@ -442,7 +547,7 @@ show_xray_core_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=5 xc_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" xc_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" xc_option || return 0
 
     local source
     case $xc_option in
@@ -486,7 +591,7 @@ xc_install_manual() {
     echo -e "${COLOR_YELLOW}1. ${LANG[XC_SOURCE_OFF_NAME]}${COLOR_RESET}"
     echo -e "${COLOR_YELLOW}2. ${LANG[XC_SOURCE_JOLY_NAME]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[XC_MANUAL_SOURCE_PROMPT]}" source_num
+    reading "${LANG[XC_MANUAL_SOURCE_PROMPT]}" source_num || return 0
     case $source_num in
         1) source="off" ;;
         2) source="joly" ;;
@@ -518,7 +623,7 @@ xc_update_core() {
     fi
     step_do "${LANG[XC_RESOLVING]}"
     if ! tag=$(xc_resolve_tag "$source"); then
-        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_LATEST_FAILED]}" "$tag")${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[XC_PIN_FALLBACK]}" "$tag")${COLOR_RESET}"
     fi
     if [ "$tag" = "$current" ]; then
         echo -e "${COLOR_GREEN}$(printf "${LANG[XC_UPDATE_SAME]}" "$current")${COLOR_RESET}"

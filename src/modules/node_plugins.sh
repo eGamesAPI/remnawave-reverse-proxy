@@ -16,19 +16,45 @@ NP_DEFAULT_DURATION=3600
 NP_PLUGIN_SECTIONS='["torrentBlocker","ingressFilter","egressFilter"]'
 NP_PLUGIN_KNOWN_NAMES='["Reverse Node Plugins","Torrent Blocker","Ingress Filter","Egress Filter"]'
 
+# The shared plugin's uuid, remembered on every pick and create: the record
+# may be renamed in the panel UI, and a name-only lookup then missed it and
+# created a fresh empty record.
+NP_STATE_FILE="${DIR_REMNAWAVE}node-plugin.uuid"
+
+# Session answer to "re-bind nodes running another plugin?": "keep" after a
+# no, so every later save in this run does not ask again.
+NP_FOREIGN_NODES=""
+
 np_api() {
     local method="$1" path="$2" data="${3:-}"
     make_api_request "$method" "http://${NP_PANEL_HOST}${path}" "$token" "$data"
 }
 
 # Sync/executor return 202 with an empty body; anything JSON-shaped carrying
-# statusCode/message at the top level is an API error.
+# statusCode/message at the top level is an API error. The optional second
+# argument is the curl exit code of the request: an empty body only counts
+# as accepted when curl itself succeeded (connection refused and timeouts
+# also print nothing), and a non-JSON body is never a success.
 np_accepted() {
-    local body="${1:-}"
+    local body="${1:-}" rc="${2:-0}"
+    [ "$rc" -eq 0 ] || return 1
     [ -z "$body" ] && return 0
+    echo "$body" | jq -e . >/dev/null 2>&1 || return 1
     if echo "$body" | jq -e 'has("statusCode") or has("message")' >/dev/null 2>&1; then
         return 1
     fi
+    return 0
+}
+
+np_saved_uuid() {
+    [ -r "$NP_STATE_FILE" ] || return 0
+    head -n1 "$NP_STATE_FILE" 2>/dev/null
+}
+
+np_save_uuid() {
+    [ -n "$1" ] || return 0
+    [ "$(np_saved_uuid)" = "$1" ] && return 0
+    { printf '%s\n' "$1" > "$NP_STATE_FILE" && chmod 600 "$NP_STATE_FILE"; } 2>/dev/null
     return 0
 }
 
@@ -68,30 +94,36 @@ np_fetch_plugin_config() {
     return 0
 }
 
-# Pick the shared plugin for a config section. Preference order: the record
-# named exactly like the shared plugin, then any plugin already carrying the
-# section (adoption), then any record under a known legacy name — so a
-# renamed-but-empty plugin is still found. Sets np_uuid, np_name and
-# np_config_json; np_uuid stays empty when there is no such plugin.
+# Pick the shared plugin. Preference order: the record whose uuid was saved
+# last time (a rename in the panel UI keeps it), then the record named
+# exactly like the shared plugin, then any record under a known legacy name.
+# The list serves pluginConfig as null, so the config always comes from the
+# per-uuid GET; when that GET fails the pick fails (rc 1) instead of falling
+# back to "{}" — a PATCH on top of "{}" wiped every other section on all
+# nodes. Sets np_uuid, np_name and np_config_json; np_uuid stays empty when
+# there is no such plugin.
 np_select_plugin() {
     local section="$1" fallback_name="$2"
     np_uuid=""
     np_name="$fallback_name"
     np_config_json="{}"
-    local match
-    match=$(echo "$np_plugins_json" | jq -c --arg section "$section" --arg shared "$NP_PLUGIN_NAME" --argjson names "$NP_PLUGIN_KNOWN_NAMES" '
-        ([.[] | select(.name == $shared)] | .[0]) as $by_shared
-        | ($by_shared
-            // ([.[] | select(((.pluginConfig // {}) | has($section)))] | .[0])
-            // ([.[] | select(.name as $n | ($names | index($n)) != null)] | .[0])) // null' 2>/dev/null)
+    local match saved
+    saved=$(np_saved_uuid)
+    match=$(echo "$np_plugins_json" | jq -c --arg saved "$saved" --arg shared "$NP_PLUGIN_NAME" --argjson names "$NP_PLUGIN_KNOWN_NAMES" '
+        ([.[] | select($saved != "" and .uuid == $saved)] | .[0])
+        // ([.[] | select(.name == $shared)] | .[0])
+        // ([.[] | select(.name as $n | ($names | index($n)) != null)] | .[0])
+        // null' 2>/dev/null)
     if [ -n "$match" ] && [ "$match" != "null" ]; then
         np_uuid=$(echo "$match" | jq -r '.uuid // empty')
         np_name=$(echo "$match" | jq -r --arg fallback "$fallback_name" '.name // $fallback')
-        local list_cfg
-        list_cfg=$(echo "$match" | jq -c '.pluginConfig // {}')
-        np_config_json="$list_cfg"
-        np_fetch_plugin_config || np_config_json="$list_cfg"
+        if ! np_fetch_plugin_config; then
+            np_config_json=""
+            return 1
+        fi
+        np_save_uuid "$np_uuid"
     fi
+    return 0
 }
 
 np_refresh_plugin() {
@@ -101,17 +133,23 @@ np_refresh_plugin() {
 
 # Older script versions kept one plugin record per feature, but a node holds a
 # single activePluginUuid — so at most one of them ever ran. Merge any legacy
-# records into the shared plugin (sections deep-merged, the first record wins
-# where two configs collide), delete the extras and re-bind the nodes. A lone
-# record already named right is left alone.
+# records into the shared plugin (sections deep-merged, the keeper wins
+# where two configs collide), delete the extras and re-bind the nodes — only
+# after the user agreed to the listed records. The keeper is the record with
+# the saved uuid, else the one named like the shared plugin, else the first
+# legacy one. A lone record that already is the shared plugin is left alone.
+# The list serves pluginConfig as null, so records are matched by name and
+# saved uuid only.
 np_consolidate_plugins() {
     np_fetch_plugins || return 1
-    local candidates total
-    candidates=$(echo "$np_plugins_json" | jq -c --argjson names "$NP_PLUGIN_KNOWN_NAMES" --argjson sections "$NP_PLUGIN_SECTIONS" '
+    local candidates total saved
+    saved=$(np_saved_uuid)
+    candidates=$(echo "$np_plugins_json" | jq -c --argjson names "$NP_PLUGIN_KNOWN_NAMES" --arg saved "$saved" --arg shared "$NP_PLUGIN_NAME" '
         [.[] | . as $rec | select(
             ($names | index($rec.name)) != null
-            or any($sections[]; . as $s | (($rec.pluginConfig // {}) | has($s)))
-        )]' 2>/dev/null)
+            or ($saved != "" and $rec.uuid == $saved)
+        )]
+        | sort_by(if ($saved != "" and .uuid == $saved) then 0 elif .name == $shared then 1 else 2 end)' 2>/dev/null)
     [ -z "$candidates" ] && candidates="[]"
     total=$(echo "$candidates" | jq 'length')
     [ "$total" -eq 0 ] && return 0
@@ -119,12 +157,22 @@ np_consolidate_plugins() {
     local keeper_uuid keeper_name
     keeper_uuid=$(echo "$candidates" | jq -r '.[0].uuid')
     keeper_name=$(echo "$candidates" | jq -r '.[0].name')
-    if [ "$total" -eq 1 ] && [ "$keeper_name" = "$NP_PLUGIN_NAME" ]; then
+    if [ "$total" -eq 1 ] && { [ "$keeper_name" = "$NP_PLUGIN_NAME" ] || [ "$keeper_uuid" = "$saved" ]; }; then
         return 0
     fi
 
-    local i uuid cfg merged="" names_summary body response
+    # A stock/legacy name gives way to the shared one; a custom rename sticks.
+    local rename final_name="$keeper_name"
+    rename=$(echo "$NP_PLUGIN_KNOWN_NAMES" | jq --arg n "$keeper_name" --arg shared "$NP_PLUGIN_NAME" '$n != $shared and index($n) != null')
+    [ "$rename" = "true" ] && final_name="$NP_PLUGIN_NAME"
+
+    local i uuid cfg merged="" names_summary body response api_rc merge_confirm
     names_summary=$(echo "$candidates" | jq -r '[.[].name] | join(", ")')
+    # Merging deletes records and re-binds every enabled node: never without
+    # a yes. A no (or closed stdin) leaves everything as is until next entry.
+    if ! reading_yn "$(printf "${LANG[NP_MIGRATE_CONFIRM]}" "$names_summary" "$final_name")" merge_confirm; then
+        return 0
+    fi
     step_do "$(printf "${LANG[NP_MIGRATE_STEP]}" "$names_summary")"
 
     # Deep-merge in reverse list order so the keeper (first record) wins
@@ -139,16 +187,24 @@ np_consolidate_plugins() {
         if [ -z "$merged" ]; then
             merged="$cfg"
         else
-            # jq's * keeps the right side on conflicts, so the merge gathered
-            # so far (records closer to the keeper) beats the current one.
-            merged=$(jq -nc --argjson cur "$cfg" --argjson acc "$merged" '$cur * $acc')
+            # jq's * keeps the right side on conflicts, so the current record
+            # (closer to the keeper) goes right and beats the merge gathered
+            # so far from records further down the list. * replaces arrays
+            # whole, so the address/port lists are united instead: a "merge"
+            # must not drop the other record's blocked or ignored entries.
+            merged=$(jq -nc --argjson cur "$cfg" --argjson acc "$merged" '
+                reduce (["ingressFilter","blockedIps"], ["egressFilter","blockedIps"],
+                        ["egressFilter","blockedPorts"], ["torrentBlocker","ignoreLists","ip"],
+                        ["torrentBlocker","ignoreLists","userId"]) as $p
+                    ($acc * $cur;
+                     ((try ($acc | getpath($p)) catch null) // null) as $a
+                     | ((try ($cur | getpath($p)) catch null) // null) as $c
+                     | if ($a | type) == "array" and ($c | type) == "array"
+                       then setpath($p; $c + ($a - $c)) else . end)')
         fi
     done
 
     body=$(jq -n --arg uuid "$keeper_uuid" --argjson cfg "$merged" '{uuid: $uuid, pluginConfig: $cfg}')
-    # A stock/legacy name gives way to the shared one; a custom rename sticks.
-    local rename
-    rename=$(echo "$NP_PLUGIN_KNOWN_NAMES" | jq --arg n "$keeper_name" --arg shared "$NP_PLUGIN_NAME" '$n != $shared and index($n) != null')
     if [ "$rename" = "true" ]; then
         body=$(echo "$body" | jq -c --arg name "$NP_PLUGIN_NAME" '. + {name: $name}')
     fi
@@ -157,17 +213,20 @@ np_consolidate_plugins() {
         echo -e "${COLOR_RED}$(printf "${LANG[NP_MIGRATE_FAIL]}" "$response")${COLOR_RESET}"
         return 1
     fi
+    np_save_uuid "$keeper_uuid"
 
     for ((i = 1; i < total; i++)); do
         uuid=$(echo "$candidates" | jq -r ".[$i].uuid")
-        response=$(np_api "DELETE" "/api/node-plugins/${uuid}")
-        np_accepted "$response" || echo -e "${COLOR_YELLOW}$(printf "${LANG[NP_MIGRATE_DELETE_FAIL]}" "$uuid")${COLOR_RESET}"
+        api_rc=0
+        response=$(np_api "DELETE" "/api/node-plugins/${uuid}") || api_rc=$?
+        np_accepted "$response" "$api_rc" || echo -e "${COLOR_YELLOW}$(printf "${LANG[NP_MIGRATE_DELETE_FAIL]}" "$uuid")${COLOR_RESET}"
     done
 
     # Nodes still pointing at a deleted record must move to the keeper —
     # binding every enabled node also activates the merged plugin everywhere.
+    # The merged records count as ours, not as another plugin on the node.
     local attach_rc=0
-    np_attach_plugin "$keeper_uuid" || attach_rc=$?
+    np_attach_plugin "$keeper_uuid" "$(echo "$candidates" | jq -c '[.[].uuid]')" || attach_rc=$?
     if [ "$attach_rc" -eq 0 ]; then
         step_ok "${LANG[NP_MIGRATE_OK]}"
     elif [ "$attach_rc" -eq 2 ]; then
@@ -209,6 +268,7 @@ np_ensure_plugin() {
         echo -e "${COLOR_RED}$(printf "${LANG[NP_CREATE_FAIL]}" "$response")${COLOR_RESET}"
         return 1
     fi
+    np_save_uuid "$np_uuid"
     np_config_json="{}"
     return 0
 }
@@ -219,28 +279,42 @@ np_ensure_plugin() {
 # shot; offline nodes keep the binding in the panel DB and pick the config up
 # on reconnect.
 
-# Space-separated uuids of every enabled node; empty when there are none.
-np_enabled_node_uuids() {
-    local response
+# Bind the plugin to every enabled node. A node holds one activePluginUuid,
+# so nodes running another plugin are listed and re-bound only after a yes;
+# on a no they keep their plugin for the rest of the session. The optional
+# second argument is a JSON array of extra plugin uuids that count as ours
+# (records merged into this one). 0 — bound (or every node kept its own
+# plugin); 1 — API failed; 2 — no enabled nodes.
+np_attach_plugin() {
+    local plugin_uuid="$1" ours="${2:-[]}"
+    local response nodes_json foreign uuids_json body api_rc=0 rebind_confirm
     response=$(np_api "GET" "/api/nodes?_=$(date +%s)")
     if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
         return 1
     fi
-    echo "$response" | jq -r '[.response[] | select(.isDisabled == false) | .uuid] | join(" ")'
-}
-
-# Bind the plugin to every enabled node. 0 — bound; 1 — API failed;
-# 2 — no enabled nodes.
-np_attach_plugin() {
-    local plugin_uuid="$1"
-    local uuids uuids_json body response
-    uuids=$(np_enabled_node_uuids) || return 1
-    [ -z "$uuids" ] && return 2
-    uuids_json=$(printf '%s\n' $uuids | jq -R . | jq -s .)
+    nodes_json=$(echo "$response" | jq -c --arg uuid "$plugin_uuid" --argjson ours "$ours" \
+        '[.response[] | select(.isDisabled == false)
+          | .activePluginUuid as $active
+          | . + {foreign: ($active != null and $active != $uuid
+                           and (($ours | index($active)) == null))}]')
+    [ "$(echo "$nodes_json" | jq 'length')" -eq 0 ] && return 2
+    foreign=$(echo "$nodes_json" | jq -r '[.[] | select(.foreign) | .name] | join(", ")')
+    if [ -n "$foreign" ] && [ "$NP_FOREIGN_NODES" != "keep" ]; then
+        if ! reading_yn "$(printf "${LANG[NP_ATTACH_FOREIGN_CONFIRM]}" "$foreign")" rebind_confirm; then
+            NP_FOREIGN_NODES="keep"
+        fi
+    fi
+    if [ -n "$foreign" ] && [ "$NP_FOREIGN_NODES" = "keep" ]; then
+        uuids_json=$(echo "$nodes_json" | jq -c '[.[] | select(.foreign | not) | .uuid]')
+        echo -e "${COLOR_YELLOW}$(printf "${LANG[NP_ATTACH_FOREIGN_KEPT]}" "$foreign")${COLOR_RESET}"
+    else
+        uuids_json=$(echo "$nodes_json" | jq -c '[.[].uuid]')
+    fi
+    [ "$(echo "$uuids_json" | jq 'length')" -eq 0 ] && return 0
     body=$(jq -n --argjson uuids "$uuids_json" --arg uuid "$plugin_uuid" \
         '{uuids: $uuids, fields: {activePluginUuid: $uuid}}')
-    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body")
-    np_accepted "$response"
+    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body") || api_rc=$?
+    np_accepted "$response" "$api_rc"
 }
 
 # Unbind the plugin from every enabled node carrying it. 0 — done (or nothing
@@ -256,8 +330,9 @@ np_detach_plugin() {
         '[.response[] | select(.isDisabled == false) | select(.activePluginUuid == $uuid) | .uuid]')
     [ "$(echo "$uuids_json" | jq 'length')" -eq 0 ] && return 0
     body=$(jq -n --argjson uuids "$uuids_json" '{uuids: $uuids, fields: {activePluginUuid: null}}')
-    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body")
-    np_accepted "$response"
+    local api_rc=0
+    response=$(np_api "POST" "/api/nodes/bulk-actions/update" "$body") || api_rc=$?
+    np_accepted "$response" "$api_rc"
 }
 
 # Fill NP_BOUND_COUNT / NP_NODES_COUNT with "enabled nodes running the
@@ -288,8 +363,9 @@ np_apply_config() {
         echo -e "${COLOR_RED}$(printf "${LANG[NP_UPDATE_FAIL]}" "$response")${COLOR_RESET}"
         return 1
     fi
-    sync_response=$(np_api "POST" "/api/node-plugins/actions/sync" "$(jq -n --arg uuid "$np_uuid" '{uuid: $uuid}')")
-    if ! np_accepted "$sync_response"; then
+    local api_rc=0
+    sync_response=$(np_api "POST" "/api/node-plugins/actions/sync" "$(jq -n --arg uuid "$np_uuid" '{uuid: $uuid}')") || api_rc=$?
+    if ! np_accepted "$sync_response" "$api_rc"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_SYNC_FAIL]}" "$sync_response")${COLOR_RESET}"
         return 1
     fi
@@ -317,8 +393,11 @@ np_valid_ipv4() {
     local ip="$1"
     [[ "$ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
     local octet
+    # Leading zeros are refused like the panel schema does (and "08" is not
+    # read as a broken octal number); 10# keeps the comparison decimal.
     for octet in "${BASH_REMATCH[@]:1}"; do
-        (( octet <= 255 )) || return 1
+        case "$octet" in 0[0-9]*) return 1 ;; esac
+        (( 10#$octet <= 255 )) || return 1
     done
 }
 
@@ -336,7 +415,7 @@ np_valid_cidr4() {
     case "$entry" in
         */*)
             prefix="${entry##*/}"
-            [[ "$prefix" =~ ^[0-9]{1,2}$ ]] || return 1
+            [[ "$prefix" =~ ^[1-9][0-9]?$ ]] || return 1
             (( 8 <= 10#$prefix && 10#$prefix <= 32 )) || return 1
             ;;
     esac
@@ -394,7 +473,7 @@ np_settings() {
     step_do "${LANG[NP_SETTINGS_TITLE]}"
 
     local duration_input
-    reading "$(printf "${LANG[NP_DURATION_PROMPT]}" "$duration")" duration_input
+    reading "$(printf "${LANG[NP_DURATION_PROMPT]}" "$duration")" duration_input || return 0
     if [ -n "$duration_input" ]; then
         if ! [[ "$duration_input" =~ ^[0-9]+$ ]] || [ "$duration_input" -le 0 ]; then
             echo -e "${COLOR_RED}${LANG[NP_INVALID_DURATION]}${COLOR_RESET}"
@@ -404,7 +483,7 @@ np_settings() {
     fi
 
     local ips_input ips_json
-    reading "$(printf "${LANG[NP_IPS_PROMPT]}" "$ips_display")" ips_input
+    reading "$(printf "${LANG[NP_IPS_PROMPT]}" "$ips_display")" ips_input || return 0
     if [ -z "$ips_input" ]; then
         ips_json=$(echo "$np_config_json" | jq -c '.torrentBlocker.ignoreLists.ip // []')
     elif [ "$ips_input" = "-" ]; then
@@ -491,18 +570,18 @@ np_stats() {
 
 np_unblock_ip() {
     local unblock_ip
-    reading "${LANG[NP_UNBLOCK_PROMPT]}" unblock_ip
+    reading "${LANG[NP_UNBLOCK_PROMPT]}" unblock_ip || return 0
     [ -z "$unblock_ip" ] && return 0
     if ! np_valid_ip "$unblock_ip"; then
         echo -e "${COLOR_RED}$(printf "${LANG[NP_INVALID_IP]}" "$unblock_ip")${COLOR_RESET}"
         return 1
     fi
     step_do "$(printf "${LANG[NP_UNBLOCKING]}" "$unblock_ip")"
-    local body response
+    local body response api_rc=0
     body=$(jq -n --arg ip "$unblock_ip" \
         '{command: {command: "unblockIps", ips: [$ip]}, targetNodes: {target: "allNodes"}}')
-    response=$(np_api "POST" "/api/node-plugins/executor" "$body")
-    if np_accepted "$response"; then
+    response=$(np_api "POST" "/api/node-plugins/executor" "$body") || api_rc=$?
+    if np_accepted "$response" "$api_rc"; then
         step_ok "$(printf "${LANG[NP_UNBLOCK_OK]}" "$unblock_ip")"
     else
         echo -e "${COLOR_RED}$(printf "${LANG[NP_EXEC_FAIL]}" "$response")${COLOR_RESET}"
@@ -510,15 +589,21 @@ np_unblock_ip() {
 }
 
 np_recreate_tables() {
+    # The node rebuilds its whole nftables table, and the Ingress/Egress sets
+    # are refilled only when the plugin config hash changes — say so before
+    # the reset whenever those filters are on (or their state is unknown).
+    if ! np_refresh_plugin "torrentBlocker" "$NP_PLUGIN_NAME" || ig_is_on || eg_is_on; then
+        echo -e "${COLOR_YELLOW}${LANG[NP_RECREATE_FILTERS_NOTE]}${COLOR_RESET}"
+    fi
     local confirm
     if ! reading_yn "${LANG[NP_RECREATE_CONFIRM]}" confirm; then
         return 0
     fi
     step_do "${LANG[NP_RECREATING]}"
-    local body response
+    local body response api_rc=0
     body=$(jq -n '{command: {command: "recreateTables"}, targetNodes: {target: "allNodes"}}')
-    response=$(np_api "POST" "/api/node-plugins/executor" "$body")
-    if np_accepted "$response"; then
+    response=$(np_api "POST" "/api/node-plugins/executor" "$body") || api_rc=$?
+    if np_accepted "$response" "$api_rc"; then
         step_ok "${LANG[NP_RECREATE_OK]}"
     else
         echo -e "${COLOR_RED}$(printf "${LANG[NP_EXEC_FAIL]}" "$response")${COLOR_RESET}"
@@ -545,11 +630,11 @@ np_delete() {
         return 1
     fi
     step_do "${LANG[NP_DELETING]}"
-    local response
-    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}")
-    if np_accepted "$response"; then
+    local response api_rc=0
+    response=$(np_api "DELETE" "/api/node-plugins/${np_uuid}") || api_rc=$?
+    if np_accepted "$response" "$api_rc"; then
         step_ok "${LANG[NP_DELETED_OK]}"
-        rm -f "$IG_STATE_FILE" "$EG_STATE_FILE"
+        rm -f "$IG_STATE_FILE" "$EG_STATE_FILE" "$NP_STATE_FILE"
     else
         echo -e "${COLOR_RED}$(printf "${LANG[NP_DELETE_FAIL]}" "$response")${COLOR_RESET}"
     fi
@@ -559,6 +644,25 @@ np_delete() {
 
 IG_PLUGIN_NAME="Ingress Filter"
 IG_STATE_FILE="${DIR_REMNAWAVE}ingress-preset.state"
+
+# A clean preset line: IPv4 octets 0-255 without leading zeros (the panel
+# schema refuses them, and one bad line fails the whole PATCH) and an
+# optional /8-/32 prefix, the same range np_valid_cidr4 allows by hand.
+IG_CIDR_RE='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(/([89]|[12][0-9]|3[0-2]))?$'
+
+# The presets menu re-renders after every action; remote checks reuse one
+# download per preset for IG_REMOTE_TTL seconds, and one failed download
+# (GitHub and every mirror down) skips the checks for the same time instead
+# of waiting on each mirror again for every preset.
+IG_REMOTE_TTL=600
+declare -gA IG_REMOTE_CACHE=() IG_REMOTE_CACHE_TS=() IG_REMOTE_FAIL_ID_TS=()
+IG_REMOTE_FAIL_TS=0
+
+# Entries every other id of a preset state file claims ("manual" included).
+np_state_others() {
+    [ -r "$1" ] || return 0
+    awk -F'\t' -v id="$2" '$1 != id { print $2 }' "$1"
+}
 
 ig_is_on() {
     echo "$np_config_json" | jq -e '.ingressFilter.enabled == true or .ingressFilter.enabled == "true"' >/dev/null 2>&1
@@ -604,22 +708,35 @@ ig_mirror_prefixes() {
     printf '%s\n' "" "https://gh-proxy.com/" "https://ghfast.top/" "https://ghproxy.net/"
 }
 
-# One URL over all mirrors -> body on stdout. Garbage pages (a mirror's error
-# interstitial, the origin's 404 text) are dropped later by the CIDR filter.
+# One URL over all mirrors -> body on stdout. A body counts only when it
+# carries at least one clean IPv4/CIDR line: a mirror's error interstitial
+# or the origin's 404 text moves on to the next mirror instead of ending the
+# search with a page the CIDR filter later empties.
+#
+# rc 1 — some server answered, but with no list (404, error page); rc 2 — no
+# server answered at all (network down), which the menu checks treat as
+# "skip every preset for a while".
 ig_fetch_url() {
-    local url="$1" prefix body
+    local url="$1" prefix body rc answered=0
     while IFS= read -r prefix; do
         if command -v curl >/dev/null 2>&1; then
-            body=$(curl -sL $CURL_IP_FLAGS --connect-timeout 10 --max-time 60 "${prefix}${url}" 2>/dev/null)
+            body=$(curl -fsSL $CURL_IP_FLAGS --connect-timeout 10 --max-time 60 "${prefix}${url}" 2>/dev/null)
+            rc=$?
+            # 22: an HTTP error status, so the server itself is reachable
+            { [ "$rc" -eq 0 ] || [ "$rc" -eq 22 ]; } && answered=1
         else
             body=$(wget $WGET_IP_FLAGS -q -T 10 -t 1 -O- "${prefix}${url}" 2>/dev/null)
+            rc=$?
+            # 8: the server issued an error response
+            { [ "$rc" -eq 0 ] || [ "$rc" -eq 8 ]; } && answered=1
         fi
-        if [ -n "$body" ]; then
+        if [ -n "$body" ] && printf '%s\n' "$body" | sed 's/\r//g' | grep -qE "$IG_CIDR_RE"; then
             printf '%s\n' "$body"
             return 0
         fi
     done < <(ig_mirror_prefixes)
-    return 1
+    [ "$answered" = "1" ] && return 1
+    return 2
 }
 
 ig_preset_sources() {
@@ -665,20 +782,49 @@ ig_preset_state_set() {
     chmod 600 "$IG_STATE_FILE" 2>/dev/null
 }
 
-# Download every file of a preset over mirrors (all-or-nothing) and keep only
-# clean IPv4 / IPv4-CIDR lines.
+# Download every file of a preset over mirrors (all-or-nothing: every file
+# must give at least one entry, see ig_fetch_url) and keep only clean
+# IPv4 / IPv4-CIDR lines.
 ig_fetch_preset_entries() {
     local id="$1" url body entries=""
     while IFS= read -r url; do
         [ -z "$url" ] && continue
-        body=$(ig_fetch_url "$url") || return 1
+        body=$(ig_fetch_url "$url") || return $?
         entries+="$body"$'\n'
     done <<< "$(ig_preset_sources "$id")"
     IG_PRESET_ENTRIES=$(printf '%s' "$entries" | sed 's/\r//g' \
-        | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}(/[0-9]{1,2})?$' | sort -u)
+        | grep -E "$IG_CIDR_RE" | sort -u)
     IG_PRESET_COUNT=$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | wc -l)
     [ "$IG_PRESET_COUNT" -gt 0 ] || return 1
+    IG_REMOTE_CACHE[$id]="$IG_PRESET_ENTRIES"
+    IG_REMOTE_CACHE_TS[$id]=$(date +%s)
     return 0
+}
+
+# Menu-side twin of ig_fetch_preset_entries: serves a fresh-enough download
+# from the session cache, and after a failed download skips the network for
+# IG_REMOTE_TTL seconds — for every preset when no server answered at all,
+# for this preset only when its list is broken upstream (so one dead file
+# does not starve the checks of the presets after it). Applying a preset
+# always downloads anew.
+ig_fetch_preset_cached() {
+    local id="$1" now rc
+    now=$(date +%s)
+    if [ -n "${IG_REMOTE_CACHE_TS[$id]:-}" ] && (( now - ${IG_REMOTE_CACHE_TS[$id]} < IG_REMOTE_TTL )); then
+        IG_PRESET_ENTRIES="${IG_REMOTE_CACHE[$id]}"
+        IG_PRESET_COUNT=$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | wc -l)
+        return 0
+    fi
+    (( now - IG_REMOTE_FAIL_TS < IG_REMOTE_TTL )) && return 1
+    (( now - ${IG_REMOTE_FAIL_ID_TS[$id]:-0} < IG_REMOTE_TTL )) && return 1
+    ig_fetch_preset_entries "$id" && return 0
+    rc=$?
+    if [ "$rc" -eq 2 ]; then
+        IG_REMOTE_FAIL_TS=$now
+    else
+        IG_REMOTE_FAIL_ID_TS[$id]=$now
+    fi
+    return 1
 }
 
 # True when the preset is applied AND the remote list differs from what was
@@ -687,7 +833,7 @@ ig_preset_needs_update() {
     local id="$1" applied remote
     applied=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
     [ -n "$applied" ] || return 1
-    ig_fetch_preset_entries "$id" || return 1
+    ig_fetch_preset_cached "$id" || return 1
     remote=$(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u)
     [ "$remote" != "$applied" ]
 }
@@ -714,11 +860,14 @@ ig_preset_apply() {
     fi
 
     # Replace only this preset's previous entries; manual entries and other
-    # presets stay in place.
-    local current old_preset merged
+    # presets stay in place — an old entry another preset or a manual add
+    # (id "manual" in the state) still claims is not subtracted.
+    local current old_preset merged keep
     current=$(ig_current_entries | sed '/^$/d' | sort -u)
     old_preset=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
     if [ -n "$old_preset" ]; then
+        keep=$(np_state_others "$IG_STATE_FILE" "$id" | sed '/^$/d' | sort -u)
+        [ -n "$keep" ] && old_preset=$(comm -23 <(printf '%s\n' "$old_preset") <(printf '%s\n' "$keep"))
         current=$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$old_preset"))
     fi
     merged=$(printf '%s\n%s\n' "$current" "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u)
@@ -786,6 +935,8 @@ ig_manual_add() {
     merged=$(printf '%s\n%s\n' "$(ig_current_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)
     total=$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)
     if ig_apply_entries "$merged"; then
+        # Remember manual entries so a preset update never subtracts them.
+        ig_preset_state_set "manual" "$(printf '%s\n%s\n' "$(ig_preset_state_get "manual")" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)"
         step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "$total")"
     fi
 }
@@ -813,6 +964,7 @@ ig_manual_remove() {
         if [ -z "$ig_input" ]; then
             if reading_yn "${LANG[IG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
                 if ig_apply_entries ""; then
+                    ig_preset_state_set "manual" ""
                     step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "0")"
                 fi
                 return 0
@@ -848,6 +1000,7 @@ ig_manual_remove() {
         return 0
     fi
     if ig_apply_entries "$after"; then
+        ig_preset_state_set "manual" "$(ig_preset_state_get "manual" | grep -Fxv "${remove_args[@]}")"
         step_ok "$(printf "${LANG[IG_LIST_SAVED]}" "$after_count")"
     fi
 }
@@ -883,13 +1036,17 @@ show_ingress_presets_menu() {
 
     # Reconcile the local state with what the panel actually serves: entries
     # wiped outside the presets (manual removal, panel edits, past bugs) must
-    # not keep showing as an applied preset.
-    local id current applied present total
+    # not keep showing as an applied preset. Only a successful API read may
+    # do that — a failed one says nothing about the list, and treating it as
+    # empty dropped every mark (stale entries then stayed in the list forever).
+    local id current applied present total live=0
     current=""
-    if np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME" && [ -n "$np_uuid" ]; then
-        current=$(ig_current_entries | sed '/^$/d' | sort -u)
+    if np_refresh_plugin "ingressFilter" "$IG_PLUGIN_NAME"; then
+        live=1
+        [ -n "$np_uuid" ] && current=$(ig_current_entries | sed '/^$/d' | sort -u)
     fi
     for id in ru classic fofa; do
+        [ "$live" = "1" ] || break
         applied=$(ig_preset_state_get "$id" | sed '/^$/d' | sort -u)
         [ -n "$applied" ] || continue
         total=$(printf '%s\n' "$applied" | sed '/^$/d' | wc -l)
@@ -914,7 +1071,7 @@ show_ingress_presets_menu() {
         for id in ru classic fofa; do
             applied=$(ig_preset_state_get "$id" | sed '/^$/d')
             [ -n "$applied" ] && continue
-            if ig_fetch_preset_entries "$id" && [ "$IG_PRESET_COUNT" -gt 0 ]; then
+            if ig_fetch_preset_cached "$id" && [ "$IG_PRESET_COUNT" -gt 0 ]; then
                 present=$(comm -12 <(printf '%s\n' "$IG_PRESET_ENTRIES" | sed '/^$/d' | sort -u) \
                     <(printf '%s\n' "$current") | sed '/^$/d' | wc -l)
                 if [ "$present" -eq "$IG_PRESET_COUNT" ]; then
@@ -962,7 +1119,7 @@ show_ingress_presets_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=3 ig_preset_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_preset_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_preset_option || return 0
 
     case $ig_preset_option in
         1)
@@ -1028,7 +1185,7 @@ show_ingress_filter_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=5 ig_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" ig_option || return 0
 
     case $ig_option in
         1)
@@ -1165,18 +1322,29 @@ eg_cidr_overlaps() {
     [ $(( an & bm )) -eq $(( bn & am )) ]
 }
 
-# Every IPv4 prefix the host actually routes to or owns: connected routes,
-# interface addresses. These must never land in the egress blocklist.
+# Every IPv4 prefix the host actually routes to, owns or resolves through:
+# connected routes (host routes printed without /len count as /32),
+# interface addresses and the DNS resolvers of the host, including the
+# upstreams behind systemd-resolved (a cloud resolver like 169.254.169.254
+# is often reached via the default route only). These must never land in
+# the egress blocklist.
 eg_host_v4_ranges() {
+    local rf
     {
-        ip -4 route show 2>/dev/null | awk '$1 != "default" && $1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+$/ { print $1 }'
+        ip -4 route show 2>/dev/null | awk '$1 != "default" && $1 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(\/[0-9]+)?$/ { print (index($1, "/") ? $1 : $1 "/32") }'
         ip -4 addr show 2>/dev/null | sed -n 's/.*inet \([0-9.]*\)\/.*/\1\/32/p'
+        for rf in /etc/resolv.conf /run/systemd/resolve/resolv.conf; do
+            [ -r "$rf" ] || continue
+            awk '$1 == "nameserver" && $2 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ { print $2 "/32" }' "$rf"
+        done
     } | sort -u
 }
 
 eg_is_port_entry() {
-    [[ "$1" =~ ^[0-9]{1,5}$ ]] || return 1
-    (( $1 >= 1 && $1 <= 65535 ))
+    # No leading zeros: "08" broke the arithmetic (invalid octal) and "010"
+    # was checked as 8 while jq's tonumber stored 10.
+    [[ "$1" =~ ^[1-9][0-9]{0,4}$ ]] || return 1
+    (( 10#$1 <= 65535 ))
 }
 
 # IPv4 (plain or CIDR, octets checked) or loose IPv6 / IPv6-CIDR.
@@ -1185,8 +1353,12 @@ eg_valid_ip_entry() {
     local addr="${1%%/*}"
     [[ "$addr" == *:* && "$addr" =~ ^[0-9a-fA-F:]+$ ]] || return 1
     [[ "$(echo "$addr" | tr -cd ':')" == *:*:* ]] || return 1
+    # IPv6 prefix 0-128 without leading zeros, as the panel schema wants.
     case "$1" in
-        */*) [[ "${1##*/}" =~ ^[0-9]{1,3}$ ]] || return 1 ;;
+        */*)
+            [[ "${1##*/}" =~ ^(0|[1-9][0-9]{0,2})$ ]] || return 1
+            (( 10#${1##*/} <= 128 )) || return 1
+            ;;
     esac
     return 0
 }
@@ -1262,13 +1434,16 @@ eg_preset_apply_private() {
     local was_on="false"
     eg_is_on && was_on="true"
 
-    local old_private merged current
+    local old_private merged current keep
     old_private=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
     current=$(eg_ip_entries | sed '/^$/d' | sort -u)
     # Subtract the old preset BEFORE merging the new one — the preset list is
     # constant, so union-then-subtract removed on every re-run the very
     # ranges it claimed to apply (private nets silently left the blocklist).
+    # Ranges also added by hand (id "manual" in the state) are kept.
     if [ -n "$old_private" ]; then
+        keep=$(np_state_others "$EG_STATE_FILE" "private" | sed '/^$/d' | sort -u)
+        [ -n "$keep" ] && old_private=$(comm -23 <(printf '%s\n' "$old_private") <(printf '%s\n' "$keep"))
         current=$(comm -23 <(printf '%s\n' "$current") <(printf '%s\n' "$old_private"))
     fi
     merged=$(printf '%s\n%s\n' "$current" "$EG_PRIVATE_BLOCKED" | sed '/^$/d' | sort -u)
@@ -1296,13 +1471,17 @@ eg_preset_apply_mail() {
     local was_on="false"
     eg_is_on && was_on="true"
 
-    local old_mail merged
+    local old_mail merged keep
     old_mail=$(eg_preset_state_get "mail" | sed '/^$/d' | sort -u)
     merged=$(printf '25\n465\n587\n' | sort -n -u)
+    # comm needs plain lexical order on both sides (sort -n broke it: "file
+    # 1 is not in sorted order"); the numeric order is for the final list.
     local current_ports
-    current_ports=$(eg_port_entries | sed '/^$/d' | sort -n -u)
+    current_ports=$(eg_port_entries | sed '/^$/d' | sort -u)
     if [ -n "$old_mail" ]; then
-        current_ports=$(comm -23 <(printf '%s\n' "$current_ports") <(printf '%s\n' "$old_mail" | sort -n))
+        keep=$(np_state_others "$EG_STATE_FILE" "mail" | sed '/^$/d' | sort -u)
+        [ -n "$keep" ] && old_mail=$(comm -23 <(printf '%s\n' "$old_mail") <(printf '%s\n' "$keep"))
+        current_ports=$(comm -23 <(printf '%s\n' "$current_ports") <(printf '%s\n' "$old_mail"))
     fi
     merged=$(printf '%s\n%s\n' "$current_ports" "$merged" | sed '/^$/d' | sort -n -u)
 
@@ -1368,6 +1547,8 @@ eg_manual_add_ip() {
     done
     merged=$(printf '%s\n%s\n' "$(eg_ip_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)
     if eg_apply "$merged" "$(eg_port_entries | sed '/^$/d' | sort -n -u)"; then
+        # Remember manual entries so a preset re-apply never subtracts them.
+        eg_preset_state_set "manual" "$(printf '%s\n%s\n' "$(eg_preset_state_get "manual")" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)"
         step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)" "$(eg_port_count)")"
     fi
 }
@@ -1391,6 +1572,7 @@ eg_manual_add_port() {
     done
     merged=$(printf '%s\n%s\n' "$(eg_port_entries)" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -n -u)
     if eg_apply "$(eg_ip_entries | sed '/^$/d' | sort -u)" "$merged"; then
+        eg_preset_state_set "manual" "$(printf '%s\n%s\n' "$(eg_preset_state_get "manual")" "$(printf '%s\n' "${entries[@]}")" | sed '/^$/d' | sort -u)"
         step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(eg_ip_count)" "$(printf '%s\n' "$merged" | sed '/^$/d' | wc -l)")"
     fi
 }
@@ -1428,6 +1610,7 @@ eg_manual_remove() {
         if [ -z "$eg_input" ]; then
             if reading_yn "${LANG[EG_REMOVE_ALL_CONFIRM]}" wipe_confirm; then
                 if eg_apply "" ""; then
+                    eg_preset_state_set "manual" ""
                     step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "0" "0")"
                 fi
                 return 0
@@ -1469,6 +1652,7 @@ eg_manual_remove() {
         return 0
     fi
     if eg_apply "$new_ips" "$new_ports"; then
+        eg_preset_state_set "manual" "$(eg_preset_state_get "manual" | grep -Fxv "${ip_args[@]}" "${port_args[@]}")"
         step_ok "$(printf "${LANG[EG_LIST_SAVED]}" "$(printf '%s\n' "$new_ips" | sed '/^$/d' | wc -l)" "$(printf '%s\n' "$new_ports" | sed '/^$/d' | wc -l)")"
     fi
 }
@@ -1506,10 +1690,15 @@ show_egress_presets_menu() {
     # computed locally (host routes / constants), so nothing is downloaded;
     # instead of a remote update mark, private ranges get a drift mark when
     # the host state changed since the apply.
-    local current_ips="" current_ports="" applied present total pm p_present
-    if np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME" && [ -n "$np_uuid" ]; then
-        current_ips=$(eg_ip_entries | sed '/^$/d' | sort -u)
-        current_ports=$(eg_port_entries | sed '/^$/d' | sort -n -u)
+    # Marks are dropped only after a successful API read: a failed one says
+    # nothing about the lists (see show_ingress_presets_menu).
+    local current_ips="" current_ports="" applied present total pm p_present live=0
+    if np_refresh_plugin "egressFilter" "$EG_PLUGIN_NAME"; then
+        live=1
+        if [ -n "$np_uuid" ]; then
+            current_ips=$(eg_ip_entries | sed '/^$/d' | sort -u)
+            current_ports=$(eg_port_entries | sed '/^$/d' | sort -n -u)
+        fi
     fi
 
     local computed computed_count drift_n=""
@@ -1518,7 +1707,9 @@ show_egress_presets_menu() {
     computed_count=$(printf '%s\n' "$computed" | sed '/^$/d' | wc -l)
 
     applied=$(eg_preset_state_get "private" | sed '/^$/d' | sort -u)
-    if [ -n "$applied" ]; then
+    if [ -n "$applied" ] && [ "$live" != "1" ]; then
+        [ "$applied" != "$computed" ] && drift_n="$computed_count"
+    elif [ -n "$applied" ]; then
         total=$(printf '%s\n' "$applied" | sed '/^$/d' | wc -l)
         if [ -z "$current_ips" ]; then
             present=0
@@ -1543,7 +1734,9 @@ show_egress_presets_menu() {
         fi
     fi
 
-    if [ -n "$(eg_preset_state_get "mail" | sed '/^$/d')" ]; then
+    if [ "$live" != "1" ]; then
+        :
+    elif [ -n "$(eg_preset_state_get "mail" | sed '/^$/d')" ]; then
         p_present=0
         for pm in 25 465 587; do
             [ -n "$current_ports" ] && printf '%s\n' "$current_ports" | grep -qx "$pm" && p_present=$((p_present + 1))
@@ -1578,7 +1771,7 @@ show_egress_presets_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=2 eg_preset_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_preset_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_preset_option || return 0
 
     case $eg_preset_option in
         1)
@@ -1640,7 +1833,7 @@ show_egress_filter_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=6 eg_option
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_option
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" eg_option || return 0
 
     case $eg_option in
         1)
@@ -1705,6 +1898,11 @@ np_env_set() {
     fi
 }
 
+# Percent-encode the user:password part of a proxy URL so special
+# characters (@, :, /) in the credentials survive curl's URL parser;
+# the user can type the password as is
+# Keep byte-identical with the copy in certificates.sh: both modules define
+# this name, and whichever is sourced last wins.
 percent_encode_proxy_auth() {
     local url="$1"
     local scheme rest hostpart userinfo user pass
@@ -1730,24 +1928,32 @@ percent_encode_proxy_auth() {
         pass=""
     fi
 
+    # Byte-wise under the C locale: URL encoding works on UTF-8 bytes, while
+    # a UTF-8 locale (the spinner exports C.UTF-8) reads whole characters
+    # and printf "'c" yields the code point — я became %44F, not %D1%8F
+    local LC_ALL=C
+
     while IFS= read -r -n 1 c; do
+        [ -z "$c" ] && continue
         case "$c" in
-            [A-Za-z0-9.-_~]) out_user+="$c" ;;
+            [A-Za-z0-9._-]) out_user+="$c" ;;
             *) printf -v octet '%%%02X' "'$c"; out_user+="$octet" ;;
         esac
     done <<< "$user"
-
     while IFS= read -r -n 1 c; do
+        [ -z "$c" ] && continue
         case "$c" in
-            [A-Za-z0-9.-_~]) out_pass+="$c" ;;
+            [A-Za-z0-9._-]) out_pass+="$c" ;;
             *) printf -v octet '%%%02X' "'$c"; out_pass+="$octet" ;;
         esac
     done <<< "$pass"
 
     if [ -n "$out_pass" ]; then
         printf '%s://%s:%s@%s\n' "$scheme" "$out_user" "$out_pass" "$hostpart"
-    else
+    elif [ -n "$out_user" ]; then
         printf '%s://%s@%s\n' "$scheme" "$out_user" "$hostpart"
+    else
+        printf '%s://%s\n' "$scheme" "$hostpart"
     fi
 }
 
@@ -1766,11 +1972,17 @@ np_tg_parse_chat() {
     return 0
 }
 
+# The bot token (in the URL) and the proxy credentials go to curl through a
+# config on a file descriptor, never through argv, where ps and
+# /proc/<pid>/cmdline show them to every local user. Both values are
+# shape-checked before (token [0-9A-Za-z:_-], proxy URL-safe characters),
+# so nothing in them needs escaping inside the quoted config strings.
 np_tg_send_test() {
-    local curl_proxy=() thread_args=()
-    [ -n "$NP_TG_PROXY_VAL" ] && curl_proxy=(--proxy "$NP_TG_PROXY_VAL")
+    local curl_cfg thread_args=()
+    curl_cfg="url = \"https://api.telegram.org/bot${NP_TG_TOKEN_VAL}/sendMessage\""
+    [ -n "$NP_TG_PROXY_VAL" ] && curl_cfg+=$'\n'"proxy = \"${NP_TG_PROXY_VAL}\""
     [ -n "$NP_TG_THREAD_VAL" ] && thread_args=(--data-urlencode "message_thread_id=${NP_TG_THREAD_VAL}")
-    NP_TG_RESPONSE=$(curl -s -m 20 "${curl_proxy[@]}" "https://api.telegram.org/bot${NP_TG_TOKEN_VAL}/sendMessage" \
+    NP_TG_RESPONSE=$(curl -s -m 20 -K <(printf '%s\n' "$curl_cfg") \
         --data-urlencode "chat_id=${NP_TG_CHAT_VAL}" \
         "${thread_args[@]}" \
         --data-urlencode "text=✅ ${LANG[NP_TG_TEST_TEXT]}" 2>/dev/null)
@@ -1819,7 +2031,10 @@ np_tg_disable() {
         return 0
     fi
     step_do "${LANG[NP_TG_RECREATING]}"
-    np_env_set "TELEGRAM_NOTIFY_TBLOCKER" "change_me"
+    # Empty, not the change_me placeholder: the backend only skips the TB
+    # listeners on an empty chat id and otherwise keeps posting every event
+    # to a chat named "change_me" (400 from Telegram each time).
+    np_env_set "TELEGRAM_NOTIFY_TBLOCKER" ""
     # Keep the global switch on while other categories still carry a real chat.
     local other others_left=0 v
     for v in TELEGRAM_NOTIFY_USERS TELEGRAM_NOTIFY_NODES TELEGRAM_NOTIFY_CRM TELEGRAM_NOTIFY_SERVICE; do
@@ -1983,7 +2198,7 @@ show_node_plugins_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=3
-    reading "$(printf "${LANG[NP_SELECT_PLUGIN]}" "$last")" NP_OPTION
+    reading "$(printf "${LANG[NP_SELECT_PLUGIN]}" "$last")" NP_OPTION || return 0
 
     case $NP_OPTION in
         1)
@@ -2039,7 +2254,7 @@ show_torrent_blocker_menu() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     local last=7
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NP_OPTION
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" NP_OPTION || return 0
 
     case $NP_OPTION in
         1)

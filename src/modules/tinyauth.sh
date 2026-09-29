@@ -11,15 +11,24 @@ tinyauth_setup() {
     # install.
     local forbidden collision
     while true; do
-        reading "$(printf "${LANG[ENTER_TINYAUTH_NAME]}" "$base_domain")" TINYAUTH_NAME
+        # EOF on stdin (a pipe that ran dry) would spin this loop at full
+        # CPU: give up on the portal the same way a failed user create does.
+        if ! reading "$(printf "${LANG[ENTER_TINYAUTH_NAME]}" "$base_domain")" TINYAUTH_NAME; then
+            echo -e "${COLOR_RED}${LANG[TINYAUTH_CREATE_FAIL]}${COLOR_RESET}"
+            PANEL_AUTH_MODE=cookie
+            return 1
+        fi
         if ! [[ "$TINYAUTH_NAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]]; then
             echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}"
             continue
         fi
+        # DNS names are case-insensitive and nginx lowercases server_name:
+        # "Panel" must collide with panel.<base> like "panel" does.
+        TINYAUTH_NAME="${TINYAUTH_NAME,,}"
         TINYAUTH_DOMAIN="${TINYAUTH_NAME}.${base_domain}"
         collision=""
         for forbidden in "$@"; do
-            if [ -n "$forbidden" ] && [ "$TINYAUTH_DOMAIN" = "$forbidden" ]; then
+            if [ -n "$forbidden" ] && [ "${TINYAUTH_DOMAIN,,}" = "${forbidden,,}" ]; then
                 collision="$forbidden"
                 break
             fi

@@ -18,7 +18,9 @@ make_api_request() {
     hdr=$(printf 'Authorization: Bearer %s\nContent-Type: application/json\nX-Forwarded-For: 127.0.0.1\nX-Forwarded-Proto: https\nX-Remnawave-Client-Type: browser\n' "$token")
 
     if [ -n "$data" ]; then
-        curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" -H @<(printf '%s' "$hdr") -d "$data"
+        # The body goes over stdin too: config-profile PATCHes carry Reality
+        # private keys, and -d would put them in argv.
+        printf '%s' "$data" | curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" -H @<(printf '%s' "$hdr") --data-binary @-
     else
         curl -s --connect-timeout 10 --max-time 60 -X "$method" "$url" -H @<(printf '%s' "$hdr")
     fi
@@ -370,10 +372,12 @@ EOF
         return 0
     fi
 
+    # Errors go to stderr: the last stdout line is the uuid on success, and
+    # a caller that captures it must never take the error text for an id.
     if [ -z "$node_response" ]; then
-        echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_NODE]}${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_EMPTY_RESPONSE_NODE]}${COLOR_RESET}" >&2
     else
-        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}: $node_response${COLOR_RESET}"
+        echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}: $node_response${COLOR_RESET}" >&2
     fi
     return 1
 }

@@ -287,7 +287,11 @@ fi
         return 1
     fi
 
-    if ! re_run_host "$host" "${plugin_setup}${cert_cmd} $email_arg --agree-tos --non-interactive --key-type ecdsa --elliptic-curve secp384r1" >&2; then
+    # --deploy-hook lands in the lineage's renewal conf as renew_hook, so
+    # every renewal restarts nginx — the packaged certbot.timer renews first
+    # and knows nothing of the crontab line below. On this first issue the
+    # container does not exist yet, hence the tolerant form.
+    if ! re_run_host "$host" "${plugin_setup}${cert_cmd} $email_arg --agree-tos --non-interactive --key-type ecdsa --elliptic-curve secp384r1 --deploy-hook 'docker restart remnawave-nginx >/dev/null 2>&1 || true'" >&2; then
         return 1
     fi
 
@@ -297,6 +301,10 @@ fi
 
     lineage=$(re_run_host "$host" "ls -1 /etc/letsencrypt/live/ 2>/dev/null | grep -E '^${base}(-[0-9]+)?\$' | sort -V | tail -1")
     [ -n "$lineage" ] || return 1
+    # A lineage left from an earlier install is not re-issued, so its conf
+    # never saw --deploy-hook. A DNS-01 conf ends in [renewalparams], and an
+    # appended line lands there (the same move as configure_certbot_renewal_hooks).
+    re_run_host_n "$host" "f=/etc/letsencrypt/renewal/${lineage}.conf; [ -f \"\$f\" ] && { grep -q '^renew_hook' \"\$f\" || echo 'renew_hook = docker restart remnawave-nginx >/dev/null 2>&1 || true' >> \"\$f\"; }" >/dev/null 2>&1
     echo "$lineage"
 }
 
@@ -313,23 +321,29 @@ an_setup_cert_sync() {
     local host="$1" lineage="$2"
     local sync_script="${DIR_REMNAWAVE}node-cert-sync.sh"
     local sync_list="${DIR_REMNAWAVE}node-cert-sync.list"
-    local marker="rrp-cert-sync v2"
+    local marker="rrp-cert-sync v3"
 
     if [ ! -f "$sync_script" ] || ! head -3 "$sync_script" 2>/dev/null | grep -qF "$marker"; then
+        # A checkout keeps modules under src/modules; the installed copy
+        # caches them in modules/. No source means no sync at all, and the
+        # caller must not promise one.
         local re_src
-        re_src="${LOCAL_SRC_DIR:-}${LOCAL_SRC_DIR:+/}remote_exec.sh"
+        re_src="${LOCAL_SRC_DIR:+$LOCAL_SRC_DIR/modules/remote_exec.sh}"
         [ -r "$re_src" ] || re_src="${DIR_REMNAWAVE}modules/remote_exec.sh"
-        [ -r "$re_src" ] || return 0
+        if [ ! -r "$re_src" ]; then
+            err_msg "${LANG[AN_SYNC_SETUP_FAIL]}"
+            return 1
+        fi
 
         {
             cat <<'EOL'
 #!/bin/bash
-# rrp-cert-sync v2 — managed by remnawave-reverse-proxy (add_node auto
+# rrp-cert-sync v3 — managed by remnawave-reverse-proxy (add_node auto
 # deploy). Pushes renewed node certificates; entries live in
 # node-cert-sync.list as "host lineage" lines. The sync decision compares
-# the sha256 fingerprint of the panel's fullchain with the node's copy: a
+# the sha256 of the panel's fullchain+privkey pair with the node's copy: a
 # renewal window on the panel says nothing about whether THIS node still
-# holds the previous file, and day counting used to skip nodes 2..N forever.
+# holds the previous files, and day counting used to skip nodes 2..N forever.
 set -u
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 log="${DIR_REMNAWAVE}node-cert-sync.log"
@@ -347,14 +361,26 @@ while read -r host lineage; do
     full="/etc/letsencrypt/live/$lineage/fullchain.pem"
     key="/etc/letsencrypt/live/$lineage/privkey.pem"
     [ -r "$full" ] && [ -r "$key" ] || continue
-    pfp=$(openssl x509 -noout -fingerprint -sha256 -in "$full" 2>/dev/null)
+    # The node holds byte copies, so a plain sha256 of both files decides:
+    # no OpenSSL-version-dependent fingerprint prefix, and a push torn
+    # between the two files no longer looks "in sync" until the next renewal.
+    pfp=$(cat "$full" "$key" | sha256sum | cut -d' ' -f1)
     [ -n "$pfp" ] || continue
-    rfp=$(re_run_host_n "$host" "openssl x509 -noout -fingerprint -sha256 -in /opt/remnanode/ssl/$lineage/fullchain.pem 2>/dev/null" 2>/dev/null | head -n1)
+    d="/opt/remnanode/ssl/$lineage"
+    # .restart-pending marks a pair that landed but never reached nginx:
+    # the node answers nothing then, and the pair goes out again.
+    rfp=$(re_run_host_n "$host" "[ -e $d/.restart-pending ] || cat $d/fullchain.pem $d/privkey.pem 2>/dev/null | sha256sum | cut -d' ' -f1" 2>/dev/null | head -n1)
     [ "$rfp" = "$pfp" ] && continue
-    if cat "$full" | re_run_host "$host" "cat > /opt/remnanode/ssl/$lineage/fullchain.pem" \
-       && cat "$key" | re_run_host "$host" "cat > /opt/remnanode/ssl/$lineage/privkey.pem"; then
-        re_run_host_n "$host" "docker restart remnawave-nginx" >/dev/null 2>&1
-        echo "$(date '+%F %T') $host $lineage synced"
+    # Both files land beside the live pair and replace it in one remote
+    # command: nginx never meets a new chain next to the old key.
+    if cat "$full" | re_run_host "$host" "cat > $d/fullchain.pem.new" \
+       && cat "$key" | re_run_host "$host" "cat > $d/privkey.pem.new" \
+       && re_run_host_n "$host" "touch $d/.restart-pending && mv -f $d/privkey.pem.new $d/privkey.pem && mv -f $d/fullchain.pem.new $d/fullchain.pem" >/dev/null 2>&1; then
+        if re_run_host_n "$host" "docker restart remnawave-nginx >/dev/null && rm -f $d/.restart-pending" >/dev/null 2>&1; then
+            echo "$(date '+%F %T') $host $lineage synced"
+        else
+            echo "$(date '+%F %T') $host $lineage RESTART FAILED"
+        fi
     else
         echo "$(date '+%F %T') $host $lineage PUSH FAILED"
     fi
@@ -367,7 +393,11 @@ EOL
             mv -f "${sync_script}.tmp" "$sync_script"
         else
             rm -f "${sync_script}.tmp"
-            return 0
+            # An older working script stays; a first install has none.
+            if [ ! -f "$sync_script" ]; then
+                err_msg "${LANG[AN_SYNC_SETUP_FAIL]}"
+                return 1
+            fi
         fi
         # The list survives a regeneration — its format is stable, and
         # wiping it would orphan every node the old script was serving.
@@ -514,6 +544,10 @@ an_auto_deploy() {
     # Cloudflare proxy tolerance here.
     load_dns_records_module
     load_certificates_module
+    # DNS_RECORD_PROVIDER (the provider of a record created in THIS add_node
+    # run) is reset by the caller once, before its retry loop: a retry must
+    # keep what the first attempt used — the record resolves by then, the
+    # picker is skipped, and an unknown zone would leave no provider at all.
     base_domain=$(extract_domain "$domain")
     dns_saved_credentials_load
     # The provider of a zone the panel already holds a certificate for is
@@ -548,9 +582,18 @@ an_auto_deploy() {
             echo -e ""
             echo -e "${COLOR_YELLOW}4. ${LANG[DNS_RECORD_MANUAL]}${COLOR_RESET}"
             echo -e ""
+            echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+            echo -e ""
             while true; do
-                reading "${LANG[DNS_RECORD_CHOOSE]}" dns_pick
+                # EOF (piped answers ran out) cancels: an unchecked read here
+                # spun forever while the old stack was already down.
+                reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 4)" dns_pick || dns_pick=0
                 case "$dns_pick" in
+                    0)
+                        # rc 2 = walk-away: the caller reports it, no retry.
+                        an_deploy_bail "$host" "$had_stack"
+                        return 2
+                        ;;
                     1)
                         step_do "$(printf "${LANG[AN_DNS_STEP]}" "$domain" "$node_ip")" >&2
                         ensure_dns_record_cloudflare "$domain" "$base_domain" "$node_ip" && { step_ok "${LANG[AN_DNS_OK]}" >&2; break; }
@@ -715,8 +758,9 @@ an_auto_deploy() {
     fi
 
     rm -rf "$tmpd"
+    local sync_ok=1
     if [ "$cert_on_node" = 0 ] && [ "$ws" != "caddy" ]; then
-        an_setup_cert_sync "$host" "$lineage"
+        an_setup_cert_sync "$host" "$lineage" || sync_ok=0
     fi
 
     # NetBird overlay: join the machine (or reuse its live
@@ -724,6 +768,7 @@ an_auto_deploy() {
     # overlay address to the caller — the node record is created only after
     # this succeeds.
     AN_NODE_OVERLAY=""
+    AN_NODE_SSH_HOST=""
     if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ]; then
         step_do "${LANG[AN_NB_JOIN_STEP]}" >&2
         local node_ov="" kk up_out is unit="rrp-nb-apt-${NB_RUN_ID:-$RANDOM$RANDOM}"
@@ -735,10 +780,17 @@ an_auto_deploy() {
             re_run_host_n "$host" "$(nb_apt_repo_script)" >/dev/null 2>&1 \
             && { is=$(nb_apt_install_script); is=${is//INSTALL_UNIT/$unit}; re_run_host_n "$host" "$is" >/dev/null 2>&1; } \
             && re_run_host_n "$host" "$(nb_lazy_off_script)" >/dev/null 2>&1 || true
-            kk=$(nb_oneoff_key "$(nb_state_get grp_nodes)" "rrp-node-${entity_name}-${unit}") \
-                && up_out=$(printf '%s\n' "${kk#* }" | re_run_host "$host" "$(nb_up_script "$entity_name" "")") \
-                && { [ -n "${kk%% *}" ] && nb_revoke_setup_key "${kk%% *}"; } \
-                && node_ov=$(printf '%s\n' "$up_out" | sed -n 's/^RRP_OVERLAY=//p' | tail -n1)
+            # The one-off key is revoked whatever `up` did — a failed join
+            # must not leave a live key to the nodes group behind — and the
+            # overlay is read from up's output whatever the revoke did: a
+            # failed DELETE must not hide a peer that did join.
+            if kk=$(nb_oneoff_key "$(nb_state_get grp_nodes)" "rrp-node-${entity_name}-${unit}"); then
+                up_out=$(printf '%s\n' "${kk#* }" | re_run_host "$host" "$(nb_up_script "$(nb_node_hostname "$entity_name" "$(printf '%s' "$host" | sha256sum | cut -c1-8)")" "$(nb_mgmt_for_remote)")")
+                if [ -n "${kk%% *}" ] && ! nb_revoke_setup_key "${kk%% *}"; then
+                    echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_NB_KEY_REVOKE_FAIL]}" "rrp-node-${entity_name}-${unit}")${COLOR_RESET}" >&2
+                fi
+                node_ov=$(printf '%s\n' "$up_out" | sed -n 's/^RRP_OVERLAY=//p' | tail -n1)
+            fi
         fi
         if ! nb_is_ipv4 "$node_ov"; then
             echo -e "${COLOR_RED}${LANG[AN_NB_JOIN_FAIL]}${COLOR_RESET}" >&2
@@ -758,6 +810,9 @@ an_auto_deploy() {
         fi
         step_ok "${LANG[AN_NB_PATH_OK]}" >&2
         AN_NODE_OVERLAY="$node_ov"
+        # The SSH target this deploy ran over — it gets the overlay alias
+        # once the record exists.
+        AN_NODE_SSH_HOST="$host"
     fi
 
     local attempt resolved_ip="" hosts_hinted=0
@@ -808,7 +863,8 @@ an_auto_deploy() {
             if [ "$ws" = "caddy" ]; then
                 echo -e "${COLOR_GRAY}${LANG[AN_SYNC_CADDY]}${COLOR_RESET}"
             elif [ "$cert_on_node" = 0 ]; then
-                echo -e "${COLOR_GRAY}${LANG[AN_SYNC_NOTE]}${COLOR_RESET}"
+                # A failed sync setup has already said so — no false promise.
+                [ "$sync_ok" = 1 ] && echo -e "${COLOR_GRAY}${LANG[AN_SYNC_NOTE]}${COLOR_RESET}"
             else
                 echo -e "${COLOR_GRAY}${LANG[AN_SYNC_NODE]}${COLOR_RESET}"
             fi
@@ -834,6 +890,25 @@ an_auto_deploy() {
     done
     echo -e "${COLOR_YELLOW}${LANG[AN_WAIT_FAIL]}${COLOR_RESET}"
     return 0
+}
+
+# Overlay birth registers only the config profile before the deploy: when
+# the node record never appears, that profile is an orphan that would block
+# a retry under the same name. It goes only while no node uses it (a record
+# created despite a lost response keeps it), and the outcome is read back.
+an_drop_orphan_profile() {
+    local domain_url="$1" token="$2" profile_uuid="$3" name="$4"
+    if [ -n "$profile_uuid" ] && make_api_request "GET" "http://$domain_url/api/nodes" "$token" \
+        | jq -e --arg p "$profile_uuid" '(.response | type) == "array" and all(.response[]; (.configProfile.activeConfigProfileUuid // "") != $p)' >/dev/null 2>&1; then
+        make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token" >/dev/null 2>&1
+        if make_api_request "GET" "http://$domain_url/api/config-profiles" "$token" \
+            | jq -e --arg p "$profile_uuid" '(.response.configProfiles | type) == "array" and all(.response.configProfiles[]; .uuid != $p)' >/dev/null 2>&1; then
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_NB_PROFILE_DROPPED]}" "$name")${COLOR_RESET}"
+            return 0
+        fi
+    fi
+    echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_NB_PROFILE_LEFT]}" "$name")${COLOR_RESET}"
+    return 1
 }
 
 an_show_manual_instruction() {
@@ -905,7 +980,9 @@ an_offer_stale_cleanup() {
         return 1
     fi
     node_name=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].name // "?"' 2>/dev/null)
-    profile_uuid=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].configProfileUuid // empty' 2>/dev/null)
+    # Nodes carry the profile as configProfile.activeConfigProfileUuid; the
+    # flat configProfileUuid exists on host inbounds only.
+    profile_uuid=$(echo "$nodes_json" | jq -r --arg d "$domain" '[.response[]? | select(.address == $d)][0].configProfile.activeConfigProfileUuid // empty' 2>/dev/null)
 
     echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_FOUND]}" "$node_name")${COLOR_RESET}"
     echo -n "$(question "${LANG[AN_STALE_ASK]}")"
@@ -918,10 +995,28 @@ an_offer_stale_cleanup() {
     # anything is deleted. Unreadable usage counts as "in use".
     local still_used=""
     if [ -n "$profile_uuid" ]; then
-        still_used=$(echo "$nodes_json" | jq -r --arg p "$profile_uuid" --arg n "$node_uuid" '[.response[]? | select(.configProfileUuid == $p and .uuid != $n)] | length' 2>/dev/null)
+        still_used=$(echo "$nodes_json" | jq -r --arg p "$profile_uuid" --arg n "$node_uuid" '[.response[]? | select((.configProfile.activeConfigProfileUuid // "") == $p and .uuid != $n)] | length' 2>/dev/null)
     fi
 
+    # DELETE answers 204 with no body, so the outcome is read back from the
+    # lists: "removed" is printed only for what is really gone. A node DELETE
+    # only enqueues the removal (the panel drops the row from a queue job),
+    # so the list is polled for a while: an instant read-back races the job
+    # and would skip the host/profile cleanup below for a node already gone.
     make_api_request "DELETE" "http://$domain_url/api/nodes/$node_uuid" "$token" >/dev/null 2>&1
+    local node_gone=0 poll
+    for poll in 1 2 3 4 5 6 7 8 9 10; do
+        if make_api_request "GET" "http://$domain_url/api/nodes" "$token" \
+            | jq -e --arg n "$node_uuid" '(.response | type) == "array" and all(.response[]; .uuid != $n)' >/dev/null 2>&1; then
+            node_gone=1
+            break
+        fi
+        [ "$poll" -lt 10 ] && sleep 1
+    done
+    if [ "$node_gone" != 1 ]; then
+        echo -e "${COLOR_RED}$(printf "${LANG[AN_STALE_NODE_FAIL]}" "$node_name")${COLOR_RESET}"
+        return 1
+    fi
     if [ -n "$profile_uuid" ] && [ "${still_used:-1}" = "0" ]; then
         local hosts_json huuid
         hosts_json=$(make_api_request "GET" "http://$domain_url/api/hosts" "$token")
@@ -929,6 +1024,14 @@ an_offer_stale_cleanup() {
             make_api_request "DELETE" "http://$domain_url/api/hosts/$huuid" "$token" >/dev/null 2>&1
         done
         make_api_request "DELETE" "http://$domain_url/api/config-profiles/$profile_uuid" "$token" >/dev/null 2>&1
+        if ! make_api_request "GET" "http://$domain_url/api/config-profiles" "$token" \
+            | jq -e --arg p "$profile_uuid" '(.response.configProfiles | type) == "array" and all(.response.configProfiles[]; .uuid != $p)' >/dev/null 2>&1 \
+           || ! make_api_request "GET" "http://$domain_url/api/hosts" "$token" \
+            | jq -e --arg p "$profile_uuid" '(.response | type) == "array" and all(.response[]; (.inbound.configProfileUuid // "") != $p)' >/dev/null 2>&1; then
+            # The node is gone, so the domain is free; the leftovers are named.
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_PROFILE_LEFT]}" "$profile_uuid")${COLOR_RESET}"
+            return 0
+        fi
     fi
     if [ -n "$profile_uuid" ] && [ "${still_used:-1}" != "0" ]; then
         echo -e "${COLOR_YELLOW}$(printf "${LANG[AN_STALE_HOSTS_KEPT]}" "${still_used:-1}")${COLOR_RESET}"
@@ -951,7 +1054,7 @@ an_offer_stale_cleanup() {
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
         while true; do
-            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" ws_choice
+            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" ws_choice || return 0
             case "$ws_choice" in
                 1) an_ws="nginx"; break ;;
                 2) an_ws="caddy"; break ;;
@@ -1001,9 +1104,17 @@ an_offer_stale_cleanup() {
         response=$(make_api_request "GET" "http://$domain_url/api/config-profiles" "$token")
         if echo "$response" | jq -e ".response.configProfiles[] | select(.name == \"$entity_name\")" > /dev/null 2>&1; then
             echo -e "${COLOR_RED}$(printf "${LANG[CF_INVALID_NAME]}" "$entity_name")${COLOR_RESET}"
-        else
-            break
+            continue
         fi
+        # Node names are unique in the panel too, and in overlay mode the
+        # record is created only after the whole deploy — a clash found
+        # there would throw that work away.
+        if make_api_request "GET" "http://$domain_url/api/nodes" "$token" \
+            | jq -e --arg n "$entity_name" 'any(.response[]?; .name == $n)' >/dev/null 2>&1; then
+            echo -e "${COLOR_RED}$(printf "${LANG[AN_NODE_NAME_TAKEN]}" "$entity_name")${COLOR_RESET}"
+            continue
+        fi
+        break
     done
 
     local private_key
@@ -1053,6 +1164,10 @@ an_offer_stale_cleanup() {
         return 0
     fi
 
+    # One left over from an earlier add_node in the same session would
+    # outrank the zone's real provider in the certificate step; the retries
+    # below share this run's value.
+    DNS_RECORD_PROVIDER=""
     local deployed=1 retry rc=0
     while true; do
         rc=0
@@ -1062,6 +1177,12 @@ an_offer_stale_cleanup() {
     done
     if [ "$deployed" -ne 0 ]; then
         echo -e ""
+        # Overlay mode has no node card to finish by hand: the record is
+        # created only after a successful deploy.
+        if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ]; then
+            an_drop_orphan_profile "$domain_url" "$token" "$config_profile_uuid" "$entity_name"
+            return 0
+        fi
         if [ "$rc" = 2 ]; then
             echo -e "${COLOR_YELLOW}${LANG[AN_CANCELLED]}${COLOR_RESET}"
         else
@@ -1074,13 +1195,43 @@ an_offer_stale_cleanup() {
     # Overlay birth: the deploy proved the path, now the record goes straight
     # to the overlay address and the wait runs by uuid.
     if [ "${AN_NODE_OVERLAY_MODE:-0}" = "1" ] && [ -n "$AN_NODE_OVERLAY" ]; then
-        create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$AN_NODE_OVERLAY" "$entity_name" "$plugin_uuid" | tail -n1 > /tmp/rrp-an-node-uuid
-        local node_uuid
-        node_uuid=$(cat /tmp/rrp-an-node-uuid); rm -f /tmp/rrp-an-node-uuid
-        if [ -z "$node_uuid" ]; then
-            echo -e "${COLOR_RED}${LANG[ERROR_CREATE_NODE]}${COLOR_RESET}"
+        # A machine that was already moved onto the overlay and is being
+        # reinstalled comes back with the same overlay IP, and addresses are
+        # unique in the panel: name the stale record instead of a raw 400.
+        local addr_owner
+        addr_owner=$(make_api_request "GET" "http://$domain_url/api/nodes" "$token" \
+            | jq -r --arg a "$AN_NODE_OVERLAY" '[.response[]? | select(.address == $a) | .name][0] // empty' 2>/dev/null)
+        if [ -n "$addr_owner" ]; then
+            echo -e "${COLOR_RED}$(printf "${LANG[AN_NB_ADDR_TAKEN]}" "$addr_owner" "$AN_NODE_OVERLAY")${COLOR_RESET}"
+            an_drop_orphan_profile "$domain_url" "$token" "$config_profile_uuid" "$entity_name"
             return 1
         fi
+        # No pipe: the rc decides, and the id comes from CREATED_NODE_UUID —
+        # a captured last line once took an error message for a uuid.
+        # create_node itself prints the panel's error (stderr) on failure.
+        local node_uuid=""
+        step_do "${LANG[CREATING_NODE]}"
+        if create_node "$domain_url" "$token" "$config_profile_uuid" "$inbound_uuid" "$AN_NODE_OVERLAY" "$entity_name" "$plugin_uuid" >/dev/null; then
+            node_uuid="$CREATED_NODE_UUID"
+        fi
+        if ! [[ "$node_uuid" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            an_drop_orphan_profile "$domain_url" "$token" "$config_profile_uuid" "$entity_name"
+            return 1
+        fi
+        step_ok "${LANG[NODE_CREATED]}"
+        # Local state goes in before any wait: the SSH target learns the
+        # overlay alias (lookups go by the panel address, the overlay IP
+        # from birth), and the netbird record knows the public host even
+        # when the connection is never confirmed.
+        if [ -n "${AN_NODE_SSH_HOST:-}" ] && re_target_load_by_host "$AN_NODE_SSH_HOST"; then
+            re_target_write "$RE_HOST" "$RE_PORT" "$RE_USER" "$RE_KEY" "$RE_LABEL" "$AN_NODE_OVERLAY"
+        fi
+        nb_node_set "$node_uuid" uuid "$node_uuid"
+        nb_node_set "$node_uuid" name "$entity_name"
+        nb_node_set "$node_uuid" old_address "$SELFSTEAL_DOMAIN"
+        nb_node_set "$node_uuid" public_host "$SELFSTEAL_DOMAIN"
+        nb_node_set "$node_uuid" overlay "$AN_NODE_OVERLAY"
+        nb_node_state "$node_uuid" patched
         create_host "$domain_url" "$token" "$inbound_uuid" "$SELFSTEAL_DOMAIN" "$config_profile_uuid" "$entity_name" || return 1
         local squad_uuid
         local squad_uuids
@@ -1094,11 +1245,6 @@ an_offer_stale_cleanup() {
         step_do "${LANG[AN_NB_WAIT_STEP]}"
         if nb_wait_node_connected "$token" "$node_uuid" "$(date +%s)" 120 45; then
             step_ok "${LANG[SR_WAIT_CONNECT_OK]}"
-            nb_node_set "$node_uuid" uuid "$node_uuid"
-            nb_node_set "$node_uuid" name "$entity_name"
-            nb_node_set "$node_uuid" old_address "$SELFSTEAL_DOMAIN"
-            nb_node_set "$node_uuid" public_host "$SELFSTEAL_DOMAIN"
-            nb_node_set "$node_uuid" overlay "$AN_NODE_OVERLAY"
             nb_node_state "$node_uuid" connected
             nb_journal "$node_uuid" overlay-birth done
             nb_audit "overlay-birth name=$entity_name overlay=$AN_NODE_OVERLAY"

@@ -23,30 +23,42 @@ warp_run_script() {
     local script_name="$1"
     local script_url="https://raw.githubusercontent.com/distillium/warp-native/main/${script_name}"
     local script_file="/tmp/warp-native-${script_name}"
+    local check_file="${script_file}.check"
 
+    # Direct, then GitHub proxies
     local download_prefixes=(
         ""
         "https://gh-proxy.com/"
         "https://ghfast.top/"
         "https://ghproxy.net/"
     )
-    local mirror_prefix script_ok=false
+    local mirror_prefix sum first_sum="" agreed=0
 
+    # The script runs as root, so no single source is trusted: it goes
+    # ahead only when two independent sources served identical bytes.
+    rm -f "$script_file" "$check_file"
     for mirror_prefix in "${download_prefixes[@]}"; do
-        if warp_download_file "${mirror_prefix}${script_url}" "$script_file"; then
-            if head -1 "$script_file" | grep -q "^#!/bin/bash"; then
-                script_ok=true
-                break
+        rm -f "$check_file"
+        if warp_download_file "${mirror_prefix}${script_url}" "$check_file" \
+            && head -1 "$check_file" | grep -q "^#!/bin/bash"; then
+            sum=$(sha256sum "$check_file" 2>/dev/null | cut -d' ' -f1)
+            if [ -z "$first_sum" ]; then
+                first_sum="$sum"
+                agreed=1
+            elif [ "$sum" = "$first_sum" ]; then
+                agreed=$((agreed + 1))
             fi
+            [ "$agreed" -ge 2 ] && break
         fi
     done
 
-    if [ "$script_ok" != "true" ]; then
-        rm -f "$script_file"
-        echo -e "${COLOR_RED}${LANG[WARP_SCRIPT_FAIL]}${COLOR_RESET}"
+    if [ "$agreed" -lt 2 ]; then
+        rm -f "$check_file"
+        echo -e "${COLOR_RED}${LANG[WARP_SCRIPT_UNVERIFIED]}${COLOR_RESET}"
         return 1
     fi
 
+    mv -f "$check_file" "$script_file"
     bash "$script_file"
     local run_rc=$?
     rm -f "$script_file"
@@ -112,7 +124,7 @@ warp_select_config() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION
+    reading "${LANG[WARP_PROMPT1]}" CONFIG_OPTION || return 1
 
     if [ "$CONFIG_OPTION" = "0" ]; then
         echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
@@ -154,65 +166,74 @@ warp_patch_config() {
     local config_json="$2"
     local update_response
 
+    # A failed jq edit leaves an empty or broken config: never send that
+    if ! echo "$config_json" | jq -e 'type == "object"' > /dev/null 2>&1; then
+        echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid config${COLOR_RESET}"
+        return 1
+    fi
+
     update_response=$(make_api_request "PATCH" "${WARP_API_URL}/api/config-profiles" "$WARP_TOKEN" "{\"uuid\": \"$selected_uuid\", \"config\": $config_json}")
-    if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.' > /dev/null 2>&1; then
-        echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: Invalid response${COLOR_RESET}"
+    # The panel answers errors with JSON too ({"message": ..., "statusCode":
+    # 400}): only the updated profile echoed back counts as success
+    if [ -z "$update_response" ] || ! echo "$update_response" | jq -e '.response.uuid' > /dev/null 2>&1; then
+        local panel_error
+        panel_error=$(echo "$update_response" | jq -r '.message // empty' 2>/dev/null)
+        echo -e "${COLOR_RED}${LANG[WARP_UPDATE_FAIL]}: ${panel_error:-Invalid response}${COLOR_RESET}"
         return 1
     fi
 }
 
+# A loop, not self-recursion: every redraw used to add a stack frame, and
+# EOF on stdin recursed forever. EOF now leaves the menu.
 manage_warp_native() {
-    echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[WARP_NATIVE_MENU]}${COLOR_RESET}"
-    echo -e " ${COLOR_GRAY}${LANG[WARP_DOC_LINK]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}2. ${LANG[WARP_UNINSTALL]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}3. ${LANG[WARP_ADD_CONFIG]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}4. ${LANG[WARP_DELETE_WARP_SETTINGS]}${COLOR_RESET}"
-    echo -e ""
-    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e ""
-    reading "${LANG[WARP_PROMPT]}" WARP_OPTION
+    while true; do
+        echo -e ""
+        echo -e "${COLOR_GREEN}${LANG[WARP_NATIVE_MENU]}${COLOR_RESET}"
+        echo -e " ${COLOR_GRAY}${LANG[WARP_DOC_LINK]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}1. ${LANG[WARP_INSTALL]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}2. ${LANG[WARP_UNINSTALL]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}3. ${LANG[WARP_ADD_CONFIG]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}4. ${LANG[WARP_DELETE_WARP_SETTINGS]}${COLOR_RESET}"
+        echo -e ""
+        echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+        echo -e ""
+        reading "${LANG[WARP_PROMPT]}" WARP_OPTION || return 0
 
-    case $WARP_OPTION in
-        1)
-            if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml 2>/dev/null && \
-               ! grep -q "remnanode:" /opt/remnanode/docker-compose.yml 2>/dev/null; then
-                echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
+        case $WARP_OPTION in
+            1)
+                if ! grep -q "remnanode:" /opt/remnawave/docker-compose.yml 2>/dev/null && \
+                   ! grep -q "remnanode:" /opt/remnanode/docker-compose.yml 2>/dev/null; then
+                    echo -e "${COLOR_RED}${LANG[WARP_NO_NODE]}${COLOR_RESET}"
+                    sleep 2
+                    continue
+                fi
+                warp_run_script "install.sh"
                 sleep 2
-                manage_warp_native
-                return
-            fi
-            warp_run_script "install.sh"
-            sleep 2
-            manage_warp_native
-            ;;
-        2)
-            warp_run_script "uninstall.sh"
-            sleep 2
-            manage_warp_native
-            ;;
-        3)
-            manage_warp_add_config
-            sleep 2
-            manage_warp_native
-            ;;
-        4)
-            manage_warp_delete_settings
-            sleep 2
-            manage_warp_native
-            ;;
-        0)
-            echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            ;;
-        *)
-            echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE]}${COLOR_RESET}"
-            sleep 2
-            manage_warp_native
-            ;;
-    esac
+                ;;
+            2)
+                warp_run_script "uninstall.sh"
+                sleep 2
+                ;;
+            3)
+                manage_warp_add_config
+                sleep 2
+                ;;
+            4)
+                manage_warp_delete_settings
+                sleep 2
+                ;;
+            0)
+                echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
+                return 0
+                ;;
+            *)
+                echo -e "${COLOR_RED}${LANG[WARP_INVALID_CHOICE]}${COLOR_RESET}"
+                sleep 2
+                ;;
+        esac
+    done
 }
 
 manage_warp_add_config() {

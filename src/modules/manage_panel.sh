@@ -102,7 +102,9 @@ show_manage_panel_menu() {
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
-    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" SUB_OPTION
+    # EOF on stdin (a pipe, a closed terminal) ends the menu instead of
+    # re-drawing it forever.
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "$last")" SUB_OPTION || return 0
 
     case $SUB_OPTION in
         1)
@@ -192,6 +194,20 @@ compose_stack_running() {
     docker compose ps --status running --quiet 2>/dev/null | grep -q .
 }
 
+# Services of the compose in the current directory that are not running,
+# one per line. A single running container says nothing about the rest of
+# the stack, and compose has no "stopped" status to filter on (containers
+# sit in created, exited, dead or restarting), so the declared services
+# are compared with the running ones instead.
+compose_services_down() {
+    local running svc
+    running=$(docker compose ps --services --status running 2>/dev/null)
+    docker compose config --services 2>/dev/null | while IFS= read -r svc; do
+        [ -n "$svc" ] || continue
+        printf '%s\n' "$running" | grep -qx -- "$svc" || printf '%s\n' "$svc"
+    done
+}
+
 # Silenced compose call under a spinner with an honest exit code. Defined
 # guardedly so several modules can carry the same definition.
 command -v compose_run_spinner >/dev/null 2>&1 || compose_run_spinner() {
@@ -213,7 +229,9 @@ start_panel_node() {
         any=1
         cd "$dir" 2>/dev/null || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $dir${COLOR_RESET}" >&2; continue; }
 
-        if compose_stack_running; then
+        # "Running" only when every service is: a stopped panel next to a
+        # live db and node still needs the `up -d`.
+        if compose_stack_running && [ -z "$(compose_services_down)" ]; then
             echo -e "${COLOR_GREEN}${LANG[PANEL_RUNNING]} ($dir)${COLOR_RESET}"
         else
             echo -e "${COLOR_YELLOW}${LANG[STACK_STARTING]} ($dir)...${COLOR_RESET}"
@@ -274,17 +292,32 @@ update_panel_node() {
             before=""
         fi
 
+        # The pull rc is kept: a registry outage leaves the images as they
+        # were, which must not read as "no updates available".
+        local pull_rc_file pull_rc
         tmpfile=$(mktemp)
-        docker compose pull > "$tmpfile" 2>&1 &
+        pull_rc_file=$(mktemp)
+        ( docker compose pull > "$tmpfile" 2>&1; echo $? > "$pull_rc_file" ) &
         spinner $! "${LANG[WAITING]}"
         pull_output=$(cat "$tmpfile")
-        rm -f "$tmpfile"
+        pull_rc=$(cat "$pull_rc_file" 2>/dev/null)
+        rm -f "$tmpfile" "$pull_rc_file"
 
         images_after=$(docker compose config --images | sort -u)
         if [ -n "$images_after" ]; then
             after=$(echo "$images_after" | xargs -I {} docker images -q {} | sort -u)
         else
             after=""
+        fi
+
+        if [ "${pull_rc:-1}" != "0" ]; then
+            echo -e "${COLOR_RED}$(printf "${LANG[COMPOSE_PULL_FAIL]}" "$dir")${COLOR_RESET}"
+            printf '%s\n' "$pull_output" | tail -n 5 | sed 's/^/  /'
+            # Nothing new arrived: stop here. Images that did arrive before
+            # the failure are still applied below, as they were before.
+            if [ "$before" = "$after" ]; then
+                continue
+            fi
         fi
 
         if [ "$before" != "$after" ] || echo "$pull_output" | grep -q "Pull complete"; then
@@ -413,7 +446,10 @@ upgrade_panel_to_v3() {
     local ts backup_dir pg_user pg_db
     ts=$(date +%Y%m%d-%H%M%S)
     backup_dir="$dir/backup/$ts"
-    if ! mkdir -p "$backup_dir"; then
+    # The dump carries the whole panel database (admin hashes, REALITY
+    # private keys in the profiles): the directory is root-only, so the
+    # files written into it under the default umask stay unreadable too.
+    if ! (umask 077 && mkdir -p "$backup_dir") || ! chmod 700 "$backup_dir"; then
         echo -e "${COLOR_RED}${LANG[UPGRADE_BACKUP_FAILED]}${COLOR_RESET}"
         return 1
     fi
@@ -464,30 +500,23 @@ upgrade_panel_to_v3() {
     fi
     printf "${COLOR_GREEN}${LANG[UPGRADE_BACKUP_OK]}${COLOR_RESET}\n" "$backup_dir"
 
-    # Append only: the 2.x keys stay in place so the backed-up .env is a working
-    # rollback, and 3.x silently ignores keys it does not know.
-    if ! grep -q '^APP_SECRET=' .env; then
-        {
-            printf '\n### SECRETS ###\n'
-            printf '# 3.x dropped the JWT_AUTH_SECRET alias. The value below is the same one\n'
-            printf '# the panel already used, so admin logins and API tokens keep working.\n'
-            printf 'APP_SECRET=%s\n' "$app_secret"
-        } >> .env
-    fi
-    if ! grep -q '^PANEL_DOMAIN=' .env; then
-        local front_end
-        front_end=$(read_env_value .env FRONT_END_DOMAIN)
-        if [ -n "$front_end" ] && [ "$front_end" != "*" ]; then
-            printf 'PANEL_DOMAIN=%s\n' "$front_end" >> .env
-        fi
-    fi
+    # :latest and :dev move to the 3.x image on pull, and the rollback has
+    # nothing else to go back to: keep the id of the image the panel runs.
+    # The container comes first — a floating tag pulled by hand without a
+    # recreate already points past it; the tag is the fallback when no
+    # container is left.
+    { docker container inspect -f '{{.Image}}' remnawave 2>/dev/null \
+        || docker image inspect -f '{{.Id}}' "remnawave/backend:${current_tag}" 2>/dev/null; } > "$backup_dir/backend-image.id" \
+        || rm -f "$backup_dir/backend-image.id"
 
     # :latest and :dev already resolve to a 3.x image, so only the pinned old
-    # majors need the tag rewritten.
+    # majors need the tag rewritten. The check reads the tag the same way the
+    # migration gate does, so a trailing comment on the image line is fine.
     case "$current_tag" in
         1|1.*|2|2.*)
             sed -i "s|image: remnawave/backend:${current_tag}|image: remnawave/backend:3|" docker-compose.yml
-            if ! grep -qE '^[[:space:]]*image:[[:space:]]*remnawave/backend:3[[:space:]]*$' docker-compose.yml; then
+            if [ "$(panel_image_tag "$dir")" != "3" ]; then
+                cp -a "$backup_dir/docker-compose.yml" ./docker-compose.yml
                 printf "${COLOR_RED}${LANG[UPGRADE_TAG_FAILED]}${COLOR_RESET}\n" "$backup_dir"
                 return 1
             fi
@@ -502,6 +531,27 @@ upgrade_panel_to_v3() {
         printf "${COLOR_RED}${LANG[UPGRADE_PULL_FAILED]}${COLOR_RESET}\n" "$backup_dir"
         tail -n 10 "$backup_dir/pull.log"
         return 1
+    fi
+
+    # Append only: the 2.x keys stay in place so the backed-up .env is a working
+    # rollback, and 3.x silently ignores keys it does not know. This runs only
+    # once the pull succeeded: APP_SECRET is one of the two signals of the
+    # migration gate, and an early exit that left it behind would turn the
+    # next plain "Update" into an unguarded 3.x start.
+    if ! grep -q '^APP_SECRET=' .env; then
+        {
+            printf '\n### SECRETS ###\n'
+            printf '# 3.x dropped the JWT_AUTH_SECRET alias. The value below is the same one\n'
+            printf '# the panel already used, so admin logins and API tokens keep working.\n'
+            printf 'APP_SECRET=%s\n' "$app_secret"
+        } >> .env
+    fi
+    if ! grep -q '^PANEL_DOMAIN=' .env; then
+        local front_end
+        front_end=$(read_env_value .env FRONT_END_DOMAIN)
+        if [ -n "$front_end" ] && [ "$front_end" != "*" ]; then
+            printf 'PANEL_DOMAIN=%s\n' "$front_end" >> .env
+        fi
     fi
 
     # --no-deps keeps compose from walking the service_healthy dependencies of
@@ -525,12 +575,15 @@ upgrade_panel_to_v3() {
 
     # Bring back whatever the recreate left behind: the subscription page and,
     # on a combined box, the node.
-    docker compose up -d > "$backup_dir/up-rest.log" 2>&1
+    local up_rest_rc=0
+    docker compose up -d > "$backup_dir/up-rest.log" 2>&1 || up_rest_rc=$?
 
     local stopped
-    stopped=$(docker compose ps --services --filter status=stopped 2>/dev/null | tr '\n' ' ')
+    stopped=$(compose_services_down | tr '\n' ' ')
     if [ -n "${stopped// /}" ]; then
         printf "${COLOR_RED}${LANG[UPGRADE_SERVICES_DOWN]}${COLOR_RESET}\n" "$stopped"
+        tail -n 20 "$backup_dir/up-rest.log"
+    elif [ "$up_rest_rc" -ne 0 ]; then
         tail -n 20 "$backup_dir/up-rest.log"
     fi
 
@@ -579,6 +632,16 @@ rollback_panel_from_v3() {
         printf "${COLOR_RED}${LANG[ROLLBACK_FAILED]}${COLOR_RESET}\n" "$backup_dir"
         tail -n 20 "$backup_dir/pg_restore.log"
         return 1
+    fi
+
+    # A floating tag (:latest, :dev) was moved to the 3.x image by the pull;
+    # point it back at the image the panel ran before, or `up` would start
+    # 3.x again on the 2.x .env and loop.
+    local old_id old_tag
+    old_id=$(cat "$backup_dir/backend-image.id" 2>/dev/null)
+    old_tag=$(panel_image_tag "$dir")
+    if [ -n "$old_id" ] && [ -n "$old_tag" ]; then
+        docker tag "$old_id" "remnawave/backend:${old_tag}" > "$backup_dir/rollback-tag.log" 2>&1
     fi
 
     docker compose up -d > "$backup_dir/rollback-up.log" 2>&1
@@ -670,7 +733,9 @@ set_reality_min_client_ver() {
             continue
         fi
 
-        body=$(jq -n --arg uuid "$uuid" --argjson config "$config" '{uuid: $uuid, config: $config}')
+        # The config goes to jq on stdin, not in argv: it carries the REALITY
+        # private keys (visible in ps) and may exceed the per-argument limit.
+        body=$(printf '%s' "$config" | jq -c --arg uuid "$uuid" '{uuid: $uuid, config: .}')
         response=$(make_api_request "PATCH" "http://$domain_url/api/config-profiles" "$token" "$body")
         if echo "$response" | jq -e '.response.uuid' > /dev/null 2>&1; then
             patched=$((patched + 1))
@@ -711,7 +776,8 @@ view_logs() {
 
         local choice
         while true; do
-            reading "${LANG[SELECT_STACK_LOGS_PROMPT]}" choice
+            # EOF would otherwise spin this loop at full CPU.
+            reading "${LANG[SELECT_STACK_LOGS_PROMPT]}" choice || return 1
             if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#dirs[@]} ]; then
                 break
             fi
@@ -722,12 +788,20 @@ view_logs() {
 
     cd "$target" || { echo -e "${COLOR_RED}${LANG[CHANGE_DIR_FAILED]} $target${COLOR_RESET}"; return 1; }
 
-    if ! compose_stack_running; then
-        echo -e "${COLOR_RED}${LANG[CONTAINER_NOT_RUNNING]}${COLOR_RESET}"
+    # Logs of exited or restart-looping containers are exactly the ones
+    # needed after a failed start, and compose keeps them: only a stack
+    # without any container has nothing to show.
+    if ! docker compose ps -a -q 2>/dev/null | grep -q .; then
+        echo -e "${COLOR_RED}$(printf "${LANG[LOGS_NO_CONTAINERS]}" "$target")${COLOR_RESET}"
         return 1
     fi
 
     echo -e "${COLOR_YELLOW}${LANG[VIEW_LOGS]} ($target)${COLOR_RESET}"
+    if ! compose_stack_running; then
+        echo -e "${COLOR_YELLOW}${LANG[LOGS_STACK_STOPPED]}${COLOR_RESET}"
+        docker compose logs -t --tail 200
+        return 0
+    fi
     docker compose logs -f -t
 }
 
@@ -743,9 +817,12 @@ show_panel_access() {
     echo -e ""
 }
 
+# "0" hands control back to the panel menu that called us (it redraws
+# itself), instead of starting a nested copy of the whole script whose exit
+# would drop the operator right back into this submenu.
 manage_panel_access() {
     show_panel_access
-    reading "${LANG[IPV6_PROMPT]}" ACCESS_OPTION
+    reading "${LANG[IPV6_PROMPT]}" ACCESS_OPTION || return 0
     case $ACCESS_OPTION in
         1)
             open_panel_access
@@ -755,8 +832,7 @@ manage_panel_access() {
             ;;
         0)
             echo -e "${COLOR_YELLOW}${LANG[EXIT]}${COLOR_RESET}"
-            sleep 2
-            remnawave_reverse
+            return 0
             ;;
         *)
             echo -e "${COLOR_YELLOW}${LANG[IPV6_INVALID_CHOICE]}${COLOR_RESET}"
@@ -774,6 +850,12 @@ manage_panel_access() {
 # bind next to its unix socket.
 panel_access_port_busy() {
     ss -tln 2>/dev/null | awk -v p=":8443" '$4 ~ p"$" { found = 1 } END { exit !found }'
+}
+
+# The UFW rule open_panel_access adds, told apart from any other 8443 rule
+# by its comment.
+panel_access_own_rule() {
+    ufw status 2>/dev/null | grep -qE '^8443/tcp[[:space:]].*# Panel access 8443[[:space:]]*$'
 }
 
 # The real panel domain — the compose carries only the ${PANEL_DOMAIN}
@@ -819,13 +901,22 @@ panel_access_write() { # target tmp
 }
 
 panel_access_apply_nginx() {
-    local dir="$1" conf="$dir/nginx.conf" tmp="${1}/nginx.conf.8443tmp"
+    # Two locals: in one statement $dir would still be the caller's.
+    local dir="$1"
+    local conf="$dir/nginx.conf" tmp="$dir/nginx.conf.8443tmp"
     cp -p "$conf" "${conf}.8443bak"
 
     # A stale listen from a previous run goes first, ours lands right after
     # the panel's server_name — inside the same server block.
     sed '\|^[[:space:]]*listen 8443 ssl;$|d' "$conf" > "$tmp"
     sed -i "/server_name ${PANEL_DOMAIN};/a \    listen 8443 ssl;" "$tmp"
+    # No server_name matching the .env domain (edited by hand) means no
+    # listen was added: nginx -t would still pass on the unchanged file.
+    if ! grep -q '^[[:space:]]*listen 8443 ssl;$' "$tmp"; then
+        rm -f "$tmp" "${conf}.8443bak"
+        echo -e "${COLOR_RED}$(printf "${LANG[PORT_8443_EDIT_FAILED]}" "$conf")${COLOR_RESET}"
+        return 1
+    fi
     panel_access_write "$conf" "$tmp"
 
     if ! panel_access_nginx_validate "$dir"; then
@@ -842,6 +933,20 @@ panel_access_apply_nginx() {
     return 0
 }
 
+# Restart caddy and tell whether it stayed up. A config caddy rejects dies
+# a few seconds into its restart loop, and `docker ps` keeps listing a
+# container that restart: always is looping (Restarting counts as running),
+# so the proof is the restart counter: sampled right after our restart, it
+# must not move while caddy settles.
+panel_access_caddy_restart() {
+    local count state
+    docker restart remnawave-caddy >/dev/null 2>&1 || return 1
+    count=$(docker inspect -f '{{.RestartCount}}' remnawave-caddy 2>/dev/null)
+    sleep 6
+    state=$(docker inspect -f '{{.State.Running}} {{.State.Restarting}} {{.RestartCount}}' remnawave-caddy 2>/dev/null)
+    [ -n "$count" ] && [ "$state" = "true false $count" ]
+}
+
 # The caddy door reuses the panel site itself: the address moves to :8443
 # and a TCP bind joins the unix one, so the site keeps answering on the
 # socket (the normal path through Xray) while also listening on 8443.
@@ -849,19 +954,24 @@ panel_access_apply_nginx() {
 # costs one restart — it re-resolves the bind mount, in-place writes or
 # not.
 panel_access_apply_caddy() {
-    local dir="$1" caddyfile="$dir/Caddyfile" tmp="${1}/Caddyfile.8443tmp"
+    # Two locals: in one statement $dir would still be the caller's.
+    local dir="$1"
+    local caddyfile="$dir/Caddyfile" tmp="$dir/Caddyfile.8443tmp"
     cp -p "$caddyfile" "${caddyfile}.8443bak"
 
     sed "s|https://{\$PANEL_DOMAIN} {|https://{\$PANEL_DOMAIN}:8443 {|" "$caddyfile" > "$tmp"
     sed -i "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/ { /^    bind unix/{ a\    bind 0.0.0.0
 }; }" "$tmp"
+    # Both edits anchor on our own template; a hand-edited Caddyfile may
+    # match neither, and the restart below would then change nothing.
+    if ! sed -n "/https:\/\/{\$PANEL_DOMAIN}:8443 {/,/^}/p" "$tmp" | grep -q '^    bind 0.0.0.0$'; then
+        rm -f "$tmp" "${caddyfile}.8443bak"
+        echo -e "${COLOR_RED}$(printf "${LANG[PORT_8443_EDIT_FAILED]}" "$caddyfile")${COLOR_RESET}"
+        return 1
+    fi
     panel_access_write "$caddyfile" "$tmp"
 
-    docker restart remnawave-caddy >/dev/null 2>&1
-    # A config caddy rejects dies a few seconds into its restart loop — an
-    # immediate check would pass right before that.
-    sleep 6
-    if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
+    if ! panel_access_caddy_restart; then
         cat "${caddyfile}.8443bak" > "$caddyfile"
         docker restart remnawave-caddy >/dev/null 2>&1
         rm -f "${caddyfile}.8443bak"
@@ -898,26 +1008,31 @@ open_panel_access() {
         return 1
     fi
 
-    if command -v ss >/dev/null 2>&1 && panel_access_port_busy; then
-        echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
-        return 1
+    local configured=false
+    if [ "$webserver" = "nginx" ]; then
+        grep -q "listen 8443 ssl;" "$dir/nginx.conf" && configured=true
+    else
+        grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile" && configured=true
     fi
 
-    if [ "$webserver" = "nginx" ]; then
-        if grep -q "listen 8443 ssl;" "$dir/nginx.conf"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
-        else
-            panel_access_apply_nginx "$dir" || return 1
-        fi
+    # An open door holds 8443 itself (host network), so "port busy" is
+    # checked only before the door is configured — re-opening it (say, to
+    # restore the UFW rule) must not trip over our own listener.
+    if [ "$configured" = true ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
     else
-        if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
-            echo -e "${COLOR_YELLOW}${LANG[PORT_8443_ALREADY_CONFIGURED]}${COLOR_RESET}"
+        if command -v ss >/dev/null 2>&1 && panel_access_port_busy; then
+            echo -e "${COLOR_RED}${LANG[PORT_8443_IN_USE]}${COLOR_RESET}"
+            return 1
+        fi
+        if [ "$webserver" = "nginx" ]; then
+            panel_access_apply_nginx "$dir" || return 1
         else
             panel_access_apply_caddy "$dir" || return 1
         fi
     fi
 
-    ufw allow 8443/tcp >/dev/null 2>&1
+    ufw allow 8443/tcp comment 'Panel access 8443' >/dev/null 2>&1
     ufw reload >/dev/null 2>&1
 
     # The link follows the auth mode: with a portal (tinyauth or caddy
@@ -956,7 +1071,13 @@ open_panel_access() {
 
     echo -e "${COLOR_YELLOW}${LANG[OPEN_PANEL_LINK]}${COLOR_RESET}"
     echo -e "${COLOR_WHITE}${panel_link}${COLOR_RESET}"
-    if [ "$auth_mode" != "cookie" ]; then
+    # The tinyauth login page is a separate server that listens only behind
+    # Xray on 443 and sends the browser back without the port, so through
+    # 8443 only an already signed-in browser gets in — say so rather than
+    # promise the usual login.
+    if [ "$auth_mode" = "tinyauth" ]; then
+        echo -e "${COLOR_YELLOW}${LANG[PORT_8443_TINYAUTH_NOTE]}${COLOR_RESET}"
+    elif [ "$auth_mode" != "cookie" ]; then
         echo -e "${COLOR_GRAY}${LANG[PORT_8443_PORTAL_NOTE]}${COLOR_RESET}"
     fi
     echo -e "${COLOR_RED}${LANG[PORT_8443_WARNING]}${COLOR_RESET}"
@@ -1003,7 +1124,11 @@ close_panel_access() {
             docker exec remnawave-nginx nginx -s reload >/dev/null 2>&1
             rm -f "${conf}.8443bak"
         else
+            # No door in the web server: an 8443 rule in UFW belongs to
+            # something else, unless it carries our comment (the config
+            # was rewritten while the door was open) — that one still goes.
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
+            panel_access_own_rule || return 0
         fi
     else
         if grep -q "https://{\$PANEL_DOMAIN}:8443 {" "$dir/Caddyfile"; then
@@ -1014,9 +1139,7 @@ close_panel_access() {
             # redirect block carries a bind 0.0.0.0 of its own.
             sed -i "/https:\/\/{\$PANEL_DOMAIN} {/,/^}/ { /^    bind 0.0.0.0$/d }" "$tmp"
             panel_access_write "$caddyfile" "$tmp"
-            docker restart remnawave-caddy >/dev/null 2>&1
-            sleep 6
-            if ! docker ps --format '{{.Names}}' | grep -qx remnawave-caddy; then
+            if ! panel_access_caddy_restart; then
                 cat "${caddyfile}.8443bak" > "$caddyfile"
                 docker restart remnawave-caddy >/dev/null 2>&1
                 rm -f "${caddyfile}.8443bak"
@@ -1026,10 +1149,12 @@ close_panel_access() {
             rm -f "${caddyfile}.8443bak"
         else
             echo -e "${COLOR_YELLOW}${LANG[PORT_8443_NOT_CONFIGURED]}${COLOR_RESET}"
+            panel_access_own_rule || return 0
         fi
     fi
 
-    if ufw status 2>/dev/null | grep -q "8443"; then
+    # Whole-port match: a bare "8443" substring also hits 18443.
+    if ufw status 2>/dev/null | grep -qE '^8443/tcp[[:space:]]'; then
         ufw delete allow 8443/tcp >/dev/null 2>&1
         ufw reload >/dev/null 2>&1
         if [ $? -ne 0 ]; then

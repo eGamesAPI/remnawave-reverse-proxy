@@ -57,8 +57,20 @@ xchk_with_statuspage() {
     xchk_installed && grep -q "xray-checker-statuspage" "$XCHK_DIR/docker-compose.yml"
 }
 
+# Up means the container state itself is "running": `docker ps` also lists
+# a container sitting in its restart loop (Docker keeps Running=true while
+# Restarting), so a config the process rejects would pass a name check.
+# The optional second argument is the RestartCount taken before a wait —
+# a container the restart policy brought back in the meantime crashed.
 xchk_container_up() {
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$1"
+    local state
+    state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' "$1" 2>/dev/null) || return 1
+    [ "${state%% *}" = "running" ] || return 1
+    [ -z "${2:-}" ] || [ "${state##* }" = "$2" ]
+}
+
+xchk_restart_count() {
+    docker inspect -f '{{.RestartCount}}' "$1" 2>/dev/null
 }
 
 # Prints "<kind> <dir>" for the reverse proxy serving this box, or fails.
@@ -78,6 +90,19 @@ xchk_webserver() {
         fi
     done
     return 1
+}
+
+# Whether the box's nginx already serves this exact host (panel, sub,
+# selfsteal, portal): a second server block for it is only a warning to
+# nginx -t and gets silently ignored. Caddy needs no lookup here — its
+# sites come from env placeholders, and caddy validate rejects duplicates.
+xchk_domain_taken() {
+    local ws dir esc
+    ws=$(xchk_webserver) || return 1
+    [ "${ws%% *}" = "nginx" ] || return 1
+    dir="${ws#* }"
+    esc="${1//./\\.}"
+    grep -qiE "^[[:space:]]*server_name[^;]*[[:space:]]${esc}[[:space:];]" "$dir/nginx.conf"
 }
 
 xchk_port_busy() {
@@ -187,11 +212,24 @@ xchk_tg_show_error() {
     fi
 }
 
+# curl config for a Bot API call: the token rides in the URL and the proxy
+# may carry user:pass, so both go through a -K file descriptor instead of
+# argv, where any local user could read them in /proc/<pid>/cmdline.
+# Values are double-quoted with backslashes and quotes escaped.
+xchk_tg_curl_cfg() {
+    local url="https://api.telegram.org/bot${XCHK_TG_TOKEN_VAL}/$1" proxy="$XCHK_TG_PROXY_VAL"
+    url="${url//\\/\\\\}"
+    url="${url//\"/\\\"}"
+    printf 'url = "%s"\n' "$url"
+    if [ -n "$proxy" ]; then
+        proxy="${proxy//\\/\\\\}"
+        proxy="${proxy//\"/\\\"}"
+        printf 'proxy = "%s"\n' "$proxy"
+    fi
+}
+
 xchk_tg_test() {
-    local proxy_args=()
-    [ -n "$XCHK_TG_PROXY_VAL" ] && proxy_args=(--proxy "$XCHK_TG_PROXY_VAL")
-    XCHK_TG_RESPONSE=$(curl -s -m 20 "${proxy_args[@]}" \
-        "https://api.telegram.org/bot${XCHK_TG_TOKEN_VAL}/getMe" 2>/dev/null)
+    XCHK_TG_RESPONSE=$(curl -s -m 20 -K <(xchk_tg_curl_cfg getMe) 2>/dev/null)
     XCHK_TG_RC=$?
     printf '%s' "$XCHK_TG_RESPONSE" | grep -q '"ok":true'
 }
@@ -200,10 +238,7 @@ xchk_tg_test() {
 # chat the user has opened first, so a failure here is a hint, not an error.
 xchk_tg_send_test() {
     local chat_id="$1"
-    local proxy_args=()
-    [ -n "$XCHK_TG_PROXY_VAL" ] && proxy_args=(--proxy "$XCHK_TG_PROXY_VAL")
-    XCHK_TG_RESPONSE=$(curl -s -m 20 "${proxy_args[@]}" \
-        "https://api.telegram.org/bot${XCHK_TG_TOKEN_VAL}/sendMessage" \
+    XCHK_TG_RESPONSE=$(curl -s -m 20 -K <(xchk_tg_curl_cfg sendMessage) \
         --data-urlencode "chat_id=${chat_id}" \
         --data-urlencode "text=✅ ${LANG[XCHK_TG_TEST_TEXT]}" 2>/dev/null)
     XCHK_TG_RC=$?
@@ -320,13 +355,16 @@ xchk_remove_cert_mounts() {
 # sidecar rewrites renewal hooks only for a lineage it issued itself.
 xchk_obtain_cert() {
     local domain="$1"
-    local base_domain
-    base_domain=$(extract_domain "$domain")
+    local lineage
     XCHK_CERT_FRESH=0
     load_certificates_module
-    if [ -d "/etc/letsencrypt/live/$base_domain" ] && is_wildcard_cert "$base_domain"; then
-        XCHK_CERT_DOMAIN="$base_domain"
-        echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_CERT_WILDCARD]}" "$XCHK_CERT_DOMAIN")${COLOR_RESET}"
+    # The lineage directory is read from the live tree, never guessed from
+    # the method: wildcard methods name it after the zone (Bunny after the
+    # base the user picked), certbot may append -0001, and only a lineage
+    # whose SANs cover the host counts.
+    if lineage=$(resolve_certificate_domain "$domain"); then
+        XCHK_CERT_DOMAIN="$lineage"
+        echo -e "${COLOR_GREEN}$(printf "${LANG[XCHK_CERT_REUSED]}" "$XCHK_CERT_DOMAIN")${COLOR_RESET}"
         return 0
     fi
 
@@ -344,7 +382,8 @@ xchk_obtain_cert() {
     echo -e "    ${COLOR_GRAY}${LANG[CERT_METHOD_ACME_DESC]}${COLOR_RESET}"
     echo -e ""
     while true; do
-        reading "${LANG[CERT_METHOD_CHOOSE]}" method
+        # EOF on stdin must end the dialog, not spin the loop forever.
+        reading "${LANG[CERT_METHOD_CHOOSE]}" method || return 1
         case "$method" in
             1|2|3|4) break ;;
             *) echo -e "${COLOR_RED}${LANG[CERT_INVALID_CHOICE]}${COLOR_RESET}" ;;
@@ -355,11 +394,11 @@ xchk_obtain_cert() {
         reading "${LANG[EMAIL_PROMPT]}" email
     fi
     get_certificates "$domain" "$method" "$email" || return 1
-    check_certificates "$domain" >/dev/null 2>&1 || return 1
-    XCHK_CERT_DOMAIN="$domain"
-    if [ "$method" = "1" ] || [ "$method" = "3" ]; then
-        XCHK_CERT_DOMAIN="$base_domain"
+    if ! lineage=$(resolve_certificate_domain "$domain"); then
+        echo -e "${COLOR_RED}${LANG[CERT_NOT_FOUND]} $domain${COLOR_RESET}"
+        return 1
     fi
+    XCHK_CERT_DOMAIN="$lineage"
     XCHK_CERT_FRESH=1
     return 0
 }
@@ -372,6 +411,18 @@ xchk_wire_nginx() {
 
     xchk_obtain_cert "$domain" || return 1
     local cert_domain="$XCHK_CERT_DOMAIN"
+
+    # A lineage issued right here renews on its own terms: the panel's cron
+    # line never opens :80 for a standalone one. Hooks go in before the
+    # wiring — a failed attempt keeps the lineage, the retry reuses it with
+    # XCHK_CERT_FRESH=0 and would never write them after a successful wire.
+    # A reused lineage without any hooks is such a leftover as well.
+    local renewal_conf="/etc/letsencrypt/renewal/$cert_domain.conf"
+    if [ "$XCHK_CERT_FRESH" = "1" ] || { [ -f "$renewal_conf" ] \
+        && ! grep -Eq '^(pre_hook|post_hook|renew_hook|deploy_hook) = ' "$renewal_conf"; }; then
+        xchk_panel_cert_hooks "$cert_domain"
+        xchk_ensure_renew_cron
+    fi
 
     # compose edit with validation + rollback: a broken compose would take
     # the whole panel stack down on the next up. The conf gets its own
@@ -393,6 +444,14 @@ xchk_wire_nginx() {
 
     XCHK_MOUNTS_ADDED=0
     if ! grep -q "/etc/letsencrypt/live/$cert_domain/fullchain.pem" "$compose"; then
+        # Docker turns a missing bind source into an empty directory on the
+        # host — a wrong lineage path must never reach a container.
+        if [ ! -s "/etc/letsencrypt/live/$cert_domain/fullchain.pem" ] \
+            || [ ! -s "/etc/letsencrypt/live/$cert_domain/privkey.pem" ]; then
+            rm -f "$backup" "$conf_backup"
+            echo -e "${COLOR_RED}${LANG[CERT_NOT_FOUND]} $cert_domain${COLOR_RESET}"
+            return 1
+        fi
         step_do "${LANG[XCHK_MOUNTS_ADDED]}"
         if ! xchk_add_cert_mounts "$compose" "$cert_domain"; then
             xchk_nginx_rollback
@@ -453,8 +512,18 @@ EOL
     # fails with EADDRINUSE — by then the whole config was already parsed,
     # so that specific conflict with ourselves is expected and passes;
     # every other failure is real and rolls both edits back.
+    # New cert mounts exist only in the compose file so far: the running
+    # container cannot see them and would reject the new ssl_certificate.
+    # Then the test runs in a throwaway container of the edited service
+    # (own name, no deps, no published ports), the live nginx untouched.
     local test_out test_rc=0
-    test_out=$(docker exec remnawave-nginx nginx -t 2>&1) || test_rc=$?
+    if [ "$XCHK_MOUNTS_ADDED" = "1" ]; then
+        test_out=$(cd "$dir" && docker compose run --rm --no-deps -T \
+            --name "xchk-nginx-test-$$" --entrypoint nginx remnawave-nginx -t \
+            < /dev/null 2>&1) || test_rc=$?
+    else
+        test_out=$(docker exec remnawave-nginx nginx -t 2>&1) || test_rc=$?
+    fi
     if [ "$test_rc" -ne 0 ]; then
         if ! printf '%s' "$test_out" | grep -q "unix:/dev/shm/nginx.sock" \
             || ! printf '%s' "$test_out" | grep -q "Address already in use"; then
@@ -535,13 +604,32 @@ ${bind_line}
 ${XCHK_MARK_END}
 EOL
 
+    # The block was appended in place (same inode), so the running caddy
+    # already sees it through its bind mount: validate before restarting —
+    # a rejected config (a duplicate site among others) is rolled back
+    # without ever taking the panel down.
+    local validate_out
+    if ! validate_out=$(docker exec remnawave-caddy caddy validate \
+        --config /etc/caddy/Caddyfile --adapter caddyfile 2>&1); then
+        # Nothing reached the running caddy yet: strip the block in place
+        # (same inode again) instead of xchk_caddy_rollback's sed -i and
+        # restart — the panel keeps serving untouched.
+        sed "/^${XCHK_MARK_BEGIN}\$/,/^${XCHK_MARK_END}\$/d" "$caddyfile" > "${caddyfile}.xchktmp" \
+            && cat "${caddyfile}.xchktmp" > "$caddyfile" && rm -f "${caddyfile}.xchktmp"
+        echo -e "${COLOR_RED}${LANG[XCHK_WEB_APPLY_FAIL]}${COLOR_RESET}"
+        printf '%s\n' "$validate_out" | tail -n 5 | sed 's/^/  /'
+        return 1
+    fi
+
     step_do "${LANG[XCHK_APPLYING_WEBSERVER]}"
     docker restart remnawave-caddy >/dev/null 2>&1
     # A config caddy rejects dies a few seconds into its restart loop — a
     # single immediate Up check passes right before that. Re-check after a
-    # pause before calling the apply successful.
+    # pause; any restart the policy made during it means caddy crashed.
+    local restarts
+    restarts=$(xchk_restart_count remnawave-caddy)
     sleep 6
-    if ! xchk_container_up remnawave-caddy; then
+    if ! xchk_container_up remnawave-caddy "$restarts"; then
         xchk_caddy_rollback "$caddyfile"
         echo -e "${COLOR_RED}${LANG[XCHK_WEB_APPLY_FAIL]}${COLOR_RESET}"
         return 1
@@ -578,8 +666,29 @@ xchk_sidecar_cert_hooks() {
         printf 'pre_hook = /usr/bin/docker stop xray-checker-nginx\n' >> "$renewal_conf"
         printf 'post_hook = /usr/bin/docker start xray-checker-nginx\n' >> "$renewal_conf"
     else
-        printf 'deploy_hook = /usr/bin/docker restart xray-checker-nginx\n' >> "$renewal_conf"
+        printf 'renew_hook = /usr/bin/docker restart xray-checker-nginx\n' >> "$renewal_conf"
     fi
+}
+
+# Renewal hooks for a lineage this module issued for the panel's nginx. That
+# nginx never listens on :80, so a standalone renewal needs no stop — only
+# the ufw hole, which the panel's cron line does not open by itself. Same
+# marker dance as configure_certbot_renewal_hooks (and the same marker, so
+# both lineages renewing in one run still clean up once): the rule is
+# deleted only when the pre hook added it, a permanent 80/tcp rule of
+# another component stays. configobj values: no commas, no hash signs.
+# The restart after a renewal brings the new file behind the per-file bind
+# mount into the container.
+xchk_panel_cert_hooks() {
+    local cert_domain="$1"
+    local renewal_conf="/etc/letsencrypt/renewal/$cert_domain.conf"
+    [ -f "$renewal_conf" ] || return 0
+    sed -i -E '/^(pre_hook|post_hook|renew_hook|deploy_hook) = /d' "$renewal_conf"
+    if grep -Eq '^[[:space:]]*authenticator[[:space:]]*=[[:space:]]*standalone[[:space:]]*$' "$renewal_conf"; then
+        printf '%s\n' "pre_hook = if [ -x /usr/sbin/ufw ] && ! /usr/sbin/ufw status | grep -Eq '^80(/tcp)?[[:space:]]+ALLOW( IN)?[[:space:]]+Anywhere'; then /usr/sbin/ufw allow 80/tcp comment 'HTTP for ACME challenge' >/dev/null && touch /run/remnawave-acme-port80; fi" >> "$renewal_conf"
+        printf '%s\n' "post_hook = if [ -f /run/remnawave-acme-port80 ]; then /usr/sbin/ufw delete allow 80/tcp >/dev/null; rm -f /run/remnawave-acme-port80; fi" >> "$renewal_conf"
+    fi
+    printf 'renew_hook = /usr/bin/docker restart remnawave-nginx\n' >> "$renewal_conf"
 }
 
 # A stand-alone box has no panel cron for certbot: install the same weekly
@@ -595,10 +704,11 @@ xchk_ensure_renew_cron() {
 # domain from state so the page can be published again once it's fixed.
 xchk_sidecar_check() {
     local kind="${1:-caddy}"
-    local container="xray-checker-caddy"
+    local container="xray-checker-caddy" restarts
     [ "$kind" = "nginx" ] && container="xray-checker-nginx"
+    restarts=$(xchk_restart_count "$container")
     sleep 6
-    if xchk_container_up "$container"; then
+    if xchk_container_up "$container" "$restarts"; then
         return 0
     fi
     echo -e "${COLOR_RED}$(printf "${LANG[XCHK_SIDECAR_FAIL]}" "$container")${COLOR_RESET}"
@@ -636,10 +746,15 @@ xchk_prepare_domain() {
         domain_input="${domain_input%%/*}"
         domain_input="${domain_input%.}"
         domain_input="${domain_input,,}"
-        if [[ "$domain_input" =~ $domain_re ]]; then
-            break
+        if ! [[ "$domain_input" =~ $domain_re ]]; then
+            echo -e "${COLOR_RED}${LANG[XCHK_DOMAIN_INVALID]}${COLOR_RESET}"
+            continue
         fi
-        echo -e "${COLOR_RED}${LANG[XCHK_DOMAIN_INVALID]}${COLOR_RESET}"
+        if xchk_domain_taken "$domain_input"; then
+            echo -e "${COLOR_RED}$(printf "${LANG[XCHK_DOMAIN_TAKEN]}" "$domain_input")${COLOR_RESET}"
+            continue
+        fi
+        break
     done
 
     load_dns_records_module
@@ -682,7 +797,8 @@ xchk_prepare_domain() {
         echo -e "${COLOR_YELLOW}0. ${LANG[XCHK_SIDECAR_SKIP]}${COLOR_RESET}"
         echo -e ""
         local ws_pick
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" ws_pick
+        # EOF counts as "skip": the domain stays unpublished, no loop.
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" ws_pick || ws_pick=0
         case "$ws_pick" in
             # A failed issuance loops back to the choice — caddy needs no
             # cert dance and is one keypress away.
@@ -935,7 +1051,8 @@ xchk_install() {
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
     echo -e ""
     while true; do
-        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" mode
+        # EOF on stdin cancels like 0 instead of re-asking forever.
+        reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" mode || mode=0
         case "$mode" in
             1) mode="bundle"; break ;;
             2) mode="checker"; break ;;
@@ -958,7 +1075,7 @@ xchk_install() {
         echo -e ""
         local page_pick
         while true; do
-            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" page_pick
+            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" page_pick || page_pick=0
             case "$page_pick" in
                 1) page="mrvibe"; break ;;
                 # kutovoys' page lives inside the checker itself — the stack
@@ -993,7 +1110,7 @@ xchk_install() {
         echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
         echo -e ""
         while true; do
-            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" sub_choice
+            reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" "2")" sub_choice || sub_choice=0
             case "$sub_choice" in
                 1|2) break ;;
                 0) echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_CANCELLED]}${COLOR_RESET}"
@@ -1110,6 +1227,13 @@ xchk_install() {
     # 6) write + start
     xchk_write_stack "$mode" "$sub_url" "$interval" "$method" || return 1
 
+    # The stack exists from here on (the menu treats the module as
+    # installed) and the webserver may already be wired — record the state
+    # before the pull or any health verdict, so uninstall can always undo
+    # the webserver edits and cert mounts, and a failed pull leaves a stack
+    # that Restart can finish once the registry is reachable.
+    xchk_state_set "$mode" "$XCHK_DOMAIN" "${XCHK_CERT_DOMAIN:-}" "${XCHK_MOUNTS_ADDED:-0}" "$XCHK_WS_KIND"
+
     step_do "${LANG[XCHK_PULLING]}"
     (cd "$XCHK_DIR" && docker compose pull) >/dev/null 2>&1 &
     local pull_pid=$!
@@ -1117,17 +1241,18 @@ xchk_install() {
     wait "$pull_pid"
     if [ $? -ne 0 ]; then
         echo -e "${COLOR_RED}${LANG[XCHK_PULL_FAIL]}${COLOR_RESET}"
+        echo -e "${COLOR_YELLOW}${LANG[XCHK_INSTALL_PARTIAL]}${COLOR_RESET}"
+        # The UI password lives only in the written compose: a Restart that
+        # finishes this install never shows the final banner with it.
+        if [ -n "$XCHK_UI_PASS" ]; then
+            echo -e "${COLOR_YELLOW}$(printf "${LANG[XCHK_UI_CREDS]}" "$XCHK_UI_USER" "$XCHK_UI_PASS")${COLOR_RESET}"
+        fi
         return 1
     fi
 
     step_do "${LANG[XCHK_STARTING]}"
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
     spinner $! "${LANG[XCHK_STARTING]}"
-
-    # The stack exists from here on — record the state before any health
-    # verdict, so uninstall can always undo the webserver edits even when
-    # a container later turns out to be slow or broken.
-    xchk_state_set "$mode" "$XCHK_DOMAIN" "${XCHK_CERT_DOMAIN:-}" "${XCHK_MOUNTS_ADDED:-0}" "$XCHK_WS_KIND"
 
     # Checker and page get separate verdicts: a slow page must not fail the
     # whole install — the checker (the monitoring itself) may already be
@@ -1267,11 +1392,22 @@ xchk_status() {
 
 xchk_restart() {
     step_do "${LANG[XCHK_RESTARTING]}"
-    (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
-    spinner $! "${LANG[XCHK_RESTARTING]}"
-    xchk_container_up xray-checker \
-        && step_ok "${LANG[XCHK_RESTARTED]}" \
-        || echo -e "${COLOR_RED}${LANG[XCHK_HEALTH_FAIL]}${COLOR_RESET}"
+    # A plain `up -d` is a no-op for running containers with an unchanged
+    # compose — a hung checker would stay hung behind "Restarted". Recreate
+    # the stack instead (named volumes, the page data and caddy certs, stay).
+    local up_pid up_rc=0
+    (cd "$XCHK_DIR" && docker compose up -d --force-recreate) >/dev/null 2>&1 &
+    up_pid=$!
+    spinner "$up_pid" "${LANG[XCHK_RESTARTING]}"
+    wait "$up_pid" || up_rc=$?
+    # A checker that cannot start dies within seconds — give it that window
+    # before reading its state.
+    sleep 3
+    if [ "$up_rc" -eq 0 ] && xchk_container_up xray-checker; then
+        step_ok "${LANG[XCHK_RESTARTED]}"
+    else
+        echo -e "${COLOR_RED}${LANG[XCHK_HEALTH_FAIL]}${COLOR_RESET}"
+    fi
 }
 
 xchk_update() {
@@ -1292,12 +1428,15 @@ xchk_update() {
         echo -e "${COLOR_GREEN}${LANG[XCHK_UP_TO_DATE]}${COLOR_RESET}"
         return 0
     fi
-    local up_pid
+    local up_pid up_rc=0
     (cd "$XCHK_DIR" && docker compose up -d) >/dev/null 2>&1 &
     up_pid=$!
     spinner "$up_pid" "${LANG[XCHK_UPDATING]}"
-    wait "$up_pid"
-    if [ $? -ne 0 ] || ! xchk_container_up xray-checker; then
+    wait "$up_pid" || up_rc=$?
+    # Same start window as xchk_restart: a new image that cannot start is
+    # still "running" right after up and dies within seconds.
+    [ "$up_rc" -eq 0 ] && sleep 3
+    if [ "$up_rc" -ne 0 ] || ! xchk_container_up xray-checker; then
         echo -e "${COLOR_RED}$(printf "${LANG[XCHK_UPDATE_FAIL]}" "docker compose up -d")${COLOR_RESET}"
         return 1
     fi
