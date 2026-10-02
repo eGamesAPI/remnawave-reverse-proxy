@@ -1,0 +1,119 @@
+---
+/**
+ * Анимированная схема Cert Warden: сертификаты заказываются у Let's Encrypt
+ * с проверкой DNS-01 у провайдера (Cloudflare, Gcore, Bunny.net), Cert Warden
+ * хранит их и раздаёт клиентам на серверах по API-ключам; клиенты кладут
+ * pem-файлы на диск и перезапускают свои контейнеры.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="cw">
+  <svg viewBox="0 0 640 370" role="img" aria-label={en
+    ? 'Cert Warden scheme: certificates are ordered from Let\'s Encrypt with DNS-01 verification at the DNS provider (Cloudflare, Gcore, Bunny.net); Cert Warden stores them and serves them to clients on each server via API keys; clients write pem files to disk and restart their containers'
+    : 'Схема Cert Warden: сертификаты заказываются у Let\'s Encrypt с проверкой DNS-01 у DNS-провайдера (Cloudflare, Gcore, Bunny.net); Cert Warden хранит их и раздаёт клиентам на серверах по API-ключам; клиенты кладут pem-файлы на диск и перезапускают свои контейнеры'}>
+    <defs>
+      <linearGradient id="cw-pane" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(0,229,160,.04)" />
+        <stop offset="1" stop-color="rgba(0,229,160,.008)" />
+      </linearGradient>
+    </defs>
+
+    <!-- источники сверху -->
+    <g class="node n-mint">
+      <rect x="36" y="20" width="276" height="56" rx="13" />
+      <text x="174" y="44" class="t">Let&#8217;s Encrypt</text>
+      <text x="174" y="64" class="s">{en ? 'issues and renews via ACME' : 'выдаёт и продлевает по ACME'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="328" y="20" width="276" height="56" rx="13" />
+      <text x="466" y="44" class="t">{en ? 'DNS provider' : 'DNS-провайдер'}</text>
+      <text x="466" y="64" class="s">Cloudflare · Gcore · Bunny</text>
+    </g>
+
+    <!-- потоки выпуска -->
+    <path class="wire w-mint" d="M174 76 C 174 116, 250 130, 300 150" />
+    <path class="flow f-mint" d="M174 76 C 174 116, 250 130, 300 150" />
+    <text x="196" y="112" class="lbl">{en ? 'certificate' : 'сертификат'}</text>
+    <path class="wire w-vio" d="M340 150 C 340 110, 420 96, 466 76" />
+    <path class="flow f-vio" d="M340 150 C 340 110, 420 96, 466 76" />
+    <text x="438" y="112" class="lbl">DNS-01 · TXT</text>
+
+    <!-- Cert Warden -->
+    <g class="node n-teal">
+      <rect x="160" y="150" width="320" height="64" rx="13" />
+      <text x="320" y="177" class="t">Cert Warden</text>
+      <text x="320" y="198" class="s">{en ? ':4050 · stores and serves via API keys' : ':4050 · хранит и раздаёт по API-ключам'}</text>
+    </g>
+
+    <!-- раздача клиентам -->
+    <path class="wire w-teal" d="M320 214 C 320 250, 200 250, 126 280" />
+    <path class="flow f-teal" d="M320 214 C 320 250, 200 250, 126 280" />
+    <path class="wire w-teal" d="M320 214 V280" />
+    <path class="flow f-teal" d="M320 214 V280" />
+    <path class="wire w-teal" d="M320 214 C 320 250, 440 250, 514 280" />
+    <path class="flow f-teal" d="M320 214 C 320 250, 440 250, 514 280" />
+    <text x="140" y="250" class="lbl">{en ? 'served via API keys' : 'раздача по API-ключам'}</text>
+
+    <g class="node n-vio">
+      <rect x="36" y="280" width="180" height="64" rx="13" />
+      <text x="126" y="304" class="t2">{en ? 'client · panel' : 'клиент · панель'}</text>
+      <text x="126" y="323" class="s">{en ? 'pem files to disk' : 'pem-файлы на диск'}</text>
+      <text x="126" y="339" class="s">{en ? 'restarts nginx / caddy' : 'рестарт nginx / caddy'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="230" y="280" width="180" height="64" rx="13" />
+      <text x="320" y="304" class="t2">{en ? 'client · de-fra-01' : 'клиент · de-fra-01'}</text>
+      <text x="320" y="323" class="s">{en ? 'pem files to disk' : 'pem-файлы на диск'}</text>
+      <text x="320" y="339" class="s">{en ? 'restarts nginx' : 'рестарт nginx'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="424" y="280" width="180" height="64" rx="13" />
+      <text x="514" y="304" class="t2">{en ? 'client · nl-ams-02' : 'клиент · nl-ams-02'}</text>
+      <text x="514" y="323" class="s">{en ? 'pem files to disk' : 'pem-файлы на диск'}</text>
+      <text x="514" y="339" class="s">{en ? 'restarts nginx' : 'рестарт nginx'}</text>
+    </g>
+  </svg>
+</div>
+
+<style>
+  .cw{
+    background:linear-gradient(180deg,#0b120e,#0a0f0c);
+    border:1px solid #2a4737;border-radius:14px;
+    padding:1.1rem 1.3rem;margin:1.25rem 0;overflow-x:auto;
+    box-shadow:0 16px 44px rgba(0,0,0,.4);
+  }
+  .cw svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mint{stroke:#1d4a3c}
+  .w-teal{stroke:#1d4a4d}
+  .w-vio{stroke:#3d3560}
+  .flow{fill:none;stroke-width:2.4;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:cw-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0;filter:drop-shadow(0 0 4px rgba(0,229,160,.55))}
+  .f-teal{stroke:#39c5cf;filter:drop-shadow(0 0 4px rgba(57,197,207,.55))}
+  .f-vio{stroke:#bc8cff;filter:drop-shadow(0 0 4px rgba(188,140,255,.5))}
+  @keyframes cw-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#101f17;stroke:#2a4737;stroke-width:1.75}
+  .n-mint rect{stroke:rgba(0,229,160,.55)}
+  .n-teal rect{stroke:rgba(57,197,207,.6);filter:drop-shadow(0 0 11px rgba(57,197,207,.28))}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .node .t{fill:#eef7f0;font-size:17.5px;font-weight:700;text-anchor:middle}
+  .node .t2{fill:#eef7f0;font-size:14.5px;font-weight:700;text-anchor:middle}
+  .n-mint .t{fill:#00e5a0}
+  .n-teal .t{fill:#39c5cf}
+  .n-vio .t,.n-vio .t2{fill:#cdaaff}
+  .node .s{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+  .lbl{fill:#8ca08f;font-size:11.5px;text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

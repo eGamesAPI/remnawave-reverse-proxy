@@ -1,66 +1,227 @@
 ---
 title: Subscription page only
-description: Instructions for installing the RemnaWave subscription page on a separate server.
+description: 'Installing the RemnaWave subscription page on a separate server: what the installer asks and what it prints at the end.'
 ---
 
 import { Steps, LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../components/version';
 
 ## Running the script
 
-:::danger[Warning]
-Script must be run as **root**.
+:::danger[Important]
+The script must be run as **root**.
 :::
 
-Enter the command on your server:
+Run this command on your server:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
-## Install only the subscription page
+:::danger[If GitHub is unreachable]
+Run the installer from the jsDelivr mirror:
 
-Use this option when your panel is already installed on another server and you want the subscription page (`remnawave/subscription-page`) on its own server — for example, to keep user traffic away from the panel.
-
-:::note
-Before starting, prepare an **API token** in the panel: `Settings` → `API tokens`. The token only needs the scopes used by the subscription page:
-
-```
-subscription-page-configs:list
-subscription-page-configs:get
-subscriptions:subpage-config
-system:metadata
-users:by-username
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
 ```
 :::
+
+## Installing only the subscription page
+
+Use this option when the panel already lives on another server and you want the subscription page on its own server, for example so user traffic does not pass through the panel server.
+
+:::note
+Prepare an **API token** in the panel beforehand: `Settings` → `API tokens`
+:::
+
+### What the installer does
+
+1. **Checks the server before starting**: the subscription page is not installed yet, port 443 is free.
+2. **Asks for three things**: the subscription domain (validated together with its DNS record), the already installed panel's domain and the panel's API token.
+3. **Finds out how the panel is protected**: cookie, TinyAuth login page or the Caddy portal, and asks for the matching key: the cookie, a login and password, or an API key.
+4. **Issues a certificate** for the subscription domain (DNS API, ACME or your own) and sets up renewal.
+5. **Writes the services into `/opt/subscription`**: the subscription page container and the web server in front of it; files are created root-only.
+6. **Starts and verifies**: requests `https://domain` up to 5 times with a 15-second pause until the page answers.
+7. **Shows the final screen**: the page address, a reminder to set `SUB_PUBLIC_DOMAIN` in the panel and a warning about the cookie match.
+
+### Step-by-step installation
 
 <Steps>
 
 1. Select `Install Remnawave Components`
 
-    ![Main menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install Remnawave Components', pick: true },
+      { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
+      { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Manage IPv6' },
+      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Check for updates script' },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
 
 2. Then select `Install only the subscription page`
 
-    ![Install only the subscription page](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_sub.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Install Remnawave Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install panel and node on one server' },
+      { kind: 'item', num: '2.', text: 'Install panel and subscription page' },
+      { kind: 'item', num: '3.', text: 'Add node to panel' },
+      { kind: 'item', num: '4.', text: 'Install only the node' },
+      { kind: 'item', num: '5.', text: 'Install only the panel' },
+      { kind: 'item', num: '6.', text: 'Install only the subscription page', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-6):' },
+    ]} />
 
-3. Select the web server — **Nginx** or **Caddy**. Both options are fully supported by the script.
+3. Select the web server
 
-    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select web server:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Nginx' },
+      { kind: 'item', num: '2.', text: 'Caddy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):' },
+    ]} />
 
-4. When prompted, enter:
+4. Answer the installer's questions: the subscription domain, the panel domain and the panel's API token
 
-    - **Subscription domain** — e.g. `sub.example.com`. If its A-record does not point to the server yet, the script will offer to create it automatically through the Cloudflare or Gcore API.
-    - **Panel domain** — the domain of the existing panel, e.g. `panel.example.com`.
-    - **Panel API token** — the token created in the step above.
-    - **Panel cookie** — the `NAME=VALUE` pair from the panel login link, e.g. `zIdejKtN=MWbLrRzx` (the same pair as in `auth/login?NAME=VALUE`).
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Enter subscription domain (e.g. sub.example.com): ', answer: 'sub.example.com' },
+      { kind: 'plain', text: 'Enter panel domain (e.g. panel.example.com): ', answer: 'panel.example.com' },
+      { kind: 'plain', text: 'Enter the panel API token (created in the panel: Settings -> API tokens):' },
+    ]} />
 
-5. After the process is complete, the subscription page is available on the subscription domain and connected to your panel.
+    :::tip
+    If the subscription domain's A record does not point at this server yet, the script offers to create it automatically through the **Cloudflare** or **Gcore** API, or you create it manually and the script checks the record again.
+    :::
+
+5. Select how the panel is protected and enter that method's key:
+
+    - `Cookie protection (default)`: the script asks for the panel cookie, the same `NAME=VALUE` pair as in the login link.
+    - `Login page (TinyAuth)`: asks for the login page's username and password.
+    - `Caddy with MFA (caddy-with-auth)`: asks for the API key from the panel's login page.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Panel protection method:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cookie protection (default)' },
+      { kind: 'item', num: '2.', text: 'Login page (TinyAuth)' },
+      { kind: 'item', num: '3.', text: 'Caddy with MFA (caddy-with-auth)' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (1-3):' },
+    ]} />
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Enter the panel cookie (format NAME=VALUE, e.g. zIdejKtN=MWbLrRzx — the same pair as in the panel login link auth/login?NAME=VALUE):' },
+    ]} />
+
+6. Select the certificate generation method for the subscription domain:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select certificate generation method for all domains:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: '    No API key, one domain per certificate' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Install your own certificate' },
+      { kind: 'dim', text: '    Upload your own fullchain.pem and privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-5):' },
+    ]} />
+
+7. If you chose Let's Encrypt, enter the email for certificate notifications, or just press Enter to skip
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: "Enter your Let's Encrypt email (or press Enter to skip):" },
+    ]} />
+
+8. From here the script works on its own: it writes the services into `/opt/subscription`, starts the containers and checks that the page answers
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Installing the subscription page' },
+      { kind: 'step', text: 'Starting the subscription page' },
+      { kind: 'step', text: 'Please wait...' },
+      { kind: 'step', text: 'Checking subscription page availability: sub.example.com...' },
+      { kind: 'step', text: 'Attempt 1 of 5' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[ ✓ ] The subscription page is up!' },
+    ]} />
+
+9. When the installation finishes, the script prints the page address and two reminders
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '=================================================' },
+      { kind: 'ok', text: 'Subscription page installed successfully!' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'step', text: 'The subscription page is available at:' },
+      { kind: 'url', text: 'https://sub.example.com' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'Do not forget to configure the panel: set SUB_PUBLIC_DOMAIN=<subscription page domain> in /opt/remnawave/.env on the panel server and restart the panel container (cd /opt/remnawave && docker compose up -d remnawave).' },
+      { kind: 'err', text: 'The cookie must match the panel\'s current cookie: if the panel is reinstalled, update EGAMES_COOKIE in /opt/subscription/docker-compose.yml and restart the subscription page container (cd /opt/subscription && docker compose up -d remnawave-subscription-page).' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'To relaunch the manager, use the following command:' },
+      { kind: 'ok', text: 'remnawave_reverse' },
+      { kind: 'step', text: '=================================================' },
+    ]} />
 
 </Steps>
 
 ## Updating the script
 
-Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+Make sure the script is up to date before you do anything else with it.
+
+1. Open the script menu with the `remnawave_reverse` command (or the short alias `rr`) and select item `12`, `Check for updates script`. When an update is already found, the item lights up red and reads `Update script`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION} `, warn: 'script update available' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Update script', pick: true },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. What changed in each version is on the releases page:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton
@@ -68,6 +229,6 @@ Make sure to update the script before running things in it. You can do this by s
         icon="github"
         iconPlacement="start"
     >
-        View latest release
+        View the latest release
     </LinkButton>
 </div>

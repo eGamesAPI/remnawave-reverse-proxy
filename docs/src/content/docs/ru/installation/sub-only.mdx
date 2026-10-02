@@ -1,9 +1,11 @@
 ---
 title: Только страница подписки
-description: Инструкция по установке страницы подписки Remnawave на отдельном сервере.
+description: 'Установка страницы подписки Remnawave на отдельный сервер: что спрашивает установщик и что выводит в конце.'
 ---
 
 import { Steps, LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../../components/version';
 
 ## Установка скрипта
 
@@ -11,48 +13,220 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 Скрипт нужно запускать с **правами root**.
 :::
 
-Введите данную команду на вашем сервере:
+Введите эту команду на вашем сервере:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+:::danger[Если GitHub недоступен]
+Запустите установщик с зеркала на jsDelivr:
+
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+:::
+
 ## Установка только страницы подписки
 
-Используйте этот вариант, если панель уже установлена на другом сервере, а страницу подписки вы хотите вынести на отдельный сервер — например, чтобы трафик пользователей не шёл через сервер панели.
+Используйте этот вариант, если панель уже установлена на другом сервере, а страницу подписки вы хотите вынести на отдельный сервер, например, чтобы трафик пользователей не шёл через сервер панели.
 
 :::note
 Перед началом подготовьте **API-токен** в панели: `Настройки` → `Токены API`
 :::
 
+### Что делает установщик
+
+1. **Проверяет сервер перед стартом**: страница подписки ещё не установлена, порт 443 свободен.
+2. **Спрашивает три вещи**: домен подписки (проверяется корректность и DNS-запись), домен уже установленной панели и API-токен панели.
+3. **Узнаёт, чем защищена панель**: cookie, страницей входа TinyAuth или порталом Caddy, и просит соответствующий ключ: куку, логин с паролем или API-ключ.
+4. **Выпускает сертификат** на домен подписки (через DNS API, ACME или ваш собственный) и настраивает автопродление.
+5. **Разворачивает сервисы в `/opt/subscription`**: контейнер страницы подписки и веб-сервер перед ним. Файлы создаются с правами только для root.
+6. **Запускает и проверяет**: обращается к `https://домен` до 5 раз с паузой 15 секунд, пока страница не ответит.
+7. **Показывает финальный экран**: адрес страницы, напоминание прописать `SUB_PUBLIC_DOMAIN` в панели и предупреждение про совпадение cookie.
+
+### Пошаговая установка
+
 <Steps>
 
 1. Выберите пункт `Установка компонентов Remnawave`
 
-    ![Главное меню](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/main_menu.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установка компонентов Remnawave', pick: true },
+      { kind: 'item', num: '2.', text: 'Переустановить панель и компоненты' },
+      { kind: 'item', num: '3.', text: 'Управление панелью и компонентами' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Управление IPv6' },
+      { kind: 'item', num: '10.', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Проверить обновления скрипта' },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
 
 2. Затем выберите пункт `Установить только страницу подписки`
 
-    ![Установить только страницу подписки](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/install_sub.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Установка компонентов Remnawave' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установить панель и ноду на один сервер' },
+      { kind: 'item', num: '2.', text: 'Установить панель и страницу подписки' },
+      { kind: 'item', num: '3.', text: 'Добавить ноду в панель' },
+      { kind: 'item', num: '4.', text: 'Установить только ноду' },
+      { kind: 'item', num: '5.', text: 'Установить только панель' },
+      { kind: 'item', num: '6.', text: 'Установить только страницу подписки', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-6):' },
+    ]} />
 
-3. Выберите веб-сервер — **Nginx** или **Caddy**
+3. Выберите веб-сервер, **Nginx** или **Caddy**
 
-    ![Выберите веб-сервер](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/webserver_select.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Выберите веб-сервер:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Nginx' },
+      { kind: 'item', num: '2.', text: 'Caddy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-2):' },
+    ]} />
 
-4. По запросу скрипта введите:
+4. Ответьте на вопросы установщика: домен подписки, домен панели и API-токен из панели
 
-    - **Домен подписки** — например, `sub.example.com`. Если A-запись ещё не указывает на сервер, скрипт предложит создать её автоматически через API Cloudflare или Gcore.
-    - **Домен панели** — домен уже установленной панели, например, `panel.example.com`.
-    - **Токен API панели** — токен, созданный на предыдущем шаге.
-    - **Cookie панели** — пара `ИМЯ=ЗНАЧЕНИЕ` из ссылки входа в панель, например `zIdejKtN=MWbLrRzx` (та же пара, что в `auth/login?ИМЯ=ЗНАЧЕНИЕ`).
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Введите домен подписки (например, sub.example.com): ', answer: 'sub.example.com' },
+      { kind: 'plain', text: 'Введите домен панели (например, panel.example.com): ', answer: 'panel.example.com' },
+      { kind: 'plain', text: 'Введите API-токен панели (создаётся в панели: Настройки → API-токены):' },
+    ]} />
 
-5. После завершения процесса страница подписки будет доступна на своём домене и подключена к вашей панели.
+    :::tip
+    Если A-запись домена подписки ещё не указывает на этот сервер, скрипт предложит создать её автоматически через API **Cloudflare** или **Gcore**, либо вы создадите её вручную, и скрипт проверит запись ещё раз.
+    :::
+
+5. Выберите, чем защищена панель, и введите ключ этого способа:
+
+    - `Cookie-защита (по умолчанию)`: скрипт попросит куку панели, ту же пару `ИМЯ=ЗНАЧЕНИЕ`, что в ссылке входа.
+    - `Страница входа (TinyAuth)`: попросит логин и пароль страницы входа панели.
+    - `Caddy с MFA (caddy-with-auth)`: попросит API-ключ со страницы входа панели.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Способ защиты панели:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cookie-защита (по умолчанию)' },
+      { kind: 'item', num: '2.', text: 'Страница входа (TinyAuth)' },
+      { kind: 'item', num: '3.', text: 'Caddy с MFA (caddy-with-auth)' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (1-3):' },
+    ]} />
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Введите cookie панели (формат ИМЯ=ЗНАЧЕНИЕ, например zIdejKtN=MWbLrRzx: та же пара, что в ссылке входа в панель auth/login?ИМЯ=ЗНАЧЕНИЕ):' },
+    ]} />
+
+6. Выберите метод генерации сертификата для домена подписки:
+
+    - **DNS API** (Cloudflare, Gcore, Bunny.net), wildcard-сертификат, DNS-записи создаются сами по API-ключу.
+    - **ACME HTTP-01**: без API-ключа, по одному домену на сертификат.
+    - **Свой сертификат**: загрузите собственные `fullchain.pem` и `privkey.pem`.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Выберите метод генерации сертификатов для всех доменов:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: '    Без API-ключа, по одному домену на сертификат' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Установить свой сертификат' },
+      { kind: 'dim', text: '    Загрузите свой fullchain.pem и privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-5):' },
+    ]} />
+
+7. Если выбрали выпуск через Let's Encrypt, укажите почту для уведомлений о сертификатах. Можно пропустить нажатием Enter
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: "Введите ваш email для Let's Encrypt (можно пропустить - Enter):" },
+    ]} />
+
+8. Дальше скрипт работает сам: развёртывает сервисы в `/opt/subscription`, запускает контейнеры и проверяет, что страница отвечает
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Установка страницы подписки' },
+      { kind: 'step', text: 'Запуск страницы подписки' },
+      { kind: 'step', text: 'Пожалуйста, подождите...' },
+      { kind: 'step', text: 'Проверяем доступность страницы подписки: sub.example.com...' },
+      { kind: 'step', text: 'Попытка 1 из 5' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[ ✓ ] Страница подписки успешно запущена!' },
+    ]} />
+
+9. После завершения установки скрипт выведет адрес страницы и два напоминания
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '=================================================' },
+      { kind: 'ok', text: 'Страница подписки успешно установлена!' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'step', text: 'Страница подписки доступна по адресу:' },
+      { kind: 'url', text: 'https://sub.example.com' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'Не забудьте настроить панель: в /opt/remnawave/.env укажите SUB_PUBLIC_DOMAIN=домен страницы подписки и перезапустите контейнер панели (cd /opt/remnawave && docker compose up -d remnawave).' },
+      { kind: 'err', text: 'Cookie должна совпадать с текущей кукой панели: если панель переустановят, обновите EGAMES_COOKIE в /opt/subscription/docker-compose.yml и перезапустите контейнер страницы подписки (cd /opt/subscription && docker compose up -d remnawave-subscription-page).' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'Для повторного запуска менеджера используйте команду:' },
+      { kind: 'ok', text: 'remnawave_reverse' },
+      { kind: 'step', text: '=================================================' },
+    ]} />
 
 </Steps>
 
 ## Обновление скрипта
 
-Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем. Вы можете сделать это, выбрав `Проверить обновления скрипта` в меню скрипта или просмотрев репозиторий GitHub на наличие обновлений.
+Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем.
+
+1. Откройте меню скрипта командой `remnawave_reverse` (или коротким алиасом `rr`) и выберите пункт `12` (`Проверить обновления скрипта`). Когда обновление уже найдено, пункт подсвечивается красным и называется `Обновить скрипт`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION} `, warn: 'доступно обновление скрипта' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Обновить скрипт', pick: true },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. Что нового в каждой версии, смотрите на странице релизов:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton

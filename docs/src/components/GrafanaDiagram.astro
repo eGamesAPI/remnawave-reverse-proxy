@@ -1,0 +1,163 @@
+---
+/**
+ * Анимированная схема мониторинга (вертикальная компоновка):
+ * сервер панели, сервер ноды и мониторинговый VPS — участники одной
+ * сети NetBird (общая рамка-облако). vmagent'ы собирают метрики
+ * (node_exporter, cAdvisor, сама панель) и внутри сети пишут их в
+ * Victoria Metrics; Grafana читает vmsingle и отдаётся через nginx;
+ * Xray Checker проверяет хосты по ссылке-подписке. Браузер —
+ * единственный элемент вне сети, публичный https.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="gm">
+  <svg viewBox="0 0 640 560" role="img" aria-label={en
+    ? 'Monitoring scheme: the panel server, the node server and the monitoring VPS are all members of one NetBird WireGuard network; vmagents scrape node_exporter, cAdvisor and the panel metrics and write them inside the mesh to Victoria Metrics; Grafana reads vmsingle and is served to the browser over public https through nginx; Xray Checker checks hosts via the subscription link'
+    : 'Схема мониторинга: сервер панели, сервер ноды и мониторинговый VPS — участники одной сети NetBird; vmagent собирает метрики node_exporter, cAdvisor и панели и пишет их внутри mesh-сети в Victoria Metrics; Grafana читает vmsingle и отдаётся в браузер по публичному https через nginx; Xray Checker проверяет хосты по ссылке-подписке'}>
+    <defs>
+      <linearGradient id="gm-cloud" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(0,229,160,.05)" />
+        <stop offset="1" stop-color="rgba(0,229,160,.01)" />
+      </linearGradient>
+      <linearGradient id="gm-vps" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(140,160,143,.05)" />
+        <stop offset="1" stop-color="rgba(140,160,143,.015)" />
+      </linearGradient>
+    </defs>
+
+    <!-- сеть NetBird: все участники внутри -->
+    <rect class="cloud" x="16" y="20" width="608" height="474" rx="26" />
+    <text x="320" y="42" class="cloud-lbl">NetBird · WireGuard mesh</text>
+    <text x="320" y="59" class="cloud-sub">{en ? 'panel + nodes + monitoring — one private network' : 'панель + ноды + мониторинг — одна приватная сеть'}</text>
+
+    <!-- источники, верхний ряд -->
+    <g class="node n-vio">
+      <rect x="36" y="74" width="276" height="96" rx="13" />
+      <text x="174" y="102" class="t">{en ? 'panel server' : 'сервер панели'}</text>
+      <text x="174" y="124" class="s">node_exporter · :9100</text>
+      <text x="174" y="141" class="s">cAdvisor · :9101</text>
+      <text x="174" y="158" class="s">{en ? 'panel · :3001' : 'панель · :3001'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="330" y="74" width="276" height="80" rx="13" />
+      <text x="468" y="102" class="t">{en ? 'node server' : 'сервер ноды'}</text>
+      <text x="468" y="124" class="s">node_exporter · :9100</text>
+      <text x="468" y="141" class="s">cAdvisor · :9101</text>
+    </g>
+    <g class="node n-vio chip">
+      <rect x="36" y="180" width="112" height="34" rx="10" />
+      <text x="92" y="202">vmagent</text>
+    </g>
+    <g class="node n-vio chip">
+      <rect x="330" y="180" width="112" height="34" rx="10" />
+      <text x="386" y="202">vmagent</text>
+    </g>
+
+    <!-- потоки метрик внутри сети -->
+    <path class="wire w-vio" d="M92 214 C 92 254, 150 276, 196 284" />
+    <path class="flow f-vio" d="M92 214 C 92 254, 150 276, 196 284" />
+    <path class="wire w-vio" d="M386 214 C 386 254, 320 276, 262 284" />
+    <path class="flow f-vio" d="M386 214 C 386 254, 320 276, 262 284" />
+    <text x="250" y="244" class="rw">remote_write</text>
+
+    <!-- мониторинговый VPS, тоже участник сети -->
+    <rect class="vps" x="120" y="250" width="400" height="194" rx="20" />
+    <text x="320" y="436" class="vps-lbl">{en ? 'monitoring VPS' : 'мониторинговый VPS'}</text>
+
+    <g class="node n-teal">
+      <rect x="136" y="276" width="170" height="58" rx="13" />
+      <text x="221" y="300" class="t">Victoria Metrics</text>
+      <text x="221" y="320" class="s">vmsingle · :8428</text>
+    </g>
+    <g class="node n-xchk chip">
+      <rect x="350" y="276" width="170" height="58" rx="13" />
+      <text x="435" y="300" class="t2">Xray Checker</text>
+      <text x="435" y="320" class="s">{en ? ':2112 · subscription' : ':2112 · подписка'}</text>
+    </g>
+    <path class="wire w-teal" d="M350 304 H306" />
+    <path class="flow f-teal" d="M350 304 H306" />
+
+    <g class="node n-entry">
+      <rect x="136" y="352" width="170" height="58" rx="13" />
+      <text x="221" y="376" class="t">Grafana</text>
+      <text x="221" y="396" class="s">{en ? ':3000 · dashboards' : ':3000 · дашборды'}</text>
+    </g>
+    <path class="wire w-mgmt" d="M221 334 V352" />
+    <path class="flow f-mint" d="M221 334 V352" />
+
+    <g class="node n-dim chip">
+      <rect x="350" y="352" width="170" height="58" rx="13" />
+      <text x="435" y="376" class="t2">nginx · :443</text>
+      <text x="435" y="396" class="s">grafana.yourdomain.com</text>
+    </g>
+    <path class="wire w-mgmt" d="M306 381 H350" />
+
+    <!-- публичный доступ: браузер вне сети NetBird -->
+    <path class="wire w-pub" d="M435 410 C 435 468, 360 484, 336 498" />
+    <path class="flow f-pub" d="M435 410 C 435 468, 360 484, 336 498" />
+    <g class="node n-dim chip">
+      <rect x="240" y="498" width="160" height="32" rx="10" />
+      <text x="320" y="519" class="t2">{en ? 'browser · https' : 'браузер · https'}</text>
+    </g>
+  </svg>
+</div>
+
+<style>
+  .gm{
+    background:linear-gradient(180deg,#0b120e,#0a0f0c);
+    border:1px solid #2a4737;border-radius:14px;
+    padding:1.1rem 1.3rem;margin:1.25rem 0;overflow-x:auto;
+    box-shadow:0 16px 44px rgba(0,0,0,.4);
+  }
+  .gm svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mgmt{stroke:#2a4737}
+  .w-teal{stroke:#1d4a4d}
+  .w-vio{stroke:#3d3560}
+  .w-pub{stroke:#4a5a50;stroke-dasharray:3 7}
+  .flow{fill:none;stroke-width:2.4;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:gm-flow 1.1s linear infinite}
+  .f-teal{stroke:#39c5cf;filter:drop-shadow(0 0 4px rgba(57,197,207,.55))}
+  .f-vio{stroke:#bc8cff;filter:drop-shadow(0 0 4px rgba(188,140,255,.5))}
+  .f-mint{stroke:#00e5a0;filter:drop-shadow(0 0 4px rgba(0,229,160,.55))}
+  .f-pub{stroke:#7ea88f;filter:drop-shadow(0 0 4px rgba(126,168,143,.45))}
+  @keyframes gm-flow{to{stroke-dashoffset:-16}}
+
+  .cloud{fill:url(#gm-cloud);stroke:rgba(0,229,160,.4);
+    stroke-width:1.5;stroke-dasharray:7 7}
+  .cloud-lbl{fill:#00e5a0;font-size:13px;opacity:.95;text-anchor:middle}
+  .cloud-sub{fill:#4fae8f;font-size:11px;opacity:.9;text-anchor:middle}
+  .vps{fill:url(#gm-vps);stroke:#2f4d3b;stroke-width:1.5}
+  .vps-lbl{fill:#9db3a4;font-size:12.5px;opacity:.95;text-anchor:middle}
+
+  .node rect{fill:#101f17;stroke:#2a4737;stroke-width:1.75}
+  .n-entry rect{stroke:rgba(0,229,160,.65);filter:drop-shadow(0 0 8px rgba(0,229,160,.18))}
+  .n-teal rect{stroke:rgba(57,197,207,.6);filter:drop-shadow(0 0 11px rgba(57,197,207,.28))}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .n-xchk rect{stroke:rgba(57,197,207,.4)}
+  .n-dim rect{stroke:#2f4d3b}
+  .node .t{fill:#eef7f0;font-size:17.5px;font-weight:700;text-anchor:middle}
+  .node .t2{fill:#eef7f0;font-size:15px;font-weight:700;text-anchor:middle}
+  .n-entry .t,.n-entry .t2{fill:#00e5a0}
+  .n-teal .t{fill:#39c5cf}
+  .n-xchk .t2{fill:#39c5cf}
+  .n-vio .t{fill:#cdaaff}
+  .n-dim .t2{fill:#9db3a4}
+  .node .s{fill:#a9c0b0;font-size:13.5px;text-anchor:middle}
+  .n-xchk .s,.n-dim .s{font-size:12.5px}
+  .chip text{font-size:14.5px;font-weight:700;text-anchor:middle}
+  .n-vio.chip text{fill:#cdaaff}
+
+  .rw{fill:#8ca08f;font-size:12px;text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

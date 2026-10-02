@@ -1,37 +1,127 @@
 ---
 title: Доступ к метрикам Prometheus
+description: 'Метрики панели Remnawave: где лежат данные подключения, как проверить эндпоинт и настроить сбор в vmagent или Prometheus.'
 ---
 
-## В оригинальной установке
+import { FileTree, LinkCard } from '@astrojs/starlight/components';
 
-Метрики Prometheus доступны на порту 3001 с базовой HTTP-аутентификацией:
+Панель Remnawave отдаёт метрики в формате Prometheus на отдельном порту `3001`. Скрипт при установке сам генерирует логин и пароль для них и прибивает порт к localhost: снаружи сервера адрес не виден, и это защищает метрики от посторонних.
 
-```yaml
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Данные для входа
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Секция <code>### PROMETHEUS ###</code> в <code>/opt/remnawave/.env</code>, генерируются при установке.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Адрес метрик
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85"><code>http://127.0.0.1:3001/metrics</code> с базовой HTTP-аутентификацией.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Доступ
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Только localhost: порт в <code>docker-compose.yml</code> привязан к <code>127.0.0.1</code>.</div>
+  </div>
+</div>
+
+## Данные подключения
+
+Логин и пароль скрипт генерирует случайными и записывает в `.env` панели:
+
+```bash title=".env" "gjlToiPH" "VsCNutHF"
+### PROMETHEUS ###
+### Metrics are available at http://127.0.0.1:METRICS_PORT/metrics
+METRICS_USER=gjlToiPH
+METRICS_PASS=VsCNutHF
+```
+
+Файл лежит в `/opt/remnawave/.env`, значения подтягиваются контейнером панели автоматически.
+
+| Переменная | Назначение | Значение у скрипта |
+| :-- | :-- | :-- |
+| `APP_PORT` | Порт панели | `3000` (только внутри Docker) |
+| `METRICS_PORT` | Порт метрик | `3001`, привязан к `127.0.0.1` |
+| `METRICS_USER` | Логин для метрик | случайный |
+| `METRICS_PASS` | Пароль для метрик | случайный |
+| `APP_SECRET` | Ключ подписи сессий и API-токенов | случайный |
+
+:::note[Если панель ставилась без скрипта]
+В оригинальной установке Remnawave значения по умолчанию `admin` и `change_me`. Обязательно смените их перед использованием метрик.
+:::
+
+## Быстрая проверка
+
+На самом сервере метрики можно получить одной командой (ответ в текстовом формате Prometheus):
+
+```bash "gjlToiPH" "VsCNutHF"
+curl -u gjlToiPH:VsCNutHF http://127.0.0.1:3001/metrics | head
+```
+
+С своего компьютера эндпоинт можно посмотреть через SSH-туннель, не открывая порт наружу:
+
+```bash
+ssh -L 3001:127.0.0.1:3001 root@your_server_ip
+```
+
+После этого `http://127.0.0.1:3001/metrics` доступен и в локальном браузере.
+
+## Настройка сборщика
+
+Забирать метрики нужно с самого сервера, прямо с `127.0.0.1`. Конфиг для vmagent (его использует руководство по мониторингу):
+
+```yaml title="vmagent/conf.d/remnawave.yml" "ваше_название_инстанса"
+- job_name: remnawave
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['127.0.0.1:3001']
+      labels:
+        instance: "ваше_название_инстанса"
+  basic_auth:
+    username: "gjlToiPH"
+    password: "VsCNutHF"
+```
+
+Для классического Prometheus секция выглядит так же:
+
+```yaml title="prometheus.yml"
 scrape_configs:
   - job_name: 'remnawave'
     scheme: http
     metrics_path: /metrics
+    scrape_interval: 15s
     static_configs:
-      - targets: ['remnawave:3001']
+      - targets: ['127.0.0.1:3001']
     basic_auth:
-      username: admin
-      password: change_me
+      username: gjlToiPH
+      password: VsCNutHF
 ```
 
-## В скрипте eGames
+:::tip
+Полное руководство по мониторингу: Victoria Metrics для хранения, Grafana для дашбордов, node_exporter и cAdvisor для серверов.
+:::
 
-Доступ к метрикам Prometheus также защищен cookie-системой, что означает:
+## Почему снаружи метрики не видны
 
-- **Локальный доступ**: Возможен напрямую через `http://127.0.0.1:3001/metrics`
-- **Внешний доступ**: Заблокирован без правильного cookie-набора
+Скрипт публикует порт метрик только на localhost:
 
+```yaml title="docker-compose.yml"
+ports:
+  - '127.0.0.1:3001:3001'
+```
 
-### Конфигурация переменных окружения
+Поэтому прямое обращение извне невозможно, и это не обходится настройкой cookie, как у страницы входа в панель: у метрик своя защита (привязка порта + basic auth). Забрать метрики снаружи можно двумя способами: агент на самом сервере (vmagent/Prometheus с `remote_write`) или SSH-туннель, как выше.
 
-| Переменная | Назначение | Значение по умолчанию |
-| :-- | :-- | :-- |
-| `APP_PORT` | Порт панели | 3000 |
-| `METRICS_PORT` | Порт метрик | 3001 |
-| `METRICS_USER` | Пользователь метрик | admin |
-| `METRICS_PASS` | Пароль метрик | change_me |
-| `APP_SECRET` | Ключ подписи сессий и API-токенов | change_me |
+:::note[Метрики Xray Checker]
+Если установлен модуль Xray Checker, его метрики живут отдельно, на `http://127.0.0.1:2112/metrics` (доступ с сервера или по SSH-туннелю), и собираются они тем же способом.
+:::
+
+---
+
+<LinkCard title="Мониторинг через Grafana и Victoria Metrics" href="/ru/configuration/grafana-monitoring-setup/" description="Полный стек мониторинга: сбор метрик панели, нод и контейнеров, дашборды Grafana." />

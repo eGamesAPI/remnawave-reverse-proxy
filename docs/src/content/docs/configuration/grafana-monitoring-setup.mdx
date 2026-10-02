@@ -5,6 +5,7 @@ description: How to set up monitoring with Grafana and Victoria Metrics
 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import GrafanaDiagram from '../../../components/GrafanaDiagram.astro';
 
 Author: **[pluralplay](../../contribution/resources#pluralplay)**, **[kutovoys](../../contribution/resources#kutovoys)**  
 Deployment of an intelligent monitoring stack, including Grafana for creating dynamic dashboards, Victoria Metrics for storing and processing metrics, Node Exporter for monitoring servers, cAdvisor for analyzing containers, Xray Checker for controlling network connections, and Netbird for building a secure network architecture. This solution provides maximum transparency, performance, and security for your infrastructure.
@@ -25,7 +26,7 @@ This guide describes the installation of services on a separate monitoring VPS s
 
 ## Scheme of work
 
-![Scheme](https://raw.githubusercontent.com/pluralplay/awesome-docs/refs/heads/main/grafana/assets/scheme.png)
+<GrafanaDiagram lang="en" />
 
 ## Configuration of your server with Grafana and Victoria Metrics
 

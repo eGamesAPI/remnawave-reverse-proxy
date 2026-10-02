@@ -1,0 +1,1636 @@
+---
+/**
+ * Лендинг главной страницы вики: герой с командой установки и живым
+ * меню скрипта (печатающаяся анимация), бегущая строка, варианты
+ * установки, модули, режимы развёртывания с DNS-таблицами, скрытая
+ * панель, FAQ и сообщество. Всё содержимое взято из реального скрипта
+ * remnawave-reverse-proxy (меню и строки ru.sh/en.sh, страница requirements).
+ * lang="ru" (по умолчанию) / lang="en" — язык страницы.
+ */
+import Terminal from './Terminal.astro';
+import { APP_VERSION } from './version';
+
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+const V = `v${APP_VERSION}`;
+const INSTALL_CMD =
+  'bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)';
+const MIRROR_CMD =
+  'bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)';
+// из раздела «Пожертвования» README
+const USDT = 'UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS';
+
+const T = en
+  ? {
+      badge: `Open Source · ${V}`,
+      lead: 'An interactive bash script: the Remnawave panel, Xray node, subscription page and a hardened Nginx or Caddy reverse proxy — with a hidden control panel, SelfSteal and SSL on autopilot.',
+      statCmd: 'install command',
+      statPaths: 'install paths',
+      statMenu: 'menu items',
+      statWs: 'web servers',
+      depBadge1: '1 server · one web server',
+      depBadge2: '2+ servers · port 2222',
+      depFlow1a: 'panel', depFlow1b: 'node', depFlow1c: 'sub', depFlow1d: 'behind one Nginx',
+      depFlow2a: 'panel', depFlow2b: 'node', depFlow2d: 'via port 2222',
+      ctaStart: 'Get started',
+      copyBtn: 'copy',
+      copied: 'copied',
+      osNote: 'Ubuntu or Debian · as root · fresh install (KVM tested)',
+      mirror: 'GitHub unreachable? Install from the jsDelivr mirror:',
+      s1: 'Installation',
+      s1sub: 'Menu item 1 offers six paths: panel and node together, panel with the subscription page, adding a node to an existing panel, a standalone node, a standalone panel, a standalone subscription page.',
+      s2: 'Modules',
+      s2sub: 'Everything above is in the main menu of the script. Two more modules arrive through it: server routing (bridges for Russian traffic) and SSH access to remote servers.',
+      s3: 'Deployment',
+      s3single: 'Single server',
+      s3singleSub: 'Panel, node and subscription page on one server: one A record and CNAMEs, everything behind one web server.',
+      s3dist: 'Distributed',
+      s3distSub: 'The panel on one server, nodes on their own machines: each node gets its own A record, the panel reaches it on port 2222.',
+      dnsHint: 'All records stay in DNS only mode.',
+      dnsApi: 'The node A record is created by the script itself — via the Cloudflare, Gcore or Bunny.net API.',
+      autoTag: 'auto',
+      s4: 'A panel that is not there',
+      s4sub: 'Without the keys the panel does not answer: an outsider gets an empty page or a 404. It opens only at the secret link with the key pair that the script prints on the final screen of the installation.',
+      s4chip1: 'Secret link (default)',
+      s4chip2: 'Login page (TinyAuth)',
+      s4chip3: 'Portal with MFA (Caddy)',
+      s4guards: 'Login protection',
+      s4method: 'Access method',
+      s4mScanner: 'Scanner',
+      s4mOwner: 'With the key',
+      s4seg: 'what they see:',
+      s4l1: 'After the first login the browser gets a secret cookie — the key in the URL is no longer needed.',
+      s4l2: 'Brute force is useless: the key space is huge, and without the right parameter the panel stays silent.',
+      dm1: 'online',
+      dm2: 'traffic',
+      dm3: 'nodes',
+      s4metrics: 'Panel metrics listen on 127.0.0.1:3001 only.',
+      community: 'Community',
+      communitySub: 'Questions, ideas and reports live in the Telegram chat. The project is open source: a star on GitHub helps it grow.',
+      chat: 'Telegram chat',
+      star: 'Star on GitHub',
+      tgSub: 'live chat: questions, ideas and bug reports',
+      ghSub: 'source code, issues and releases',
+      support: 'Support development',
+      usdtSub: 'click to copy the address',
+      legal: 'Use in accordance with the laws of your country',
+      about: 'The Remnawave panel, an Xray node and the subscription page behind one bash script: an Nginx or Caddy reverse proxy, SSL and camouflage on autopilot.',
+      toTop: 'Back to top',
+      sections: 'Sections',
+      resources: 'Resources',
+      intro: 'Overview',
+      install: 'Installation',
+      modules: 'Modules',
+      config: 'Configuration',
+      menuTitle: 'REMNAWAVE REVERSE-PROXY by eGames',
+      menuVer: `Version: ${APP_VERSION}`,
+      menu: [
+        'Install Remnawave Components',
+        'Reinstall Panel and Components',
+        'Manage Panel and Components',
+        'Node extensions (templates, plugins, core)',
+        'Xray Checker — subscription monitoring',
+        'Custom extensions by legiz',
+        'WARP Native',
+        'Backup and Restore',
+        'Manage IPv6',
+        'Manage certificates domain',
+        'NetBird: overlay network for nodes and panel',
+        'Check for updates script',
+        'Remove script',
+      ],
+      menuExit: 'Exit',
+      menuQuick: '- Quick start: remnawave_reverse',
+      menuPrompt: 'Select action (0-13):',
+      inst: ['Install panel and node on one server', 'Install panel and subscription page',
+        'Add node to panel', 'Install only the node', 'Install only the panel',
+        'Install only the subscription page'],
+      instPrompt: 'Select action (0-6):',
+      webTitle: 'Select web server:',
+      webPrompt: 'Select web server (1-2):',
+      prog: ['[*] Updating system packages…', '[*] Installing Docker & compose plugin…',
+        '[*] Requesting SSL certificate…', '[*] Starting Remnawave panel…'],
+      done: [
+        ['ok', '               INSTALLATION COMPLETE!'],
+        ['step', '================================================='],
+        ['step', 'Panel URL:'],
+        ['url', 'https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx'],
+        ['step', '-------------------------------------------------'],
+        ['step', 'To log into the panel, use the following data:'],
+        ['plain', 'Username: ', 'admin'],
+        ['plain', 'Password: ', 'k7XmQ2vLpR9t'],
+        ['step', '-------------------------------------------------'],
+        ['step', 'To relaunch the manager, use the following command:'],
+        ['ok', 'remnawave_reverse'],
+        ['step', '================================================='],
+      ],
+      paths: ['Panel + node', 'Panel + subscription page', 'Add node to panel', 'Node only', 'Panel only', 'Subscription page only'],
+      mods: [
+        ['5', 'Xray Checker', 'host health monitoring with metrics', ''],
+        ['6', 'legiz templates', 'custom camouflage site templates', ''],
+        ['7', 'WARP Native', 'WireGuard interface via wgcf for chosen domains', 'warp-native'],
+        ['8', 'Backup and Restore', 'copies of configs and data', ''],
+        ['9', 'IPv6', 'address management and connectivity checks', ''],
+        ['10', 'Certificates', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, own certs', ''],
+        ['11', 'NetBird', 'private network for the panel and nodes', 'netbird'],
+        ['12', 'Updates', 'script updates from the menu', ''],
+        ['', 'Server routing', 'Shadowsocks and VLESS bridges for Russian traffic', 'server-routing'],
+        ['', 'SSH access', 'run commands on remote servers from the menu', 'ssh-remote-access'],
+      ],
+    }
+    : {
+      badge: `Open Source · ${V}`,
+      lead: 'Интерактивный bash-скрипт. Панель Remnawave, Xray-нода, страница подписки и защищённый reverse proxy на Nginx или Caddy: скрытая панель управления, SelfSteal и SSL на автомате.',
+      statCmd: 'команда установки',
+      statPaths: 'схем установки',
+      statMenu: 'пунктов меню',
+      statWs: 'веб-сервера',
+      depBadge1: '1 сервер · один веб-сервер',
+      depBadge2: '2+ сервера · порт 2222',
+      depFlow1a: 'панель', depFlow1b: 'нода', depFlow1c: 'подписка', depFlow1d: 'за одним Nginx',
+      depFlow2a: 'панель', depFlow2b: 'нода', depFlow2d: 'по порту 2222',
+      ctaStart: 'Начать',
+      copyBtn: 'копировать',
+      copied: 'скопировано',
+      osNote: 'Ubuntu или Debian · под root · свежая установка (протестировано на KVM)',
+      mirror: 'GitHub недоступен? Установите с зеркала jsDelivr:',
+      s1: 'Установка',
+      s1sub: 'Пункт 1 меню предлагает шесть путей: панель и нода вместе, панель со страницей подписки, добавление ноды к готовой панели, отдельная нода, отдельная панель и отдельная страница подписки.',
+      s2: 'Модули',
+      s2sub: 'Всё перечисленное есть в главном меню скрипта. Ещё два модуля приходят через него: серверный роутинг (мосты для российского трафика) и SSH-доступ к удалённым серверам.',
+      s3: 'Развёртывание',
+      s3single: 'На одном сервере',
+      s3singleSub: 'Панель, нода и страница подписки на одном сервере: одна A-запись и CNAME, всё за одним веб-сервером.',
+      s3dist: 'На разных серверах',
+      s3distSub: 'Панель на своём сервере, ноды на своих: у каждой ноды своя A-запись, панель приходит к ней по порту 2222.',
+      dnsHint: 'Все записи остаются в режиме DNS only.',
+      dnsApi: 'A-запись ноды скрипт создаёт сам: через API Cloudflare, Gcore или Bunny.net.',
+      autoTag: 'авто',
+      s4: 'Панель, которой нет',
+      s4sub: 'Без ключей панель не отвечает: посторонний видит пустую страницу или 404. Открывается она только по секретной ссылке с парой ключей, которую скрипт печатает на финальном экране установки.',
+      s4chip1: 'Секретная ссылка (по умолчанию)',
+      s4chip2: 'Страница входа (TinyAuth)',
+      s4chip3: 'Портал с MFA (Caddy)',
+      s4guards: 'Защита входа',
+      s4method: 'Метод доступа',
+      s4mScanner: 'Сканер',
+      s4mOwner: 'С ключом',
+      s4seg: 'что видят:',
+      s4l1: 'После первого входа браузер получает секретную cookie: ключ из ссылки больше не нужен.',
+      s4l2: 'Перебор бесполезен: пространство ключей огромное, а без верного параметра ответа не будет.',
+      dm1: 'онлайн',
+      dm2: 'трафик',
+      dm3: 'ноды',
+      s4metrics: 'Метрики панели слушают только 127.0.0.1:3001.',
+      community: 'Сообщество',
+      communitySub: 'Вопросы, идеи и отчёты живут в Telegram-чате. Проект открытый: звезда на GitHub помогает ему расти.',
+      chat: 'Telegram-чат',
+      star: 'Поставить звезду',
+      tgSub: 'живой чат: вопросы, идеи и отчёты о багах',
+      ghSub: 'исходный код, issues и релизы',
+      support: 'Поддержать разработку',
+      usdtSub: 'нажмите, чтобы скопировать адрес',
+      legal: 'Используйте в соответствии с законодательством вашей страны',
+      about: 'Панель Remnawave, Xray-нода и страница подписки за одним bash-скриптом: reverse proxy на Nginx или Caddy, SSL и маскировка на автомате.',
+      toTop: 'Наверх',
+      sections: 'Разделы',
+      resources: 'Ресурсы',
+      intro: 'Обзор',
+      install: 'Установка',
+      modules: 'Модули',
+      config: 'Настройка',
+      menuTitle: 'REMNAWAVE REVERSE-PROXY by eGames',
+      menuVer: `Версия: ${APP_VERSION}`,
+      menu: [
+        'Установка компонентов Remnawave',
+        'Переустановить панель и компоненты',
+        'Управление панелью и компонентами',
+        'Расширения ноды (шаблоны, плагины, ядро)',
+        'Xray Checker: мониторинг подписки',
+        'Кастомные расширения от legiz',
+        'WARP Native',
+        'Backup and Restore',
+        'Управление IPv6',
+        'Управление сертификатами домена',
+        'NetBird: сеть для нод и панели',
+        'Проверить обновления скрипта',
+        'Удалить скрипт',
+      ],
+      menuExit: 'Выход',
+      menuQuick: '- Быстрый запуск: remnawave_reverse',
+      menuPrompt: 'Выберите действие (0-13):',
+      inst: ['Установить панель и ноду на один сервер', 'Установить панель и страницу подписки',
+        'Добавить ноду в панель', 'Установить только ноду', 'Установить только панель',
+        'Установить только страницу подписки'],
+      instPrompt: 'Выберите действие (0-6):',
+      webTitle: 'Выбор веб-сервера:',
+      webPrompt: 'Выберите веб-сервер (1-2):',
+      prog: ['[*] Обновление системных пакетов…', '[*] Установка Docker и compose plugin…',
+        '[*] Получение SSL-сертификата…', '[*] Запуск панели Remnawave…'],
+      done: [
+        ['ok', '               УСТАНОВКА ЗАВЕРШЕНА!'],
+        ['step', '================================================='],
+        ['step', 'Панель доступна по адресу:'],
+        ['url', 'https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx'],
+        ['step', '-------------------------------------------------'],
+        ['step', 'Для входа в панель используйте следующие данные:'],
+        ['plain', 'Логин: ', 'admin'],
+        ['plain', 'Пароль: ', 'k7XmQ2vLpR9t'],
+        ['step', '-------------------------------------------------'],
+        ['step', 'Для повторного запуска менеджера используйте команду:'],
+        ['ok', 'remnawave_reverse'],
+        ['step', '================================================='],
+      ],
+      paths: ['Панель + нода', 'Панель + подписка', 'Добавить ноду в панель', 'Только нода', 'Только панель', 'Только подписка'],
+      mods: [
+        ['5', 'Xray Checker', 'проверка хостов с метриками', ''],
+        ['6', 'Шаблоны legiz', 'кастомные шаблоны сайта-маски', ''],
+        ['7', 'WARP Native', 'интерфейс WireGuard через wgcf для выбранных доменов', 'warp-native'],
+        ['8', 'Backup and Restore', 'резервные копии конфигураций и данных', ''],
+        ['9', 'IPv6', 'управление адресами и проверка связи', ''],
+        ['10', 'Сертификаты', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, свои', ''],
+        ['11', 'NetBird', 'приватная сеть для панели и нод', 'netbird'],
+        ['12', 'Обновления', 'обновление скрипта из меню', ''],
+        ['', 'Серверный роутинг', 'мосты Shadowsocks и VLESS для российского трафика', 'server-routing'],
+        ['', 'SSH-доступ', 'команды на удалённых серверах из меню', 'ssh-remote-access'],
+      ],
+    };
+
+const tags = ['XRAY-CORE', 'NGINX', 'CADDY', 'SELFSTEAL', 'BBR', 'UFW', 'ACME', 'CLOUDFLARE DNS-API', 'GCORE', 'BUNNY.NET', 'NETBIRD', 'WARP', 'SSH', 'BACKUP', 'IPV6'];
+
+const base = en ? '' : '/ru';
+
+// карточки секции «Установка» ведут на свои страницы вики
+const pathHrefs = ['panel-and-node', 'panel-and-sub', 'add-node', 'node-only', 'panel-only', 'sub-only'];
+
+// сценарий живого терминала: скрипт читает эти строки из data-атрибута
+const PLAY = JSON.stringify({
+  title: T.menuTitle,
+  ver: T.menuVer,
+  menu: T.menu,
+  exit: T.menuExit,
+  fast: T.menuQuick,
+  promptMain: T.menuPrompt,
+  inst: T.inst,
+  instPrompt: T.instPrompt,
+  webTitle: T.webTitle,
+  webPrompt: T.webPrompt,
+  prog: T.prog,
+  done: T.done,
+  cmd: INSTALL_CMD,
+});
+---
+
+<div class="rr-landing not-content" id="rr-top" data-install-cmd={INSTALL_CMD}>
+  <!-- первый экран: герой + бегущая строка, строка прижата к низу -->
+  <div class="first">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="badge">{T.badge}</div>
+        <h1>{en ? 'Deploy' : 'Установка'}<br />Remnawave<br /><span class="h1-l2">{en ? 'in' : 'одной'} <span class="grad">{en ? 'one command.' : 'командой.'}</span></span></h1>
+        <p class="lead">{T.lead}</p>
+
+        <div class="stats">
+          <div class="stat"><b class="c-text" data-count="1">1</b><span>{T.statCmd}</span></div>
+          <div class="stat"><b class="c-mint" data-count="6">6</b><span>{T.statPaths}</span></div>
+          <div class="stat"><b class="c-cyan" data-count="13">13</b><span>{T.statMenu}</span></div>
+          <div class="stat"><b class="c-amber" data-count="2">2</b><span>{T.statWs}</span></div>
+        </div>
+
+      <div class="cta">
+        <a class="btn primary" href={`${base}/installation/requirements/`}>{T.ctaStart}<span class="arrow">→</span></a>
+        <a class="btn ghost" href="https://github.com/eGamesAPI/remnawave-reverse-proxy" target="_blank" rel="noopener">GitHub<span class="gh-count" data-stars>★</span></a>
+      </div>
+
+        <div class="cmd-row" title={INSTALL_CMD}>
+          <span class="dollar">$</span>
+          <code class="cmd-text">{INSTALL_CMD}</code>
+          <button class="cmd-copy" type="button" data-copy-cmd><span data-copy-label>{T.copyBtn}</span></button>
+        </div>
+        <div class="os-note">{T.osNote}</div>
+
+      <details class="mirror">
+        <summary>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          {T.mirror}
+        </summary>
+        <div class="cmd-row small" title={MIRROR_CMD}>
+          <span class="dollar">$</span>
+          <code class="cmd-text">{MIRROR_CMD}</code>
+          <button class="cmd-copy" type="button" data-copy-cmd><span data-copy-label>{T.copyBtn}</span></button>
+        </div>
+      </details>
+      </div>
+
+      <div class="hero-term" data-play={PLAY}>
+        <div class="ping p1" aria-hidden="true"></div>
+        <div class="ping p2" aria-hidden="true"></div>
+        <div class="ping p3" aria-hidden="true"></div>
+        <div class="specks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <Terminal title="root@vps — bash" lines={[]} foot="Ubuntu 22.04+ · Debian 11+" />
+      </div>
+    </section>
+
+    <!-- бегущая строка -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        {[0, 1].map(() => tags.map((t) => <span class="tag"><i>✦</i>{t}</span>))}
+      </div>
+    </div>
+  </div>
+
+  <!-- 01 установка -->
+  <section class="sec">
+    <div class="in">
+      <h2><span class="idx">[ 01 ]</span>{T.s1}<span class="rule"></span></h2>
+      <p class="sec-sub">{T.s1sub}</p>
+      <div class="path-grid">
+        {T.paths.map((p, i) => (
+          <a class="path-card" href={`${base}/installation/${pathHrefs[i]}/`}>
+            <span class="num">{i + 1}</span>{p}<span class="go">→</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 модули -->
+  <section class="sec alt">
+    <div class="in">
+      <h2><span class="idx">[ 02 ]</span>{T.s2}<span class="rule"></span></h2>
+      <p class="sec-sub">{T.s2sub}</p>
+      <div class="mod-grid">
+        {T.mods.map(([num, name, desc, slug]) => {
+          const card = (
+            <>
+              <div class="mod-head">{num && <span class="num">menu {num}</span>}<b>{name}</b>{slug && <span class="go">→</span>}</div>
+              <p>{desc}</p>
+            </>
+          );
+          return slug ? (
+            <a class="mod-card linked" href={`${base}/configuration/${slug}/`}>{card}</a>
+          ) : (
+            <div class="mod-card">{card}</div>
+          );
+        })}
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 развёртывание -->
+  <section class="sec">
+    <div class="in">
+      <h2><span class="idx">[ 03 ]</span>{T.s3}<span class="rule"></span></h2>
+      <div class="deploy-grid">
+        <div class="deploy-card">
+          <div class="dep-head">
+            <span class="dep-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="0.9" fill="currentColor" stroke="none"/><circle cx="7" cy="16.5" r="0.9" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <div>
+              <h3>{T.s3single}</h3>
+              <span class="dep-badge">{T.depBadge1}</span>
+            </div>
+          </div>
+          <p>{T.s3singleSub}</p>
+          <div class="dep-flow">
+            <span>{T.depFlow1a}</span><i>·</i><span>{T.depFlow1b}</span><i>·</i><span>{T.depFlow1c}</span><em>{T.depFlow1d}</em>
+          </div>
+          <div class="dep-table">
+            <table>
+              <thead><tr><th>{en ? 'Record' : 'Запись'}</th><th>{en ? 'Name' : 'Имя'}</th><th>{en ? 'Points to' : 'Значение'}</th></tr></thead>
+              <tbody>
+                <tr><td><span class="rec a">A</span></td><td>example.com</td><td>your_server_ip</td></tr>
+                <tr><td><span class="rec cname">CNAME</span></td><td>panel.example.com</td><td>example.com</td></tr>
+                <tr><td><span class="rec cname">CNAME</span></td><td>sub.example.com</td><td>example.com</td></tr>
+                <tr><td><span class="rec cname">CNAME</span><span class="auto">{T.autoTag}</span></td><td>node.example.com</td><td>example.com</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="deploy-card">
+          <div class="dep-head">
+            <span class="dep-ico cyan" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="8" height="10" rx="2"/><rect x="14" y="7" width="8" height="10" rx="2"/><path d="M10 12h4"/></svg>
+            </span>
+            <div>
+              <h3>{T.s3dist}</h3>
+              <span class="dep-badge">{T.depBadge2}</span>
+            </div>
+          </div>
+          <p>{T.s3distSub}</p>
+          <div class="dep-flow">
+            <span>{T.depFlow2a}</span><em>→</em><span>{T.depFlow2b}</span><em>{T.depFlow2d}</em>
+          </div>
+          <div class="dep-table">
+            <table>
+              <thead><tr><th>{en ? 'Record' : 'Запись'}</th><th>{en ? 'Name' : 'Имя'}</th><th>{en ? 'Points to' : 'Значение'}</th></tr></thead>
+              <tbody>
+                <tr><td><span class="rec a">A</span></td><td>example.com</td><td>panel_server_ip</td></tr>
+                <tr><td><span class="rec cname">CNAME</span></td><td>panel.example.com</td><td>example.com</td></tr>
+                <tr><td><span class="rec cname">CNAME</span></td><td>sub.example.com</td><td>example.com</td></tr>
+                <tr><td><span class="rec a">A</span><span class="auto">{T.autoTag}</span></td><td>node.example.com</td><td>node_server_ip</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="dep-hints">
+        <span class="hint">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.6 1.4A4 4 0 0 0 7 19z"/><path d="M4 4l16 16"/></svg>
+          {T.dnsHint}
+        </span>
+        <span class="hint api">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5z"/></svg>
+          {T.dnsApi}
+        </span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 скрытая панель -->
+  <section class="sec alt">
+    <div class="in">
+      <h2><span class="idx">[ 04 ]</span>{T.s4}<span class="rule"></span></h2>
+      <div class="hide-wrap">
+        <div class="hide-left">
+          <p class="sec-sub">{T.s4sub}</p>
+          <div class="url-card">
+            <div class="flabel">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg>
+              {T.s4method}
+            </div>
+            <code class="url-break">
+              <span class="u-dim">https://</span><span class="u-cyan">panel.example.com</span><span class="u-dim">/auth/login?</span><span class="u-mint">zIdejKtN</span><span class="u-dim">=</span><span class="u-violet">MWbLrRzx</span>
+            </code>
+          </div>
+          <div class="guard">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            <span>{T.s4chip1}</span>
+          </div>
+          <div class="guard">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <span>{T.s4chip2}</span>
+          </div>
+          <div class="guard">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 8.6 8 11 4.6-2.4 8-6 8-11V5z"/></svg>
+            <span>{T.s4chip3}</span>
+          </div>
+          <div class="checks">
+            <div class="check"><span class="ck" aria-hidden="true"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>{T.s4l1}</div>
+            <div class="check"><span class="ck" aria-hidden="true"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>{T.s4l2}</div>
+          </div>
+          <div class="dep-hints">
+            <span class="hint">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 7.5A3.5 3.5 0 0 1 13 4h7v13h-7a3.5 3.5 0 0 0-3.5 3.5V7.5z"/><path d="M13 11h3M2 11l4-3M2 11l4 3"/></svg>
+              {T.s4metrics}
+            </span>
+          </div>
+        </div>
+        <div class="hide-right">
+          <div class="demo">
+            <div class="demo-bar" aria-hidden="true">
+              <span class="b-dot r"></span><span class="b-dot y"></span><span class="b-dot g"></span>
+              <span class="demo-url" data-plain="https://panel.example.com/" data-key="https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx">https://panel.example.com/</span>
+            </div>
+            <div class="demo-stage">
+              <div class="demo-view dv-scanner" data-view="scanner">
+                <div class="e404">404</div>
+                <div class="e404-sub">not found</div>
+              </div>
+              <div class="demo-view dv-owner" data-view="owner" hidden>
+                <div class="ov-side" aria-hidden="true">
+                  <span class="ov-logo"></span>
+                  <span class="ov-nav on"></span>
+                  <span class="ov-nav"></span>
+                  <span class="ov-nav"></span>
+                  <span class="ov-nav"></span>
+                </div>
+                <div class="ov-main">
+                  <div class="ov-head"><span class="ov-name">remnawave / dashboard</span><span class="ov-live">● live</span></div>
+                  <div class="ov-tiles">
+                    <div class="ov-tile"><b class="c-mint">127</b><span>{T.dm1}</span></div>
+                    <div class="ov-tile"><b class="c-cyan">6.8TB</b><span>{T.dm2}</span></div>
+                    <div class="ov-tile"><b class="c-amber">5</b><span>{T.dm3}</span></div>
+                  </div>
+                  <div class="ov-chart" aria-hidden="true">
+                    <i style="--h: 28%; --i: 0"></i><i style="--h: 54%; --i: 1"></i><i style="--h: 41%; --i: 2"></i><i style="--h: 73%; --i: 3"></i><i style="--h: 49%; --i: 4"></i><i style="--h: 86%; --i: 5"></i><i style="--h: 64%; --i: 6"></i><i style="--h: 37%; --i: 7"></i>
+                  </div>
+                  <div class="ov-nodes" aria-hidden="true">
+                    <div class="ov-node"><span class="st on"></span>node-de-01<i>185.12.44.10</i></div>
+                    <div class="ov-node"><span class="st on"></span>node-fi-02<i>95.216.8.21</i></div>
+                    <div class="ov-node"><span class="st warn"></span>node-ru-03<i>185.51.16.7</i></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="demo-foot">
+              <span class="seg-note">{T.s4seg}</span>
+              <div class="seg" role="group" aria-label={T.s4guards}>
+                <button type="button" class="on" data-demo="scanner">{T.s4mScanner}</button>
+                <button type="button" data-demo="owner">{T.s4mOwner}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- сообщество -->
+  <section class="sec community">
+    <div class="in">
+      <div class="comm-box">
+        <div class="comm-glow" aria-hidden="true"></div>
+        <div class="comm-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <h2>{T.community}<span class="rule"></span></h2>
+        <p class="sec-sub">{T.communitySub}</p>
+        <div class="comm-cards">
+          <a class="comm-card tg" href="https://t.me/remnawave_reverse" target="_blank" rel="noopener">
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>
+            </span>
+            <b>{T.chat}</b>
+            <span>{T.tgSub}</span>
+            <span class="comm-go" aria-hidden="true">→</span>
+          </a>
+          <a class="comm-card gh" href="https://github.com/eGamesAPI/remnawave-reverse-proxy" target="_blank" rel="noopener">
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.15c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.26 5.66.41.36.78 1.05.78 2.13v3.16c0 .3.21.67.8.55A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+            </span>
+            <b>{T.star}</b>
+            <span>{T.ghSub}</span>
+            <span class="comm-go" aria-hidden="true">→</span>
+          </a>
+          <button class="comm-card usdt" type="button" data-usdt={USDT} title={USDT}>
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M12 21 8 9l4-6 4 6z"/></svg>
+            </span>
+            <b>{T.support}</b>
+            <span>{T.usdtSub}</span>
+            <code class="usdt-addr">TON USDT · UQAxyZDw…qc9xVS</code>
+            <span class="comm-go" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- юридическая полоса — самой последней, прижата к нижней границе -->
+  <div class="legal-strip">
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.7 9a.6.6 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .7-1c3-1 5-2 6.8-3a1 1 0 0 1 1 0c1.8 1 3.9 2 6.8 3a1 1 0 0 1 .7 1z"/><path d="M12 8v4M12 15.5h.01"/></svg>
+    <p>{T.legal}</p>
+  </div>
+
+  <!-- плашка «скопировано» -->
+  <div class="copy-toast" aria-live="polite">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+    <span>{en ? 'Copied' : 'Скопировано'}</span>
+  </div>
+</div>
+
+<script>
+  const root = document.querySelector('.rr-landing') as HTMLElement | null;
+  if (root) {
+    const en = !document.documentElement.lang.toLowerCase().startsWith('ru');
+    root.querySelectorAll<HTMLButtonElement>('[data-copy-cmd]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cmd = btn.closest('.cmd-row')?.getAttribute('title') || '';
+        navigator.clipboard?.writeText(cmd).catch(() => {});
+        toast();
+        const label = btn.querySelector('[data-copy-label]');
+        if (label) {
+          label.textContent = en ? 'copied' : 'скопировано';
+          setTimeout(() => (label.textContent = en ? 'copy' : 'копировать'), 1600);
+        }
+      });
+    });
+
+    // плашка «скопировано» — общая для всех копирований
+    document.documentElement.style.setProperty(
+      '--sb-w',
+      window.innerWidth - document.documentElement.clientWidth + 'px',
+    );
+    const toastEl = root.querySelector<HTMLElement>('.copy-toast');
+    let toastTimer = 0;
+    const toast = () => {
+      if (!toastEl) return;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toastEl.classList.remove('show'), 1800);
+    };
+
+    // живой счётчик звёзд у кнопки GitHub
+    const starsEl = root.querySelector<HTMLElement>('[data-stars]');
+    if (starsEl) {
+      fetch('https://api.github.com/repos/eGamesAPI/remnawave-reverse-proxy', {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (typeof d.stargazers_count === 'number') {
+            starsEl.textContent = '★ ' + d.stargazers_count.toLocaleString(en ? 'en-US' : 'ru-RU');
+          }
+        })
+        .catch(() => {});
+    }
+
+    // карточка USDT: клик копирует адрес кошелька
+    const usdtBtn = root.querySelector<HTMLButtonElement>('[data-usdt]');
+    if (usdtBtn) {
+      usdtBtn.addEventListener('click', () => {
+        navigator.clipboard?.writeText(usdtBtn.dataset.usdt || '').catch(() => {});
+        toast();
+        const go = usdtBtn.querySelector('.comm-go');
+        if (go) {
+          const old = go.innerHTML;
+          go.textContent = '✓';
+          setTimeout(() => {
+            go.innerHTML = old;
+          }, 1600);
+        }
+      });
+    }
+
+    // демо «сканер / с ключом» в секции скрытой панели
+    const demo = root.querySelector<HTMLElement>('.demo');
+    if (demo) {
+      const urlEl = demo.querySelector<HTMLElement>('.demo-url');
+      const views = demo.querySelectorAll<HTMLElement>('[data-view]');
+      const btns = demo.querySelectorAll<HTMLButtonElement>('[data-demo]');
+      const setView = (name: string) => {
+        views.forEach((v) => (v.hidden = v.dataset.view !== name));
+        btns.forEach((b) => b.classList.toggle('on', b.dataset.demo === name));
+        if (urlEl) {
+          urlEl.textContent = name === 'owner' ? urlEl.dataset.key || '' : urlEl.dataset.plain || '';
+          urlEl.classList.toggle('key', name === 'owner');
+        }
+      };
+      btns.forEach((b) => b.addEventListener('click', () => setView(b.dataset.demo || 'scanner')));
+    }
+
+    // счётчики статистики
+    const counters = root.querySelectorAll<HTMLElement>('[data-count]');
+    if (counters.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      counters.forEach((el) => {
+        const target = parseInt(el.dataset.count || '0', 10);
+        const t0 = performance.now();
+        const dur = 900;
+        const tick = (t: number) => {
+          const k = Math.min(1, (t - t0) / dur);
+          el.textContent = String(Math.round(target * (1 - Math.pow(1 - k, 3))));
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    }
+
+    // появление секций при скролле
+    const revealTargets = root.querySelectorAll<HTMLElement>('.sec .in > *');
+    if (revealTargets.length && !matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+      revealTargets.forEach((el) => {
+        el.classList.add('rr-wait');
+      });
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.remove('rr-wait');
+            e.target.classList.add('rr-in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      revealTargets.forEach((el) => io.observe(el));
+    }
+
+    // терминал героя: живое проигрывание как у оригинала —
+    // команда, главное меню, выбор пунктов и ход установки, по кругу
+    const termHost = root.querySelector<HTMLElement>('.hero-term');
+    const termPre = root.querySelector<HTMLElement>('.hero-term .term pre');
+    if (termHost && termPre) {
+      const L = JSON.parse(termHost.dataset.play || '{}');
+      const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      let visible = true;
+      new IntersectionObserver((es) => {
+        visible = es[0].isIntersecting;
+      }, { threshold: 0.1 }).observe(termHost);
+      const gate = async () => {
+        while (!visible || document.hidden) await sleep(300);
+      };
+
+      const row = (cls: string) => {
+        const el = document.createElement('span');
+        el.className = cls ? `ln ${cls}` : 'ln';
+        termPre.appendChild(el);
+        termPre.scrollTop = termPre.scrollHeight;
+        return el;
+      };
+      const print = async (defs: Array<[string, string] | [string, string, string?]>, step = 36) => {
+        for (const d of defs) {
+          await gate();
+          const el = row(d[0]);
+          // номера пунктов меню — жёлтым, как в самом скрипте
+          const m = d[0] === 'item' ? d[1].match(/^(\d+\.)\s?([\s\S]*)$/) : null;
+          if (m) {
+            const n = document.createElement('span');
+            n.className = 'num';
+            n.textContent = m[1];
+            el.appendChild(n);
+            el.appendChild(document.createTextNode(m[2] || '\u00a0'));
+          } else if (d[2] !== undefined) {
+            el.textContent = d[1];
+            const v = document.createElement('span');
+            v.className = 'val';
+            v.textContent = d[2];
+            el.appendChild(v);
+          } else {
+            el.textContent = d[1] || '\u00a0';
+          }
+          termPre.scrollTop = termPre.scrollHeight;
+          if (!REDUCED) await sleep(step);
+        }
+      };
+      const typeInto = async (el: HTMLElement, text: string, cls: string, speed = 22) => {
+        const span = document.createElement('span');
+        span.className = cls;
+        el.appendChild(span);
+        const cur = document.createElement('span');
+        cur.className = 'caret';
+        el.appendChild(cur);
+        for (const ch of text) {
+          await gate();
+          span.textContent += ch;
+          termPre.scrollTop = termPre.scrollHeight;
+          if (!REDUCED) await sleep(speed);
+        }
+        cur.remove();
+      };
+      const ask = async (label: string) => {
+        const el = row('');
+        const lbl = document.createElement('span');
+        lbl.className = 'dim';
+        lbl.textContent = `${label} `;
+        el.appendChild(lbl);
+        await typeInto(el, '1', 'p-sel', 220);
+      };
+
+      const mainDefs = (): Array<[string, string]> => {
+        const defs: Array<[string, string]> = [
+          ['title', L.title],
+          ['dim', ` ${L.ver} `],
+          ['plain', ''],
+        ];
+        (L.menu as string[]).forEach((m, i) => {
+          defs.push(['item', `${i + 1}. ${m}`]);
+        });
+        defs.push(['plain', ''], ['item', `0. ${L.exit}`], ['plain', ''], ['dim', L.fast], ['plain', '']);
+        return defs;
+      };
+      const installDefs = (): Array<[string, string]> => [
+        ['title', L.menu[0]],
+        ['plain', ''],
+        ...(L.inst as string[]).map((m, i) => ['item', `${i + 1}. ${m}`] as [string, string]),
+        ['plain', ''],
+        ['item', `0. ${L.exit}`],
+        ['plain', ''],
+      ];
+      const webDefs = (): Array<[string, string]> => [
+        ['title', L.webTitle],
+        ['plain', ''],
+        ['item', '1. Nginx'],
+        ['item', '2. Caddy'],
+        ['plain', ''],
+      ];
+      const progDefs = (): Array<[string, string]> =>
+        (L.prog as string[]).map((p) => ['ans', p] as [string, string]);
+
+      const runCmd = async () => {
+        const cmdLine = row('');
+        const pr = document.createElement('span');
+        pr.className = 'p-pr';
+        pr.textContent = 'root@vps:~# ';
+        cmdLine.appendChild(pr);
+        await typeInto(cmdLine, L.cmd, 'p-cmd', 14);
+      };
+
+      if (REDUCED) {
+        runCmd();
+        row('plain');
+        print(mainDefs());
+      } else {
+        (async () => {
+          await gate();
+          await sleep(600); // дать терминалу докрутить «включение» экрана
+          await runCmd();
+          await sleep(650);
+          for (;;) {
+            termPre.textContent = '';
+            await print(mainDefs());
+            await sleep(500);
+            await ask(L.promptMain);
+            await sleep(600);
+            termPre.textContent = '';
+            await print(installDefs());
+            await sleep(400);
+            await ask(L.instPrompt);
+            await sleep(600);
+            termPre.textContent = '';
+            await print(webDefs());
+            await ask(L.webPrompt);
+            await sleep(500);
+            termPre.textContent = '';
+            await print(progDefs(), 550);
+            await sleep(500);
+            termPre.textContent = '';
+            await print(L.done, 140);
+            await sleep(4200);
+            termPre.textContent = '';
+          }
+        })();
+      }
+    }
+  }
+</script>
+
+<style>
+  .rr-landing {
+    font-family: var(--sl-font, sans-serif);
+    color: #c3d8cb;
+    padding-bottom: 0.1rem;
+    background:
+      radial-gradient(900px 420px at 75% 120px, rgba(0, 240, 176, 0.055), transparent 62%),
+      radial-gradient(800px 500px at 15% 40%, rgba(0, 192, 128, 0.04), transparent 60%);
+  }
+  .rr-landing code { font-family: var(--sl-font-mono, monospace); }
+
+  /* общий каркас: контент потолком 1400px; секции и футер красятся
+     на всю ширину окна, поэтому сами вылезают за боковые поля лендинга */
+  .rr-landing {
+    --edge: clamp(1rem, 4vw, 2rem);
+    overflow-x: clip;
+  }
+  .hero,
+  .sec .in {
+    width: 100%;
+    max-width: 1400px;
+    margin-inline: auto;
+  }
+
+  .hero,
+  .sec {
+    margin-block: 0 !important;
+  }
+  .hero {
+    padding-inline: 0 !important;
+  }
+  .sec {
+    margin-inline: calc(-1 * var(--edge)) !important;
+    padding-inline: var(--edge) !important;
+  }
+
+  /* первый экран: герой и бегущая строка вместе закрывают вьюпорт,
+     строка прижата к нижней кромке, как у референса */
+  .first {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - var(--sl-nav-height, 4rem));
+  }
+  .first .hero { flex: 1 1 auto; }
+
+  /* герой: две колонки, терминальная заметно уже текстовой */
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+    gap: clamp(1.5rem, 3.5vw, 3rem);
+    align-items: center;
+    padding-block: clamp(2.75rem, 7vh, 4.5rem) clamp(2.25rem, 6vh, 3.75rem) !important;
+  }
+  .hero-copy { width: 100% !important; margin-inline: 0 !important; }
+  .hero .hero-term { width: 100% !important; }
+  .hero .stats { margin-top: 0 !important; }
+  .badge {
+    display: inline-block;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #00e5a0;
+    border: 1px solid rgba(0, 229, 160, 0.3);
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    margin-bottom: 1.1rem;
+  }
+  .hero h1 {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: clamp(2.2rem, 4.6vw, 3.7rem);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.035em;
+    color: #eef7f0;
+    margin: 0 0 1.1rem;
+  }
+  /* вторая строка заголовка — как в оригинале: тот же кегль,
+     вся фраза «одной командой.» держится вместе */
+  .h1-l2 { white-space: nowrap; display: inline-block; max-width: 100%; }
+  .grad {
+    background: linear-gradient(96deg, #00f0b0 10%, #62ffd2 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    padding-inline-end: 0.06em;
+  }
+  .lead {
+    font-size: clamp(0.95rem, 1.4vw, 1.08rem);
+    line-height: 1.6;
+    color: #a9c0b0;
+    max-width: 34em;
+    margin: 0 0 1.3rem;
+  }
+  .cta { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.1rem; }
+  .cta.center { justify-content: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.75rem 1.5rem; border-radius: 999px;
+    font-size: 0.95rem; font-weight: 600; text-decoration: none;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease, border-color 0.25s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn.primary {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, #5cffd0, #00f0b0 55%, #00dca2);
+    color: #04241a;
+    font-weight: 700; font-size: 1rem;
+    padding: 0.9rem 2rem;
+    box-shadow:
+      0 12px 36px -10px rgba(0, 240, 176, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      inset 0 -2px 6px rgba(0, 90, 70, 0.22);
+  }
+  .btn.primary::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: -70%;
+    width: 45%; transform: skewX(-20deg);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    transition: left 0.55s ease;
+  }
+  .btn.primary:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .btn.primary:hover::after { left: 125%; }
+  .btn.primary:hover {
+    box-shadow:
+      0 18px 48px -10px rgba(0, 240, 176, 0.8),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      inset 0 -2px 6px rgba(0, 90, 70, 0.22);
+  }
+  .gh-count {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.8em; color: #ffd84d;
+    border-left: 1px solid rgba(255, 255, 255, 0.16);
+    padding-left: 0.55rem; margin-left: 0.15rem;
+  }
+  .btn.ghost { border: 1px solid rgba(0, 240, 176, 0.25); color: #eef7f0; }
+  .btn.ghost:hover { transform: translateY(-2px); border-color: rgba(0, 240, 176, 0.5); }
+  .arrow { transition: transform 0.2s ease; }
+  .btn.primary:hover .arrow { transform: translateX(3px); }
+
+  .cmd-row {
+    display: flex; align-items: center; gap: 0.7rem;
+    max-width: 36em; padding: 0.55rem 0.5rem 0.55rem 0.9rem;
+    border-radius: 12px; background: rgba(8, 17, 13, 0.85);
+    border: 1px solid rgba(0, 240, 176, 0.18);
+    font-family: var(--sl-font-mono, monospace);
+  }
+  .cmd-row.small { margin-top: 0.7rem; max-width: 100%; }
+  .dollar { font-weight: 700; color: #00f0b0; flex-shrink: 0; }
+  .cmd-text {
+    flex: 1; min-width: 0; font-size: 0.72rem; line-height: 1.4;
+    color: #62ffd2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cmd-copy {
+    appearance: none; background: transparent; flex-shrink: 0;
+    font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #a9c0b0; padding: 0.4rem 0.7rem; border-radius: 7px;
+    border: 1px solid rgba(0, 240, 176, 0.2); cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+  .cmd-copy:hover { color: #62ffd2; border-color: rgba(0, 240, 176, 0.45); background: rgba(0, 240, 176, 0.08); }
+  .os-note { font-size: 0.78rem; color: #7f9d8e; margin-top: 0.5rem; }
+  /* зеркало jsDelivr — заметная янтарная плашка, как «внимание» */
+  .mirror {
+    margin-top: 0.8rem; max-width: 36em;
+    border: 1px solid rgba(255, 216, 77, 0.28);
+    border-left: 3px solid #ffd84d;
+    border-radius: 12px;
+    background: rgba(255, 216, 77, 0.05);
+    padding: 0.6rem 0.95rem;
+  }
+  .mirror summary {
+    cursor: pointer; display: flex; align-items: center; gap: 0.55rem;
+    font-size: 0.82rem; color: #d8e2ce; list-style: none;
+  }
+  .mirror summary svg { color: #ffd84d; flex: none; }
+  .mirror summary::-webkit-details-marker { display: none; }
+  .mirror[open] .cmd-row.small { margin-top: 0.65rem; }
+
+  /* терминал героя: живое окно как у оригинала — высота от контента,
+     никакого скролла: длинная команда переносится по строкам;
+     вокруг — медленные орбиты и мягкое свечение */
+  .hero-term { position: relative; min-width: 0; }
+  /* фон за терминалом: сонар — кольца-эхо расходятся от окна */
+  .ping {
+    position: absolute; inset: -6% -12%;
+    border: 1px solid rgba(0, 240, 176, 0.3);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: rr-ping 4.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  .ping.p2 { animation-delay: 1.4s; }
+  .ping.p3 { animation-delay: 2.8s; }
+  @keyframes rr-ping {
+    0% { transform: scale(0.5); opacity: 0; }
+    14% { opacity: 0.5; }
+    100% { transform: scale(1.18); opacity: 0; }
+  }
+  .specks { position: absolute; inset: -8%; pointer-events: none; }
+  .specks i {
+    position: absolute; width: 4px; height: 4px; border-radius: 50%;
+    background: rgba(0, 240, 176, 0.55);
+    animation: rr-speck 7s ease-in-out infinite;
+  }
+  .specks i:nth-child(1) { left: 8%; top: 20%; }
+  .specks i:nth-child(2) { right: 12%; top: 12%; width: 3px; height: 3px; background: rgba(57, 197, 207, 0.5); animation-delay: 1.8s; }
+  .specks i:nth-child(3) { left: 20%; bottom: 18%; animation-delay: 3.1s; }
+  .specks i:nth-child(4) { right: 6%; bottom: 28%; width: 3px; height: 3px; animation-delay: 4.4s; }
+  .specks i:nth-child(5) { left: 45%; top: -2%; width: 3px; height: 3px; animation-delay: 5.6s; }
+  .specks i:nth-child(6) { right: 38%; bottom: 4%; animation-delay: 2.4s; }
+  @keyframes rr-speck {
+    50% { transform: translateY(-16px); opacity: 0.35; }
+  }
+  /* включение как у ЭЛТ-монитора + развёртка на экране */
+  .hero-term :global(.term) {
+    animation: rr-crt-on 0.6s 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hero-term :global(.term)::before {
+    /* статичные сканлайны */
+    content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(220, 255, 238, 0.03) 0 1px, transparent 1px 3px);
+  }
+  @keyframes rr-crt-on {
+    0% { transform: scaleY(0.04) scaleX(1.12); filter: brightness(2.4); opacity: 0; }
+    55% { transform: scaleY(1.02) scaleX(0.996); filter: brightness(1.3); opacity: 1; }
+    100% { transform: none; filter: none; }
+  }
+  .hero-term :global(.term) {
+    position: relative; z-index: 1;
+    margin: 0 !important;
+    /* свет только внутрь окна: за границы ничего не уходит */
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5), inset 0 0 22px rgba(0, 240, 176, 0.05);
+  }
+  .hero-term :global(pre) {
+    font-size: 12.5px !important;
+    line-height: 1.6 !important;
+    min-height: 300px;
+    overflow: hidden !important;
+    padding: 16px 20px !important;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .hero-term :global(pre .ln) { display: block; }
+  .hero-term :global(.term .p-pr) { color: #00e5a0; }
+  .hero-term :global(.term .p-cmd) { color: #62ffd2; }
+  .hero-term :global(.term .p-sel) { color: #62ffd2; font-weight: 700; }
+  /* тема даёт div+div margin-top 16px — внутри сеток карточек это ломает
+     выравнивание (первая карточка без маржи, остальные сдвинуты) */
+  :global(.rr-landing) :where(.stats, .path-grid, .mod-grid, .deploy-grid, .comm-cards, .marquee-track) > * {
+    margin-top: 0 !important;
+  }
+
+  /* статистика: полоса с линейками — крупные цифры, никаких пилюль */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0 0 1.7rem;
+    border-block: 1px solid #172b21;
+  }
+  .stat {
+    display: flex; flex-direction: column; gap: 0.25rem;
+    padding: 0.95rem 0.4rem 0.95rem 1.15rem;
+    border-left: 1px solid #172b21;
+    transition: background 0.25s ease;
+  }
+  .stat:first-child { border-left: none; padding-left: 0.4rem; }
+  .stat:hover { background: linear-gradient(180deg, rgba(0, 240, 176, 0.06), transparent); }
+  .stat:hover b { text-shadow: 0 0 16px currentColor; }
+  .stat b { font-family: var(--sl-font-mono, monospace); font-size: 1.7rem; font-weight: 700; line-height: 1.05; }
+  .stat b.c-text { color: #eef7f0; }
+  .stat b.c-mint { color: #00f0b0; }
+  .stat b.c-cyan { color: #39c5cf; }
+  .stat b.c-amber { color: #ffd84d; }
+  .stat span { font-size: 11px; color: #7f9d8e; line-height: 1.3; }
+  @media (max-width: 40rem) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat { border-left: none; padding: 0.85rem 0.5rem; border-top: 1px solid #172b21; }
+    .stat:nth-child(-n+2) { border-top: none; }
+  }
+
+  /* бегущая строка: на всю ширину */
+  .marquee {
+    overflow: hidden; border-block: 1px solid #172b21;
+    background: rgba(11, 21, 16, 0.6);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+  .marquee-track {
+    display: flex; width: max-content; gap: 2.2rem;
+    padding: 0.75rem 0;
+    animation: rr-marquee 36s linear infinite;
+  }
+  .tag {
+    display: inline-flex; align-items: center; gap: 0.6rem;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.72rem; letter-spacing: 0.12em; color: #7f9d8e;
+    white-space: nowrap;
+  }
+  .tag i { color: #00e5a0; font-style: normal; font-size: 0.6rem; }
+  @keyframes rr-marquee { to { transform: translateX(-50%); } }
+
+  /* секции: простор как у референса (py-24/py-32), чётные — с мягкой
+     подложкой и рамками, чтобы страница читалась полосами */
+  .sec { padding-block: clamp(3.25rem, 8vh, 5.5rem); }
+  .sec.alt {
+    background: rgba(11, 21, 16, 0.45);
+    border-block: 1px solid #172b21;
+  }
+  .sec h2 {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: clamp(1.45rem, 3vw, 2.05rem);
+    color: #eef7f0; margin: 0 0 1.1rem;
+  }
+  .idx { color: #00e5a0; font-size: 0.85em; letter-spacing: 0.02em; }
+  .rule { flex: 1; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #2a4737, transparent); }
+  .sec-sub { color: #a9c0b0; line-height: 1.7; max-width: 46em; margin: 0 0 2.1rem; }
+  .dns-hint { font-size: 0.8rem; color: #7f9d8e; margin-top: 0.9rem; }
+
+  .path-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .path-card {
+    display: flex; align-items: center; gap: 0.85rem;
+    border: 1px solid #24402f; border-radius: 12px; background: #0f2119;
+    padding: 1rem 1.1rem; font-weight: 600; color: #dcefe4; text-decoration: none;
+    transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  }
+  .path-card:hover { border-color: rgba(0, 229, 160, 0.45); transform: translateY(-2px); background: #10261c; }
+  .path-card .num {
+    font-family: var(--sl-font-mono, monospace);
+    color: #ffd84d; font-weight: 700; font-size: 1.05rem;
+  }
+  .path-card .go, .mod-card .go {
+    margin-left: auto; color: #00e5a0; font-weight: 400;
+    opacity: 0; transform: translateX(-5px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .path-card:hover .go, .mod-card.linked:hover .go { opacity: 1; transform: none; }
+
+  .mod-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+  .mod-card {
+    display: block; color: inherit; text-decoration: none;
+    border: 1px solid #24402f; border-radius: 12px; background: #0f2119;
+    padding: 1.15rem 1.25rem;
+    transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  }
+  .mod-card:hover { border-color: rgba(0, 229, 160, 0.45); transform: translateY(-2px); }
+  .mod-card.linked:hover { background: #10261c; }
+  .mod-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
+  .mod-head b { color: #eef7f0; font-size: 0.95rem; }
+  .mod-head .num {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.65rem; color: #00e5a0; letter-spacing: 0.08em;
+    border: 1px solid rgba(0, 229, 160, 0.3); border-radius: 6px; padding: 0.12rem 0.4rem;
+  }
+  .mod-card p { margin: 0; font-size: 0.85rem; color: #7f9d8e; line-height: 1.55; }
+
+  .deploy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.1rem; }
+  .deploy-card {
+    position: relative; overflow: hidden;
+    border: 1px solid #24402f; border-radius: 16px;
+    background: linear-gradient(180deg, #10241b, #0f2119);
+    padding: 1.5rem 1.55rem 1.4rem;
+    transition: border-color 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  }
+  .deploy-card::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(420px 170px at 85% -12%, rgba(0, 240, 176, 0.07), transparent 70%);
+  }
+  .deploy-card:hover {
+    border-color: rgba(0, 229, 160, 0.4);
+    transform: translateY(-3px);
+    box-shadow: 0 18px 42px -24px rgba(0, 0, 0, 0.65);
+  }
+  .dep-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.7rem; }
+  .dep-ico {
+    flex: none; width: 42px; height: 42px; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #00e5a0; background: rgba(0, 229, 160, 0.08);
+    border: 1px solid rgba(0, 229, 160, 0.22);
+  }
+  .dep-ico.cyan { color: #39c5cf; background: rgba(57, 197, 207, 0.08); border-color: rgba(57, 197, 207, 0.22); }
+  .dep-head h3 { margin: 0 0 0.25rem; color: #eef7f0; font-size: 1.05rem; }
+  .dep-badge {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #9db3a4; border: 1px solid #24402f; border-radius: 99px;
+    padding: 0.18rem 0.55rem; white-space: nowrap;
+  }
+  .deploy-card p { margin: 0 0 0.9rem; font-size: 0.88rem; color: #a9c0b0; line-height: 1.6; }
+  .dep-flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+    margin-bottom: 1rem; font-family: var(--sl-font-mono, monospace); font-size: 0.72rem;
+  }
+  .dep-flow span {
+    color: #dcefe4; border: 1px solid #24402f; border-radius: 7px;
+    padding: 0.22rem 0.55rem; background: rgba(11, 21, 16, 0.7);
+  }
+  .dep-flow i { color: #7f9d8e; font-style: normal; }
+  .dep-flow em { color: #7f9d8e; font-style: normal; margin-left: 0.15rem; }
+  .dep-table { border: 1px solid #1a2f24; border-radius: 10px; overflow: hidden; }
+  .deploy-card table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+  .deploy-card th {
+    text-align: left; font-family: var(--sl-font-mono, monospace);
+    color: #7f9d8e; font-weight: 500; padding: 0.45rem 0.6rem;
+    background: rgba(11, 21, 16, 0.7); font-size: 0.68rem;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .deploy-card td {
+    font-family: var(--sl-font-mono, monospace);
+    color: #c3d8cb; padding: 0.42rem 0.6rem; border-top: 1px solid #122019;
+  }
+  .deploy-card tr:last-child td:first-child { border-bottom-left-radius: 10px; }
+  .rec {
+    display: inline-block; font-size: 9.5px; letter-spacing: 0.08em;
+    border-radius: 5px; padding: 0.14rem 0.42rem;
+  }
+  .rec.a { color: #00e5a0; background: rgba(0, 229, 160, 0.09); border: 1px solid rgba(0, 229, 160, 0.3); }
+  .rec.cname { color: #39c5cf; background: rgba(57, 197, 207, 0.09); border: 1px solid rgba(57, 197, 207, 0.3); }
+  .auto {
+    display: inline-block; margin-left: 0.4rem;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #ffd84d; border: 1px dashed rgba(255, 216, 77, 0.45); border-radius: 5px;
+    padding: 0.1rem 0.34rem;
+  }
+  .dep-hints {
+    display: flex; flex-wrap: wrap; gap: 0.6rem 1.6rem;
+    margin-top: 1.1rem;
+  }
+  .hint {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 0.8rem; color: #7f9d8e;
+  }
+  .hint svg { flex: none; opacity: 0.8; }
+  .hint.api { color: #9db3a4; }
+  .hint.api svg { color: #ffd84d; opacity: 0.9; }
+
+  /* 04 «панель, которой нет»: слева метод доступа и защита,
+     справа интерактивное демо «сканер / с ключом» */
+  .hide-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    gap: clamp(1.5rem, 3vw, 2.75rem);
+    align-items: start;
+  }
+  .hide-left .sec-sub { margin-bottom: 1.4rem; font-size: 0.95rem; color: #b3c8b8; }
+  .url-card {
+    border: 1px solid #24402f; border-radius: 12px;
+    background: linear-gradient(180deg, #10241b, #0f2119);
+    padding: 1.15rem 1.3rem; margin-bottom: 1.25rem;
+    box-shadow: 0 14px 34px -24px rgba(0, 0, 0, 0.8);
+  }
+  .flabel {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #7f9d8e; margin-bottom: 0.6rem;
+  }
+  .flabel svg { color: #00e5a0; flex: none; }
+  .url-break {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 0.88rem; line-height: 1.8; word-break: break-all;
+    color: #c3d8cb;
+  }
+  .u-dim { color: #6f8d7e; }
+  .u-cyan { color: #39c5cf; }
+  .u-mint { color: #00e5a0; }
+  .u-violet { color: #a78bfa; }
+  .guard {
+    display: flex; align-items: center; gap: 0.6rem;
+    border: 1px solid #1a2f24; border-radius: 10px;
+    background: rgba(11, 21, 16, 0.55);
+    padding: 0.6rem 0.75rem; font-size: 0.84rem; color: #c3d8cb;
+  }
+  .guard svg { color: #00e5a0; flex: none; }
+  .hide-left .guard + .guard { margin-top: 0.55rem; }
+  .checks { display: flex; flex-direction: column; gap: 0.65rem; margin-top: 1.2rem; }
+  .check {
+    display: flex; align-items: flex-start; gap: 0.6rem;
+    font-size: 0.83rem; color: #a9c0b0; line-height: 1.5;
+  }
+  .ck {
+    flex: none; width: 20px; height: 20px; margin-top: 0.05rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #00e5a0; background: rgba(0, 229, 160, 0.09);
+    border: 1px solid rgba(0, 229, 160, 0.3); border-radius: 50%;
+  }
+  .hide-left .dep-hints { margin-top: 1.25rem; }
+
+  .demo {
+    border: 1px solid #24402f; border-radius: 16px; overflow: hidden;
+    background: linear-gradient(180deg, #10241b, #0f2119);
+    box-shadow: 0 20px 50px -30px rgba(0, 0, 0, 0.7);
+  }
+  .demo-bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 9px 12px;
+    background: #0b1510; border-bottom: 1px solid #1d3328;
+  }
+  .b-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .b-dot.r { background: #ff5f5680; }
+  .b-dot.y { background: #ffbd2e80; }
+  .b-dot.g { background: #27c93f80; }
+  .demo-url {
+    flex: 1; min-width: 0;
+    font-family: var(--sl-font-mono, monospace); font-size: 11px;
+    color: #6f8d7e; background: rgba(8, 17, 13, 0.8);
+    border-radius: 6px; padding: 4px 10px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: color 0.3s ease;
+  }
+  .demo-url.key { color: #62ffd2; }
+  /* сцена одной высоты для обоих видов: окно не прыгает при переключении,
+     лишнее место в режиме «с ключом» забирает график */
+  .demo-stage {
+    display: flex; flex-direction: column;
+    min-height: 30rem;
+  }
+  .demo-view { flex: 1; display: flex; animation: dv-in 0.3s ease; }
+  .demo-view[hidden] { display: none; }
+  @keyframes dv-in { from { opacity: 0; } }
+  .dv-scanner {
+    flex-direction: column;
+    align-items: center; justify-content: center; gap: 0.4rem;
+    text-align: center; padding: 1.5rem;
+  }
+  .e404 {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 4.2rem; font-weight: 700; line-height: 1; color: #33503f;
+  }
+  .e404-sub {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 10px; letter-spacing: 0.34em; text-transform: uppercase;
+    color: #6f8d7e; margin-bottom: 0.7rem;
+  }
+  .dv-owner { align-items: stretch; }
+  .ov-side {
+    flex: none; width: 46px;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    padding: 12px 0;
+    background: rgba(8, 17, 13, 0.85);
+    border-right: 1px solid #1a2f24;
+  }
+  .ov-logo {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: linear-gradient(135deg, #00f0b0, #00c080);
+    box-shadow: 0 0 14px rgba(0, 240, 176, 0.5);
+    margin-bottom: 4px;
+  }
+  .ov-nav { width: 14px; height: 14px; border-radius: 5px; background: #1d3328; }
+  .ov-nav.on { background: rgba(0, 229, 160, 0.35); box-shadow: inset 0 0 0 1px rgba(0, 229, 160, 0.5); }
+  .ov-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 1rem 1.1rem 1.1rem; }
+  .ov-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem; }
+  .ov-name { font-family: var(--sl-font-mono, monospace); font-size: 11px; color: #9db3a4; }
+  .ov-live {
+    font-family: var(--sl-font-mono, monospace); font-size: 10px;
+    color: #00e5a0; background: rgba(0, 229, 160, 0.09);
+    border: 1px solid rgba(0, 229, 160, 0.3); border-radius: 99px;
+    padding: 0.14rem 0.55rem;
+    animation: live-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes live-pulse { 50% { opacity: 0.5; } }
+  .ov-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.55rem; margin-bottom: 0.75rem; }
+  .ov-tile {
+    background: rgba(11, 21, 16, 0.7); border: 1px solid #1a2f24; border-radius: 10px;
+    padding: 0.6rem 0.7rem;
+  }
+  .ov-tile b {
+    display: block; font-family: var(--sl-font-mono, monospace);
+    font-size: 1rem; font-weight: 700; line-height: 1.1;
+  }
+  .ov-tile b.c-mint { color: #00f0b0; }
+  .ov-tile b.c-cyan { color: #39c5cf; }
+  .ov-tile b.c-amber { color: #ffd84d; }
+  .ov-tile span {
+    font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #7f9d8e;
+  }
+  .ov-chart {
+    flex: 1; min-height: 110px;
+    display: flex; align-items: flex-end; gap: 6px;
+    background: rgba(11, 21, 16, 0.7); border: 1px solid #1a2f24;
+    border-radius: 10px; padding: 10px 10px 7px;
+  }
+  .ov-chart i {
+    flex: 1; height: var(--h); border-radius: 4px 4px 0 0;
+    background: linear-gradient(180deg, #00f0b0, rgba(0, 192, 128, 0.8));
+    transform-origin: bottom; opacity: 0.85;
+    animation: ov-bounce 2.6s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 0.14s);
+  }
+  @keyframes ov-bounce { 50% { transform: scaleY(0.93); } }
+  .ov-nodes { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem; }
+  .ov-node {
+    display: flex; align-items: center; gap: 0.55rem;
+    font-family: var(--sl-font-mono, monospace); font-size: 10.5px;
+    color: #c3d8cb;
+    background: rgba(11, 21, 16, 0.6); border: 1px solid #1a2f24;
+    border-radius: 8px; padding: 0.42rem 0.65rem;
+  }
+  .ov-node i { font-style: normal; color: #6f8d7e; margin-left: auto; }
+  .st { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .st.on { background: #00e5a0; box-shadow: 0 0 6px rgba(0, 229, 160, 0.7); }
+  .st.warn { background: #ffd84d; box-shadow: 0 0 6px rgba(255, 216, 77, 0.6); }
+  .demo-foot {
+    display: flex; align-items: center; justify-content: center; gap: 0.8rem;
+    padding: 0.85rem; border-top: 1px solid #1d3328; background: rgba(11, 21, 16, 0.5);
+  }
+  .seg-note {
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #6f8d7e;
+  }
+  .seg {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: rgba(8, 17, 13, 0.9); border: 1px solid #1d3328;
+    border-radius: 99px; padding: 3px;
+  }
+  .seg button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 30px; padding: 0 1.1rem; border-radius: 99px;
+    font-family: var(--sl-font-mono, monospace);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    line-height: 1; white-space: nowrap;
+    color: #7f9d8e;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .seg button.on {
+    color: #00e5a0; background: rgba(0, 229, 160, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(0, 229, 160, 0.35);
+  }
+  @media (max-width: 60rem) {
+    .hide-wrap { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* сообщество: панель с живым свечением и парящими точками */
+  .community { text-align: center; }
+  .community .sec-sub { margin-inline: auto; }
+  .community .rule { margin-inline: auto; width: min(300px, 40%); }
+  .comm-box {
+    position: relative; overflow: hidden;
+    border: 1px solid #24402f; border-radius: 20px;
+    background: linear-gradient(180deg, #0e2118, #0b1a13);
+    padding: clamp(2rem, 5vw, 3.25rem) clamp(1.25rem, 4vw, 3rem) clamp(2rem, 5vw, 3rem);
+  }
+  .comm-glow {
+    position: absolute; inset: -30%; pointer-events: none;
+    background:
+      radial-gradient(38% 45% at 25% 30%, rgba(0, 240, 176, 0.09), transparent 70%),
+      radial-gradient(35% 45% at 75% 65%, rgba(57, 197, 207, 0.07), transparent 70%);
+    animation: comm-drift 9s ease-in-out infinite alternate;
+  }
+  @keyframes comm-drift {
+    to { transform: translate(-3%, 4%) scale(1.1); opacity: 0.75; }
+  }
+  .comm-dots { position: absolute; inset: 0; pointer-events: none; }
+  .comm-dots i {
+    position: absolute; width: 5px; height: 5px; border-radius: 50%;
+    background: rgba(0, 240, 176, 0.5);
+    animation: comm-float 6s ease-in-out infinite;
+  }
+  .comm-dots i:nth-child(1) { left: 16%; top: 32%; }
+  .comm-dots i:nth-child(2) { right: 18%; top: 26%; background: rgba(57, 197, 207, 0.45); animation-delay: 1.3s; }
+  .comm-dots i:nth-child(3) { left: 30%; bottom: 22%; animation-delay: 2.6s; }
+  .comm-dots i:nth-child(4) { right: 30%; bottom: 30%; width: 4px; height: 4px; animation-delay: 3.8s; }
+  @keyframes comm-float {
+    50% { transform: translateY(-14px); opacity: 0.35; }
+  }
+  .comm-box h2, .comm-box .sec-sub, .comm-cards { position: relative; }
+  .comm-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem; max-width: 840px; margin: 0 auto;
+  }
+  .comm-card {
+    position: relative; display: flex; flex-direction: column; align-items: flex-start;
+    gap: 0.3rem; text-decoration: none; color: inherit;
+    border: 1px solid #24402f; border-radius: 14px;
+    background: rgba(15, 33, 25, 0.85);
+    padding: 1.15rem 1.3rem; text-align: left;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .comm-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(0, 229, 160, 0.5);
+    box-shadow: 0 18px 40px -20px rgba(0, 240, 176, 0.4);
+  }
+  .comm-card .ico {
+    width: 40px; height: 40px; border-radius: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 0.55rem;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .comm-card:hover .ico { transform: scale(1.1) rotate(-4deg); }
+  .comm-card.tg .ico { color: #39c5cf; background: rgba(57, 197, 207, 0.09); border: 1px solid rgba(57, 197, 207, 0.28); }
+  .comm-card.gh .ico { color: #00e5a0; background: rgba(0, 229, 160, 0.09); border: 1px solid rgba(0, 229, 160, 0.28); }
+  button.comm-card { appearance: none; font: inherit; width: 100%; cursor: pointer; }
+  .comm-card.usdt .ico { color: #ffd84d; background: rgba(255, 216, 77, 0.09); border: 1px solid rgba(255, 216, 77, 0.28); }
+  .usdt-addr {
+    margin-top: 0.4rem; align-self: stretch;
+    font-family: var(--sl-font-mono, monospace); font-size: 0.68rem;
+    color: rgba(255, 216, 77, 0.85);
+    background: rgba(255, 216, 77, 0.06); border: 1px solid rgba(255, 216, 77, 0.18);
+    border-radius: 7px; padding: 0.3rem 0.55rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .comm-card b { color: #eef7f0; font-size: 0.98rem; }
+  .comm-card > span:not(.ico):not(.comm-go) { font-size: 0.8rem; color: #7f9d8e; line-height: 1.45; }
+  .comm-go {
+    position: absolute; right: 1.05rem; top: 1.2rem;
+    color: #00e5a0; opacity: 0; transform: translateX(-5px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .comm-card:hover .comm-go { opacity: 1; transform: none; }
+
+  /* юридическая полоса — закрывает страницу снизу */
+  .legal-strip {
+    display: flex; align-items: center; justify-content: center; gap: 0.7rem;
+    margin-inline: calc(-1 * var(--edge));
+    padding: 0.85rem var(--edge);
+    background: rgba(255, 216, 77, 0.05);
+    border-top: 1px solid rgba(255, 216, 77, 0.18);
+    color: #ffd84d;
+  }
+  .legal-strip svg { flex: none; }
+  .legal-strip p { margin: 0; font-size: 0.85rem; line-height: 1.5; text-align: center; }
+  /* плашка «скопировано»: всплывает снизу по центру */
+  .copy-toast {
+    position: fixed; bottom: 1.4rem;
+    /* центр видимой области, без желоба скроллбара (--sb-w ставит скрипт) */
+    left: calc((100vw - var(--sb-w, 0px)) / 2);
+    transform: translate(-50%, 12px);
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: #0f2119; border: 1px solid rgba(0, 229, 160, 0.45);
+    border-radius: 99px; color: #eef7f0;
+    font-size: 0.82rem; padding: 0.55rem 1.05rem;
+    box-shadow: 0 14px 40px -12px rgba(0, 0, 0, 0.65);
+    opacity: 0; pointer-events: none; z-index: 60;
+    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .copy-toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .copy-toast svg { color: #00e5a0; flex: none; }
+
+  /* вход героя */
+  .hero-copy > * { animation: rr-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .hero-copy > *:nth-child(1) { animation-delay: 0.05s; }
+  .hero-copy > *:nth-child(2) { animation-delay: 0.12s; }
+  .hero-copy > *:nth-child(3) { animation-delay: 0.2s; }
+  .hero-copy > *:nth-child(4) { animation-delay: 0.28s; }
+  .hero-copy > *:nth-child(5) { animation-delay: 0.36s; }
+  .hero-copy > *:nth-child(6) { animation-delay: 0.42s; }
+  .hero-copy > *:nth-child(7) { animation-delay: 0.48s; }
+  .hero-copy > *:nth-child(8) { animation-delay: 0.54s; }
+  /* подъём героя целиком заменён включением самого терминала (rr-crt-on) */
+  .hero-term { animation: none; }
+  @keyframes rr-rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* появление при скролле */
+  .rr-wait { opacity: 0; transform: translateY(20px); }
+  .rr-in { animation: rr-rise 0.65s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+  @media (max-width: 56rem) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .hero .hero-term { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track { animation: none; }
+    .ping, .specks i, .ov-chart i, .ov-live, .demo-view,
+    .comm-glow, .comm-dots i, .hero-term :global(.term) { animation: none; }
+    .btn.primary::after { display: none; }
+    .hero-copy > *, .hero-term, .stats, .rr-in { animation: none !important; }
+    .rr-wait { opacity: 1; transform: none; }
+  }
+</style>

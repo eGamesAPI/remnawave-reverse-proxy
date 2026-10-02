@@ -5,8 +5,15 @@ description: Instructions for installing and configuring Cert Warden — a centr
 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import CertwardenDiagram from '../../../components/CertwardenDiagram.astro';
 
 **Cert Warden** is a centralized client ACME (Automated Certificate Management Environment), designed to simplify SSL/TLS certificate management. It is an open-source solution that provides an API for automating the acquisition, renewal, and distribution of certificates across different systems and services. Cert Warden is designed to simplify certificate management in complex infrastructures, where managing a large number of certificates for different domains or devices is required.
+
+## How it works
+
+<CertwardenDiagram lang="en" />
+
+Cert Warden orders certificates from Let's Encrypt and proves domain ownership with a DNS-01 record at the DNS provider. It stores the issued certificates and serves them to clients via API keys: the client on each server downloads the pem files, writes them to disk and restarts its web server. A panel behind Caddy needs no file certificates at all: Caddy obtains them on its own.
 
 ## Why do we need Cert Warden?
 Cert Warden solves the problem of automating certificate management in complex infrastructures, such as Kubernetes clusters, web applications, or IoT devices. Here are the main reasons why it can be useful:

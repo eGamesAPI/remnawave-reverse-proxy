@@ -1,0 +1,122 @@
+---
+/**
+ * Живой «терминал» для документации: рамка окна + строки меню скрипта.
+ * Рендерится HTML/CSS, а не картинкой — резкий на любом экране,
+ * правится как текст, переводится как текст.
+ *
+ *   <Terminal title="root@server: ~" lines={[
+ *     { kind: 'title', text: 'Установка компонентов Remnawave' },
+ *     { kind: 'item', num: '1.', text: 'Установить панель и ноду' },
+ *     { kind: 'input', text: 'Выберите действие (0-6):' },
+ *   ]} />
+ *
+ * kind: title — зелёный заголовок; item — пункт меню (num жёлтым);
+ * plain — обычная строка; dim — серая; input — строка с курсором;
+ * ok — зелёная; url — мятная подчёркнутая; strong — белая жирная.
+ * answer — дописать ответ мятным, val — значение белым жирным.
+ *
+ * ВАЖНО: HTML строк собирается в frontmatter и вставляется через
+ * set:html. Писать разметку внутри <pre> шаблоном нельзя — Astro
+ * сохраняет там пробелы и отступы шаблона, и строки уезжают.
+ */
+interface TermLine {
+  kind?: 'title' | 'item' | 'plain' | 'dim' | 'input' | 'ok' | 'url' | 'strong' | 'step' | 'err';
+  num?: string;
+  text?: string;
+  answer?: string;
+  val?: string;
+  /** подсветить пункт красным — тот, который нужно выбрать по шагу инструкции */
+  pick?: boolean;
+  /** дописать кусок строки красным — например «доступно обновление скрипта» */
+  warn?: string;
+}
+interface Props {
+  title?: string;
+  lines?: TermLine[];
+  /** нижняя строка-статус (например «Ubuntu 22.04+ · Debian 11+»);
+      без неё окно рисуется как раньше — только бар и строки */
+  foot?: string;
+}
+const { title = 'root@server: ~', lines = [], foot } = Astro.props;
+
+const esc = (s: string) =>
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const html = lines
+  .map((l) => {
+    let h = '';
+    if (l.num) h += `<span class="num">${esc(l.num)}</span>`;
+    if (l.text) h += esc(l.text);
+    if (l.answer) h += `<span class="ans">${esc(l.answer)}</span>`;
+    if (l.warn) h += `<span class="warn">${esc(l.warn)}</span>`;
+    if (l.val) h += `<span class="val">${esc(l.val)}</span>`;
+    if (l.kind === 'input') h += '<span class="caret"></span>';
+    return `<span class="ln ${[l.kind ?? 'plain', l.pick ? 'pick' : ''].filter(Boolean).join(' ')}">${h}</span>`;
+  })
+  .join('\n');
+
+// Полоска заголовка тоже собирается строкой: у типографики Starlight есть
+// правила вида «* + *» для соседей внутри li, которые раскачивают <i> —
+// кнопки-точки получают явный margin:0 и свои классы цветов.
+const barHtml =
+  '<span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>' +
+  `<span class="ttl">${esc(title)}</span>`;
+const footHtml = `<span>${esc(foot ?? '')}</span><span class="root"><i></i>root</span>`;
+---
+
+<div class="term">
+  <div class="bar" set:html={barHtml}></div>
+  <pre class="scr" set:html={html}></pre>
+  {foot && <div class="foot" set:html={footHtml}></div>}
+</div>
+
+<style is:global>
+  /* стили глобальные: строки приходят через set:html и не получают
+     data-astro-cid, поэтому классы описаны от .term вниз */
+  .term{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;overflow:hidden;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+    margin:1rem 0;
+  }
+  .term .bar{display:flex;align-items:center;gap:7px;padding:10px 14px;
+    border-bottom:1px solid #1d3328;background:#0b1510}
+  .term .bar .dot{width:11px;height:11px;border-radius:50%;flex:none;
+    display:block;margin:0;padding:0}
+  .term .bar .dot.r{background:#ff5f56}
+  .term .bar .dot.y{background:#ffbd2e}
+  .term .bar .dot.g{background:#27c93f}
+  .term .bar .ttl{margin:0 0 0 8px;flex:none;color:#5e7d6f;font-size:12px}
+  .term pre.scr{
+    margin:0;padding:20px 24px;overflow-x:auto;
+    /* моно-шрифт темы: JetBrains Mono Variable с настоящими жирными
+       начертаниями — синтетический жирный обычного сабсета размывал текст */
+    font-family:var(--sl-font-mono, 'JetBrains Mono Variable', ui-monospace, Consolas, monospace);
+    font-size:14px;line-height:1.66;color:#e9f4ec;
+    background:transparent;border:none;border-radius:0;
+  }
+  .term .num{color:#ffd84d;margin-right:.45em}
+  .term .title{color:#00e5a0;font-weight:700}
+  .term .dim{color:#8ca08f}
+  .term .pick{color:#ff5d5d;font-weight:700}
+  .term .pick .num{font-weight:400}
+  .term .step{color:#ffd84d}
+  .term .err{color:#ff5d5d}
+  .term .warn{color:#ff5d5d}
+  .term .ok{color:#00e5a0;font-weight:700}
+  .term .url{color:#00e5a0;text-decoration:underline;text-underline-offset:3px}
+  .term .strong, .term .val{color:#fff;font-weight:700}
+  .term .ans{color:#00e5a0}
+  .term .caret{display:inline-block;width:8px;height:14px;background:#00e5a0;
+    vertical-align:-2px;margin-left:2px;animation:term-blink 1.1s steps(1) infinite}
+  .term .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 16px;border-top:1px solid #1d3328;background:#0b1510;
+    font-family:var(--sl-font-mono, 'JetBrains Mono Variable', ui-monospace, Consolas, monospace);
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#5e7d6f}
+  .term .foot .root{display:flex;align-items:center;gap:6px}
+  .term .foot .root i{width:6px;height:6px;border-radius:50%;background:#27c93f;
+    box-shadow:0 0 6px rgba(39,201,63,.8);animation:term-pulse 2s ease-in-out infinite}
+  @keyframes term-blink{50%{opacity:0}}
+  @keyframes term-pulse{50%{opacity:.4}}
+  @media (prefers-reduced-motion: reduce){.term .caret{animation:none}
+    .term .foot .root i{animation:none}}
+</style>

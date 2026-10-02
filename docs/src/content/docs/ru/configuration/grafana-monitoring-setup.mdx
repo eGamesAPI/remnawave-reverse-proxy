@@ -3,11 +3,36 @@ title: Мониторинг через Grafana и Victoria Metrics
 description: Как настроить мониторинг через интеллектуальный стек
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 
 Автор: **[pluralplay](../../contribution/resources#pluralplay)**, **[kutovoys](../../contribution/resources#kutovoys)**  
-Развертывание интеллектуального стека мониторинга, включающего Grafana для создания динамичных дашбордов, Victoria Metrics для хранения и обработки метрик, Node Exporter для мониторинга серверов, cAdvisor для анализа контейнеров, Xray Checker для контроля сетевых соединений и Netbird для построения безопасной сетевой архитектуры. Это решение обеспечивает максимальную прозрачность, производительность и безопасность вашей инфраструктуры.
+Развертывание стека мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Где живёт
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Отдельный мониторинговый VPS. Панель и ноды только отдают метрики изнутри сети NetBird.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Кто собирает
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">vmagent на каждом сервере: node_exporter, cAdvisor и метрики панели, доставка в vmsingle.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Веб-сервер
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Nginx или Caddy на выбор: Caddy получает сертификат на домен сам.</div>
+  </div>
+</div>
 
 :::danger[Важно]
 Инструкция описывает установку сервисов на отдельный мониторинговый VPS сервер. Описан вариант действий из-под пользователя root.
@@ -25,12 +50,12 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## Cхема работы
 
-![Scheme](https://raw.githubusercontent.com/pluralplay/awesome-docs/refs/heads/main/grafana/assets/scheme.png)
+<GrafanaDiagram lang="ru" />
 
 ## Конфигурация вашего сервера с Grafana и Victoria Metrics
 
 :::danger[Важно]
-Выпуск сертификатов для вашего домена в этой статье не рассматривается. Сертификаты домена перед запуском docker-compose надо положить в `/opt/monitoring/nginx`, или прокинуть нужный volume где лежат сертификаты, например в `/etc/letsencrypt/live/yourdomain.com`.
+Для варианта с nginx выпуск сертификатов в этой статье не рассматривается: положите их в `/opt/monitoring/nginx` или прокиньте volume, например `/etc/letsencrypt/live/yourdomain.com`. Для варианта с Caddy сертификаты не нужны: Caddy получит его сам, должен быть свободен порт 80.
 :::
 
 :::note
@@ -49,15 +74,20 @@ import { LinkButton } from '@astrojs/starlight/components';
     curl -fsSL https://get.docker.com | sh
     ```
 
-2. Создаем директории и `docker-compose.yml`:
+2. Создаем директории для стека:
 
     ```bash
     mkdir -p /opt/monitoring/{cadvisor,nodeexporter,nginx,vmagent/conf.d} && cd /opt/monitoring && nano docker-compose.yml
     ```
 
-    Вставляем следующее содержимое и заменяем поля на свои:
+</Steps>
 
-    ```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
+Конфигурация веб-сервера на выбор, вставьте свой вариант в `docker-compose.yml`:
+
+<Tabs>
+<TabItem label="Nginx">
+
+```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
     services:
       vmsingle:
         image: victoriametrics/victoria-metrics:v1.124.0
@@ -71,7 +101,7 @@ import { LinkButton } from '@astrojs/starlight/components';
         networks:
           - grafana-network
         ports:
-          - IP:8428:8428 # Тут указываем адрес NetBird (в данном случае сервера Grafana)
+          - IP:8428:8428 # Тут указываем адрес NetBird (здесь это адрес сервера Grafana)
 
       grafana:
         image: grafana/grafana:12.2.0-17027759091
@@ -129,49 +159,140 @@ import { LinkButton } from '@astrojs/starlight/components';
         driver: bridge
         external: false
     ```
-3. Создаём `nginx.conf`:
 
-    ```bash
-    nano /opt/monitoring/nginx/nginx.conf
-    ```
+Сертификаты подключаются томами в сервисе `grafana-nginx`, а сайт описывается в `nginx.conf`:
 
-4. Вставляем следующее содержимое:
+```bash
+nano /opt/monitoring/nginx/nginx.conf
+```
 
-    ```nginx title="nginx.conf" "yourdomain.com"
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ecdh_curve X25519:prime256v1:secp384r1;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
-    ssl_prefer_server_ciphers on;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:MozSSL:10m;
-    ssl_session_tickets off;
-    
-    server {
-        listen 443 ssl;
-        http2 on;
-        server_name grafana.yourdomain.com; # Вписываем домен, или саб-домен для доступа к grafana извне
+```nginx title="nginx.conf" "yourdomain.com"
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ecdh_curve X25519:prime256v1:secp384r1;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
+ssl_prefer_server_ciphers on;
+ssl_session_timeout 1d;
+ssl_session_cache shared:MozSSL:10m;
+ssl_session_tickets off;
 
-        ssl_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem"; # Указываем путь до сертификата
-        ssl_certificate_key "/etc/nginx/ssl/yourdomain.com/privkey.pem"; # Указываем путь до приватного ключа
-        ssl_trusted_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem"; # Указываем путь до сертификата
+server {
+listen 443 ssl;
+http2 on;
+server_name grafana.yourdomain.com; # Вписываем домен, или саб-домен для доступа к grafana извне
 
-        location /grafana {
-            proxy_pass http://grafana:3000;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }
-    }
-    ```
+ssl_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem"; # Указываем путь до сертификата
+ssl_certificate_key "/etc/nginx/ssl/yourdomain.com/privkey.pem"; # Указываем путь до приватного ключа
+ssl_trusted_certificate "/etc/nginx/ssl/yourdomain.com/fullchain.pem"; # Указываем путь до сертификата
 
-5. Запускаем docker-compose
+location /grafana {
+    proxy_pass http://grafana:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+}
+```
 
-    ```bash
-    docker compose up -d && docker compose logs -f -t
-    ```
+</TabItem>
+<TabItem label="Caddy">
 
-</Steps>
+Вместо `grafana-nginx` используем контейнер Caddy: сертификат на домен он получит сам, порт 80 должен быть свободен.
+
+```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
+services:
+  vmsingle:
+    image: victoriametrics/victoria-metrics:v1.124.0
+    container_name: vmsingle
+    hostname: vmsingle
+    restart: unless-stopped
+    volumes:
+      - ./victoria-metrics-data:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+    networks:
+      - grafana-network
+    ports:
+      - IP:8428:8428 # Тут указываем адрес NetBird (здесь это адрес сервера Grafana)
+
+  grafana:
+    image: grafana/grafana:12.2.0-17027759091
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SERVER_DOMAIN=yourdomain.com
+      - GF_SERVER_ROOT_URL=https://grafana.yourdomain.com/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_SERVER_PROTOCOL=http
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    networks:
+      - grafana-network
+
+  xray-checker:
+    image: kutovoys/xray-checker
+    container_name: xray-checker
+    hostname: xraychecker
+    restart: unless-stopped
+    environment:
+      - "SUBSCRIPTION_URL=https://subscription_link"
+      - "PROXY_STATUS_CHECK_URL=http://google.com/generate_204"
+      - "PROXY_CHECK_INTERVAL=60"
+    ports:
+      - 127.0.0.1:2112:2112
+    networks:
+      - grafana-network
+
+  grafana-caddy:
+    image: caddy:2.10
+    container_name: grafana-caddy
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks:
+      - grafana-network
+
+volumes:
+  grafana-data:
+  caddy_data:
+
+networks:
+  grafana-network:
+    name: grafana-network
+    driver: bridge
+    external: false
+```
+
+Создаём `Caddyfile` рядом с compose:
+
+```bash
+nano /opt/monitoring/Caddyfile
+```
+
+```caddyfile title="Caddyfile" "yourdomain.com"
+grafana.yourdomain.com {
+    reverse_proxy /grafana* grafana:3000
+}
+```
+
+</TabItem>
+</Tabs>
+
+Запускаем docker-compose:
+
+```bash
+docker compose up -d && docker compose logs -f -t
+```
 
 ## Установка и настройка Grafana сервера
 
@@ -712,7 +833,7 @@ import { LinkButton } from '@astrojs/starlight/components';
     nano /etc/systemd/system/vmagent.service
     ```
     :::note[Внимание]
-    В строке -remoteWrite.url=http://IP:8428/api/v1/write надо заменить на адрес Netbird (в данном случае сервера Grafana)
+    В строке -remoteWrite.url=http://IP:8428/api/v1/write надо заменить на адрес Netbird (здесь это адрес сервера Grafana)
     :::
     
     Вставляем следующее содержимое:
@@ -807,6 +928,6 @@ import { LinkButton } from '@astrojs/starlight/components';
 
     ![Grafana Dashboard](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/grafana/grafana_dashboard.png)
 
-5. Нажимаем кнопку **Import** данный шаблон будет загружен
+5. Нажимаем кнопку **Import**, шаблон будет загружен
 
 </Steps>

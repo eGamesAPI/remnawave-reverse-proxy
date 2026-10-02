@@ -1,96 +1,204 @@
 ---
 title: Add node to panel
-description: Manual and automatic installation of a Remnawave node on a separate server.
+description: 'Manual and automatic installation of a RemnaWave node on a separate server: what the script asks at every step.'
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../components/version';
 
 ## Running the script
 
-:::danger[Warning]
-Script must be run as **root**, and also on the server where the Remnawave panel is installed.
+:::danger[Important]
+The script must be run as **root**, and on the server where the RemnaWave panel is installed.
 :::
 
-Enter the command on your server:
+Run this command on your server:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+:::danger[If GitHub is unreachable]
+Run the installer from the jsDelivr mirror:
+
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+:::
+
 ## Add node to panel
 
-Select `Install Remnawave components`, then `Add node to panel`.
+Select `Install Remnawave Components`, then `Add node to panel`.
 
-![Main menu EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+<Steps>
 
-![Add node to panel EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel.webp)
+1. Select `Install Remnawave Components`
 
-After confirming you are on the panel server, the script asks how to set up the node server: `Automatically over SSH` or `Manually`. For the automatic mode a web server is then chosen, nginx or Caddy. From there you enter the node domain and its name — the difference is only in who installs the node on the server.
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install Remnawave Components', pick: true },
+      { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
+      { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Manage IPv6' },
+      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Check for updates script' },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. Then select `Add node to panel`
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Install Remnawave Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install panel and node on one server' },
+      { kind: 'item', num: '2.', text: 'Install panel and subscription page' },
+      { kind: 'item', num: '3.', text: 'Add node to panel', pick: true },
+      { kind: 'item', num: '4.', text: 'Install only the node' },
+      { kind: 'item', num: '5.', text: 'Install only the panel' },
+      { kind: 'item', num: '6.', text: 'Install only the subscription page' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-6):' },
+    ]} />
+
+3. Confirm that you are on the panel server
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'err', text: 'WARNING:' },
+      { kind: 'plain', text: 'Adding a node should only be done on the server where the panel is installed, not on the node server.' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Are you sure you are on the server with the installed panel?' },
+      { kind: 'plain', text: "Enter 'y' to continue or 'n' to exit (y/n): ", answer: 'y' },
+    ]} />
+
+4. Choose how to set up the node server
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'How should the node server be set up?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Automatically over SSH' },
+      { kind: 'dim', text: '   the panel installs the node on its server itself: packages, Docker, certificate.' },
+      { kind: 'dim', text: '   The domain must point at that server and root SSH access is required' },
+      { kind: 'item', num: '2.', text: 'Manually' },
+      { kind: 'dim', text: '   I will create the node in the panel, you install it on the server yourself' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (1-2):' },
+    ]} />
+
+    In automatic mode a web server is selected afterwards, nginx or Caddy. Then you enter the node's domain and its name; the only difference is who installs the node on the server.
+
+</Steps>
 
 ## Automatic installation
 
-The panel installs the node on its server by itself: it connects over SSH, prepares the machine and brings up the containers. You never log in to the node server.
+The panel sets the node up on its server itself: it connects over SSH, prepares the server and brings the containers up. You never have to log into the node server.
 
 **What you need:**
 
-- a separate server running Debian or Ubuntu with root SSH access. A password is enough: the script installs its own key on the server and forgets the password.
-- the node domain, for example `node.example.com`.
-- port 443 free on the node server. For Caddy, port 80 must be free as well — the firewall rule is added automatically.
+- a separate server with Debian or Ubuntu and root SSH access. A password is enough: the script installs its own key, never stores the password and never asks again.
+- the node's domain, for example `node.example.com`.
+- port 443 free on the node server. For Caddy port 80 must be free too; the script adds the firewall rule itself.
 
 :::tip[Domain and DNS]
-An A record already pointing at the node server makes the installation take the shortest path. Without one the script creates it through your DNS provider's API: Cloudflare, Gcore or Bunny.net, asking for a missing key once and remembering it. Working without an API is fine too: the script shows which record to add by hand.
+If the domain's A record already points at the node server, installation takes the shortest path. If there is no record, the script creates it through your DNS provider's API: Cloudflare, Gcore or Bunny.net, asking for a missing key once and remembering it. Without an API it shows which record to add by hand.
 :::
 
 **How the installation goes:**
 
 <Steps>
 
-1. **SSH connection.** Access already configured in the [SSH access](/configuration/ssh-remote-access/) section is reused silently, without extra questions. For a domain without an A record the script asks for the server IP, and that is the only additional question.
+1. **SSH connection.** If access to this server is already configured in the [SSH access](/configuration/ssh-remote-access/) section, it is used silently. For a domain without an A record the script asks for the server IP, and that is the only extra question.
 
-2. **DNS record.** When there is none, the script creates it. A zone whose certificate the panel already holds is detected automatically; for a new zone the script asks which DNS service to use.
+2. **DNS record.** If the record does not exist, the script creates it. A zone whose certificate already lives on the panel is recognized automatically. For a new zone the script asks which DNS provider to use.
 
-3. **Server preparation.** The script installs packages and Docker with mirrors in case of blockings, brings up ufw with port 443 open and SSH preserved.
+3. **Server preparation.** The script installs packages and Docker with mirrors for when downloads are blocked, brings up ufw with port 443 open and SSH preserved.
 
-4. **Link key and certificate.** First the script issues the link key between the node and the panel. Then the certificate: when the panel wildcard already covers the node domain (`*.example.com` covers `node.example.com`), its files are copied to the node and the panel ships renewals there itself. Otherwise the certificate is issued right on the node server via the DNS challenge and renewed there, without the panel. With Caddy it is simpler still: it issues and renews the certificate itself, the panel plays no part.
+4. **Link key and certificate.** First the script issues the node's link key. Then the certificate: if the panel's wildcard already covers the node domain (`*.example.com` covers `node.example.com`), the files are copied to the node and the panel carries renewals over itself. If not, the certificate is issued right on the node server via a DNS check and renewed there, without the panel. With Caddy it is simpler still: Caddy issues and renews the certificate itself, the panel is not involved.
 
-5. **Node start.** The script generates the camouflage website, writes the configuration and brings up the node and web server containers.
+5. **Launch.** The script generates the camouflage site, writes the configuration and brings up the node and web server containers.
 
-6. **Connectivity check.** The script waits for the node to report to the panel. A brand-new DNS record can still be invisible to the panel's resolvers: the script then points the panel at the address directly, and the connection goes through right away.
+6. **Connectivity check.** The script waits for the node to report to the panel. If the DNS record is very fresh and the panel's resolvers do not see it yet, the script hands the address to the panel directly and the connection goes through.
 
 </Steps>
 
-When you see `The node server is set up, the node is running`, the installation is finished. Check that the node is green in the panel's Nodes section and that its domain opens the camouflage website in a browser.
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: 'Preparing the node server: packages, Docker, ufw (may take a couple of minutes)...' },
+  { kind: 'step', text: '[ * ] NetBird on the node' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'The node server is set up, the node is running' },
+]} />
+
+When you see `The node server is set up, the node is running`, the installation is finished. Check that the node glows green in the panel's Nodes section and that its domain opens the camouflage site in a browser.
 
 :::note[Replacing an existing node]
 If a node container already runs on the server, the script always asks before replacing it. An accidental reinstall is impossible.
 :::
 
-:::note[When something fails]
-The node is already created in the panel by then. The script offers a retry, and a refusal shows how to finish the installation manually.
+:::note[If something went wrong]
+The node is already created in the panel by that point. The script offers to retry, and if you decline, it shows how to finish the installation manually.
 :::
 
 ## Manual installation
 
-The script creates the node, profile and host in the panel, and you perform the server installation yourself.
+The script creates the node, profile and host in the panel; you install the server yourself.
 
 <Steps>
 
-1. Enter your new domain `selfsteal` which will be used to connect the node to the panel, as well as the name for the node.
+1. Enter your new domain for `selfsteal`, which the node will use to connect to the panel, and a name for the node itself.
 
-    :::danger[Warning]
-    Don't forget to add a DNS record for your domain.
+    :::danger[Important]
+    Do not forget to add the DNS record for your domain.
     :::
 
-    ![Add node to panel2 EN](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/add_node_to_panel2.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: "Enter the node's selfsteal domain (the address from its card in the panel): ", answer: 'node.example.com' },
+      { kind: 'plain', text: 'Enter a name for your node (e.g. Germany): ', answer: 'Germany' },
+    ]} />
 
-2. After successfully adding the node to the panel, run the script on your new server, where the Remnawave node will be installed, select `Install Remnawave components`, and then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
+2. Once the node is added to the panel, run the script on the new server that will host the RemnaWave node, select `Install Remnawave Components`, then [`Install only the node`](https://wiki.egam.es/installation/node-only/).
 
 </Steps>
 
 ## Updating the script
 
-Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+Make sure the script is up to date before you do anything else with it.
+
+1. Open the script menu with the `remnawave_reverse` command (or the short alias `rr`) and select item `12`, `Check for updates script`. When an update is already found, the item lights up red and reads `Update script`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION} `, warn: 'script update available' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Update script', pick: true },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. What changed in each version is on the releases page:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton
@@ -98,6 +206,6 @@ Make sure to update the script before running things in it. You can do this by s
         icon="github"
         iconPlacement="start"
     >
-        View latest release
+        View the latest release
     </LinkButton>
 </div>

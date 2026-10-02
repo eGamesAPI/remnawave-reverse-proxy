@@ -1,39 +1,94 @@
 ---
 title: Как изменить домен в панели Remnawave
-description: Пошаговое руководство по замене домена в панели Remnawave, включая генерацию SSL-сертификата и обновление конфигурационных файлов.
+description: 'Пошаговое руководство по замене домена в панели Remnawave: выпуск сертификата, обновление .env, docker-compose и nginx, перенос адресов в панели.'
 ---
 
-import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem, FileTree, LinkCard } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
 
-Это руководство поможет вам изменить текущий домен панели Remnawave (например, olddomain.com) на новый (например, newdomain.com). Вы узнаете, как сгенерировать новый SSL-сертификат и обновить конфигурационные файлы. Если вы используете панель вместе с нодой, в конце приведены дополнительные шаги.
+Это руководство поможет изменить текущий домен панели Remnawave (например, `olddomain.com`) на новый (например, `newdomain.com`): выпустить SSL-сертификат, обновить конфигурационные файлы и перенести адреса внутри панели. Если панель работает вместе с нодой, в конце есть дополнительные шаги.
 
-## Вариант только панель
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      DNS и сертификат
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">A-запись нового домена и SSL-сертификат через модуль скрипта (меню 10).</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Конфигурационные файлы
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">`.env`, `docker-compose.yml` и `nginx.conf` в `/opt/remnawave`.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Адреса в панели (панель + нода)
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Адрес ноды, адрес хоста и serverNames профиля меняются через веб-интерфейс.</div>
+  </div>
+</div>
 
-:::danger[Важно]
-Не забываем добавить DNS-запись указывающего на этот сервер для нового домена, например `newdomain.com`
+:::danger[Перед началом]
+Добавьте A-запись для нового домена, указывающую на этот сервер, и оставьте её в режиме **DNS only**: с включённым прокси Cloudflare (оранжевая галка) выпуск сертификата не пройдёт.
 :::
 
-**Генерация нового SSL-сертификата**
+## Шаг 1. Сертификат для нового домена
 
-Для использования нового домена необходимо сгенерировать новый SSL-сертификат с помощью скрипта 
+Сертификат выпускается модулем скрипта: вручную через certbot ничего делать не нужно.
 
 <Steps>
 
-1. Запустите скрипт:
+1. Запустите меню скрипта командой `remnawave_reverse` (или коротким алиасом `rr`):
 
     ```bash
     remnawave_reverse
     ```
 
-2. Выберите пункт 10: `Управление сертификатами домена`
+2. Выберите пункт `10` (`Управление сертификатами домена`), затем в подменю пункт `2`:
 
-3. В подменю выберите пункт 2: `Сгенерировать новые сертификаты для другого домена`
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Обновить текущие сертификаты' },
+      { kind: 'item', num: '2.', text: 'Сгенерировать новые сертификаты для другого домена', pick: true },
+      { kind: 'item', num: '3.', text: 'Установить свой сертификат' },
+      { kind: 'item', num: '4.', text: 'Настроить Telegram-уведомления о сертификатах' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие:', answer: '2' },
+    ]} />
 
-4. Введите новый домен, например, newdomain.com
+3. Введите новый домен и выберите метод выпуска: DNS API (Cloudflare, Gcore, Bunny.net: wildcard, записи создаются по ключу автоматически), ACME HTTP-01 (без API-ключа) или свой сертификат:
 
-5. Выберите метод получения сертификата: ACME или Cloudflare
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Введите домен для новых сертификатов (например, example.com):', answer: 'newdomain.com' },
+      { kind: 'plain' },
+      { kind: 'step', text: 'Выберите метод генерации сертификатов для всех доменов:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: 'Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: 'Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: 'Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: 'Без API-ключа, по одному домену на сертификат' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Установить свой сертификат' },
+      { kind: 'dim', text: 'Загрузите свой fullchain.pem и privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-5):' },
+    ]} />
 
-6. После успешного выполнения сертификаты для нового домена появятся в следующей директории:
+4. После успешного выполнения сертификаты для нового домена появятся рядом со старыми:
 
     <FileTree>
 
@@ -46,13 +101,16 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
                 - fullchain.pem
                 - privkey.pem
 
-    </FileTree> 
+    </FileTree>
 
 </Steps>
 
-**Обновление конфигурационных файлов**
+## Шаг 2. Конфигурация
 
-После генерации сертификата обновите домен в конфигурационных файлах панели Remnawave.
+Выберите свой вариант установки: списки файлов совпадают, но конфигурации отличаются.
+
+<Tabs>
+<TabItem label="Только панель">
 
 <Steps>
 
@@ -62,25 +120,19 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
     nano /opt/remnawave/.env
     ```
 
-2. Найдите строку с текущим доменом:
+2. Найдите строку с текущим доменом и замените её на новый:
 
-    ```bash title=".env"
-    FRONT_END_DOMAIN=olddomain.com
-    ```
-
-3. Замените её на новый домен:
-
-    ```bash title=".env"
+    ```bash title=".env" "newdomain.com"
     FRONT_END_DOMAIN=newdomain.com
     ```
 
-4. Откройте файл `docker-compose.yml`:
+3. Откройте файл `docker-compose.yml`:
 
     ```bash
     nano /opt/remnawave/docker-compose.yml
     ```
 
-5. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
+4. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
 
     ```yaml title="docker-compose.yml" "newdomain.com"
     remnawave-nginx:
@@ -103,13 +155,13 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
         max-file: '5'
     ```
 
-6. Откройте файл nginx.conf:
+5. Откройте файл nginx.conf:
 
     ```bash
     nano /opt/remnawave/nginx.conf
     ```
 
-7. Найдите блок server и замените `olddomain.com` на `newdomain.com`:
+6. Найдите блок server и замените `olddomain.com` на `newdomain.com`:
 
     ```nginx title="nginx.conf" "newdomain.com"
     server {
@@ -143,7 +195,7 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
     }
     ```
 
-8. Перезапустите сервисы, чтобы применить изменения:
+7. Перезапустите сервисы, чтобы применить изменения:
 
     ```bash
     cd /opt/remnawave && docker compose down && docker compose up -d
@@ -151,52 +203,8 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
 
 </Steps>
 
-## Вариант только панель + нода
-
-:::danger[Важно]
-Не забываем добавить DNS-запись указывающего на этот сервер для нового домена, например `newdomain.com`
-:::
-
-**Генерация нового SSL-сертификата**
-
-Для использования нового домена необходимо сгенерировать новый SSL-сертификат с помощью скрипта 
-
-<Steps>
-
-1. Запустите скрипт:
-
-    ```bash
-    remnawave_reverse
-    ```
-
-2. Выберите пункт 10: `Управление сертификатами домена`
-
-3. В подменю выберите пункт 2: `Сгенерировать новые сертификаты для другого домена`
-
-4. Введите новый домен, например, newdomain.com
-
-5. Выберите метод получения сертификата: ACME или Cloudflare
-
-6. После успешного выполнения сертификаты для нового домена появятся в следующей директории:
-
-    <FileTree>
-
-    - **/etc/letsencrypt/** - корневая директория сертификатов
-        - live
-            - newdomain.com - **новый домен**
-                - fullchain.pem
-                - privkey.pem
-            - olddomain.com - **старый домен**
-                - fullchain.pem
-                - privkey.pem
-
-    </FileTree> 
-
-</Steps>
-
-**Обновление конфигурационных файлов**
-
-После генерации сертификата обновите домен в конфигурационных файлах панели Remnawave.
+</TabItem>
+<TabItem label="Панель + нода">
 
 <Steps>
 
@@ -206,25 +214,19 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
     nano /opt/remnawave/.env
     ```
 
-2. Найдите строку с текущим доменом:
+2. Найдите строку с текущим доменом и замените её на новый:
 
-    ```bash title=".env"
-    FRONT_END_DOMAIN=olddomain.com
-    ```
-
-3. Замените её на новый домен:
-
-    ```bash title=".env"
+    ```bash title=".env" "newdomain.com"
     FRONT_END_DOMAIN=newdomain.com
     ```
 
-4. Откройте файл `docker-compose.yml`:
+3. Откройте файл `docker-compose.yml`:
 
     ```bash
     nano /opt/remnawave/docker-compose.yml
     ```
 
-5. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
+4. Найдите сервис `remnawave-nginx` и обновите пути к сертификатам, заменив `olddomain.com` на `newdomain.com`:
 
     ```yaml title="docker-compose.yml" "newdomain.com"
     remnawave-nginx:
@@ -250,13 +252,13 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
         max-file: '5'
     ```
 
-6. Откройте файл nginx.conf:
+5. Откройте файл nginx.conf:
 
     ```bash
     nano /opt/remnawave/nginx.conf
     ```
 
-7. Найдите блок панели server и замените `olddomain.com` на `newdomain.com`:
+6. Найдите блок панели server и замените `olddomain.com` на `newdomain.com`:
 
     ```nginx title="nginx.conf" "newdomain.com"
     server {
@@ -297,7 +299,7 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
     }
     ```
 
-8. Найдите блок ноды server и замените `olddomain.com` на `newdomain.com`:
+7. Найдите блок ноды server и замените `olddomain.com` на `newdomain.com`:
 
     ```nginx title="nginx.conf" "newdomain.com"
     server {
@@ -314,53 +316,26 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
     }
     ```
 
-9. Запустите скрипт remnawave_reverse
+8. Откройте панель по защищённому порту: запустите `remnawave_reverse`, выберите пункт `3` (`Управление панелью/нодой`), затем пункт `6` («Доступ к панели через порт 8443», появляется только в связке панель + нода) и перейдите в браузере по адресу, который выдаст скрипт.
 
-    ```bash
-    remnawave_reverse
-    ```
+9. Внутри панели перенесите адреса на новый домен:
 
-10. Выберите пункт 3: `Управление панелью/нодой`
+    - **Ноды → Управление** → выберите вашу ноду (Steal) → измените поле **Адрес** на `172.30.0.1` → **Сохранить**.
 
-11. Выберите пункт 6: `Доступ к панели через порт 8443 (только для панели + ноды)`
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <img
+          src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/remnawave_edit_node.png"
+          alt="Address"
+          style={{ maxWidth: '60%' }}
+        />
+      </div>
 
-12. Перейдите в браузере по адресу, который выдал скрипт
+    - **Хосты → ваш хост** → в поле **Адрес** введите `newdomain.com` → **Сохранить**.
+    - **Профили → ваш профиль (StealConfig)** → измените `serverNames` на `newdomain.com` → **Сохранить**.
 
-13. Войдите в панель Remnawave и перейдите в раздел Ноды --> Управление
+10. Закройте доступ к порту 8443: `remnawave_reverse` → пункт `3` → пункт `6`.
 
-14. Выберите вашу ноду (Steal)
-
-15. Измените поле Адрес на 172.30.0.1
-
-    <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <img 
-        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/remnawave_edit_node.png" 
-        alt="Address" 
-        style={{ maxWidth: '60%' }} 
-      />
-    </div>
-
-16. Нажмите Сохранить
-
-17. Перейдите в раздел Хосты --> Ваш Хост
-
-18. В поле Адрес введите новый домен, например `newdomain.com`
-
-19. Нажмите Сохранить
-
-20. Перейдите в раздел Профили --> Ваш профиль (StealConfig)
-
-21. Измените "serverNames" на новый домен, например `newdomain.com`
-
-22. Нажмите Сохранить
-
-23. Закройте доступ к порту 8443 через скрипт remnawave_reverse
-
-    ```bash
-    remnawave_reverse
-    ```
-
-24. Перезапустите сервисы:
+11. Перезапустите сервисы:
 
     ```bash
     cd /opt/remnawave && docker compose down && docker compose up -d
@@ -368,14 +343,17 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
 
 </Steps>
 
+</TabItem>
+</Tabs>
+
 ## Проверка результата
 
 <Steps>
 
-1. Откройте браузер и перейдите на новый домен (не забывая про куки):
+1. Откройте браузер и перейдите на новый домен (не забывая про секретную ссылку с куками):
 
-    ```bash "newdomain.com" "MdAGAnCL" "ExnqGvcX"
-    https://newdomain.com/auth/login?MdAGAnCL=ExnqGvcX
+    ```bash "newdomain.com" "zIdejKtN" "MWbLrRzx"
+    https://newdomain.com/auth/login?zIdejKtN=MWbLrRzx
     ```
 
 2. Убедитесь, что панель Remnawave загружается корректно и сертификат SSL работает.
@@ -389,3 +367,11 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
 4. Если панель не открывается, убедитесь, что DNS-записи для `newdomain.com` обновлены и указывают на ваш сервер.
 
 </Steps>
+
+:::tip[После замены]
+Старый каталог сертификатов (`/etc/letsencrypt/live/olddomain.com`) можно удалить: продление теперь настроено только для нового домена. Домен страницы подписки (если она у вас есть) живёт отдельно и при необходимости меняется по той же схеме: своей A-записью, своим сертификатом и своим `.env` в `/opt/subscription`.
+:::
+
+---
+
+<LinkCard title="Управление сертификатами" href="/ru/configuration/certwarden/" description="Альтернативный способ хранения и выдачи сертификатов: Certwarden." />

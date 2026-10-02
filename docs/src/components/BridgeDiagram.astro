@@ -1,0 +1,173 @@
+---
+/**
+ * Анимированные схемы серверного роутинга.
+ * variant="ss" (по умолчанию): пользователь → входная нода → две ветки
+ *   (RU напрямую / зарубежное через SS-туннель на сервер выхода).
+ * variant="route": VLESS Route — два хоста в подписке, обычный живёт
+ *   по общим правилам, хост маршрута уводит весь трафик на сервер моста.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ * Пунктиры «бегут» — трафик живой. prefers-reduced-motion гасит бег.
+ */
+interface Props {
+  variant?: 'ss' | 'route';
+  lang?: 'ru' | 'en';
+}
+const { variant = 'ss', lang = 'ru' } = Astro.props;
+const isRoute = variant === 'route';
+const en = lang === 'en';
+
+const T = isRoute
+  ? {
+      host1: en ? 'Germany' : 'Germany',
+      host1s: en ? 'regular host' : 'обычный хост',
+      host2: en ? 'Germany → Moscow' : 'Germany → Moscow',
+      host2s: en ? 'route is baked into the UUID' : 'маршрут зашит в UUID',
+      entry: en ? 'entry node' : 'входная нода',
+      entryS: en ? 'one and the same' : 'одна и та же',
+      res1: en ? 'common profile rules' : 'общие правила профиля',
+      res1s: en ? 'as without the bridge' : 'как без моста',
+      res2: en ? 'exit server' : 'сервер выхода',
+      res2s: en ? 'RU and foreign sites see the bridge IP' : 'RU и зарубежные видят IP моста',
+      l1: en ? 'no vlessRoute' : 'vlessRoute нет',
+      l2: 'vlessRoute: 2',
+      l3: en ? 'SS tunnel' : 'SS-туннель',
+    }
+  : {
+      user: en ? 'user' : 'пользователь',
+      userS: en ? 'same subscription' : 'та же подписка',
+      entry: en ? 'entry node' : 'входная нода',
+      entryS: en ? 'decides where traffic goes' : 'решает, куда идти',
+      ru: en ? 'RU sites and IPs' : 'RU-сайты и IP',
+      ruS: en ? 'see the entry node IP' : 'видят IP входной ноды',
+      out: en ? 'foreign traffic' : 'зарубежный трафик',
+      outS: en ? 'sees the exit server IP' : 'видит IP сервера выхода',
+      l1: en ? 'straight' : 'напрямую',
+      l2: en ? 'SS tunnel' : 'SS-туннель',
+      l3: 'chacha20-ietf-poly1305',
+    };
+---
+
+<div class="bridge">
+  {isRoute ? (
+    <svg viewBox="0 0 780 292" role="img" aria-label={en ? 'VLESS Route: the Germany host follows the common profile rules, the Germany → Moscow host sends all traffic through the bridge server' : 'Схема VLESS Route: хост Germany работает по общим правилам профиля, хост Germany → Moscow уводит весь трафик через сервер моста'}>
+      <!-- верхняя линия: обычный хост -->
+      <path class="wire w-teal" d="M214 79 C 262 79, 268 134, 298 140" />
+      <path class="flow f-teal" d="M214 79 C 262 79, 268 134, 298 140" />
+      <path class="wire w-teal" d="M442 134 C 492 128, 516 79, 558 79" />
+      <path class="flow f-teal" d="M442 134 C 492 128, 516 79, 558 79" />
+
+      <!-- нижняя линия: хост маршрута -->
+      <path class="wire w-vio" d="M214 213 C 262 213, 268 158, 298 152" />
+      <path class="flow f-vio" d="M214 213 C 262 213, 268 158, 298 152" />
+      <path class="wire w-vio" d="M442 158 C 486 166, 516 213, 558 213" />
+      <path class="flow f-vio" d="M442 158 C 486 166, 516 213, 558 213" />
+
+      <!-- узлы -->
+      <g class="node n-teal">
+        <rect x="12" y="56" width="202" height="46" rx="11" />
+        <text x="113" y="76" class="t">{T.host1}</text>
+        <text x="113" y="93" class="s">{T.host1s}</text>
+      </g>
+      <g class="node n-vio">
+        <rect x="12" y="190" width="202" height="46" rx="11" />
+        <text x="113" y="210" class="t">{T.host2}</text>
+        <text x="113" y="227" class="s">{T.host2s}</text>
+      </g>
+      <g class="node n-entry">
+        <rect x="298" y="122" width="144" height="52" rx="12" />
+        <text x="370" y="146" class="t">{T.entry}</text>
+        <text x="370" y="164" class="s">{T.entryS}</text>
+      </g>
+      <g class="node n-teal">
+        <rect x="558" y="56" width="210" height="46" rx="11" />
+        <text x="663" y="76" class="t">{T.res1}</text>
+        <text x="663" y="93" class="s">{T.res1s}</text>
+      </g>
+      <g class="node n-vio">
+        <rect x="558" y="190" width="210" height="46" rx="11" />
+        <text x="663" y="210" class="t">{T.res2}</text>
+        <text x="663" y="227" class="s">{T.res2s}</text>
+      </g>
+
+      <!-- подписи путей -->
+      <text x="240" y="104" class="lbl teal">{T.l1}</text>
+      <text x="238" y="192" class="lbl vio">{T.l2}</text>
+      <text x="468" y="196" class="lbl vio">{T.l3}</text>
+    </svg>
+  ) : (
+    <svg viewBox="0 0 780 262" role="img" aria-label={en ? 'Bridge: the user connects to the entry node, RU sites go straight from the entry IP, foreign traffic travels the SS tunnel to the exit server' : 'Схема моста: пользователь подключается ко входной ноде, RU-сайты идут напрямую с IP входа, зарубежный трафик уходит SS-туннелем на сервер выхода'}>
+      <!-- ветки: базовая линия + бегущий пунктир -->
+      <path class="wire" d="M132 131 H188" />
+      <path class="flow" d="M132 131 H188" />
+
+      <path class="wire w-teal" d="M342 118 C 420 118, 436 63, 518 63" />
+      <path class="flow f-teal" d="M342 118 C 420 118, 436 63, 518 63" />
+
+      <path class="wire w-vio" d="M342 144 C 420 144, 436 199, 518 199" />
+      <path class="flow f-vio" d="M342 144 C 420 144, 436 199, 518 199" />
+
+      <!-- узлы -->
+      <g class="node">
+        <rect x="12" y="104" width="120" height="54" rx="12" />
+        <text x="72" y="128" class="t">{T.user}</text>
+        <text x="72" y="146" class="s">{T.userS}</text>
+      </g>
+      <g class="node n-entry">
+        <rect x="188" y="104" width="154" height="54" rx="12" />
+        <text x="265" y="128" class="t">{T.entry}</text>
+        <text x="265" y="146" class="s">{T.entryS}</text>
+      </g>
+      <g class="node n-teal">
+        <rect x="518" y="36" width="192" height="54" rx="12" />
+        <text x="614" y="60" class="t">{T.ru}</text>
+        <text x="614" y="78" class="s">{T.ruS}</text>
+      </g>
+      <g class="node n-vio">
+        <rect x="518" y="172" width="192" height="54" rx="12" />
+        <text x="614" y="196" class="t">{T.out}</text>
+        <text x="614" y="214" class="s">{T.outS}</text>
+      </g>
+
+      <!-- подписи веток -->
+      <text x="428" y="52" class="lbl teal">{T.l1}</text>
+      <text x="420" y="184" class="lbl vio">{T.l2}</text>
+      <text x="432" y="214" class="lbl2" text-anchor="end">{T.l3}</text>
+    </svg>
+  )}
+</div>
+
+<style>
+  .bridge{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .bridge svg{display:block;width:100%;min-width:560px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-teal{stroke:#1d4a4d}
+  .w-vio{stroke:#3d3560}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:bridge-flow 1.1s linear infinite}
+  .f-teal{stroke:#39c5cf}
+  .f-vio{stroke:#bc8cff}
+  @keyframes bridge-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-entry rect{stroke:rgba(0,229,160,.55)}
+  .n-teal rect{stroke:rgba(57,197,207,.55)}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .node .t{fill:#e9f4ec;font-size:15px;font-weight:600;text-anchor:middle}
+  .n-entry .t{fill:#00e5a0}
+  .n-teal .t{fill:#39c5cf}
+  .n-vio .t{fill:#bc8cff}
+  .node .s{fill:#8ca08f;font-size:11px;text-anchor:middle}
+  .lbl{font-size:12px;font-weight:600}
+  .lbl.teal{fill:#39c5cf}
+  .lbl.vio{fill:#bc8cff}
+  .lbl2{fill:#a9c0b0;font-size:11.5px}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

@@ -1,94 +1,82 @@
 ---
 title: Частые проблемы
-description: Устранение распространенных проблем
+description: 'Устранение частых проблем: доступ ботов к панели, потерянный секретный вход, алиас rr в других оболочках.'
 ---
 
-import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
-## Развертывание ботов
+Здесь собраны вопросы, которые чаще всего приходят в Telegram-чат и на GitHub. Для проблем с контейнерами и загрузкой образов есть отдельная страница.
 
-Если вы развертываете ботов, убедитесь, что в окружении или конфигурации бота вы используете режим `local`. В этом случае вы можете просто ввести `http://remnawave:3000`, чтобы избежать проблем с доступом к панели.
+## Подключение ботов
 
-## Утерянный cookie-пути к панели
+Если вы развертываете бота рядом с панелью на том же сервере, укажите в его окружении режим `local` и адрес `http://remnawave:3000`: контейнер бота обращается к панели напрямую по внутренней сети Docker, и проблемы с внешним доступом отпадают.
 
-Если вы потеряли cookie-пути к панели, вы можете просмотреть их, выполнив следующие шаги:
+Для ботов и сервисов вне сервера воспользуйтесь [руководством по внешнему доступу к API](../configuration/external-api/).
+
+## Потерян секретный вход в панель
+
+Вход в панель живёт в ссылке вида `https://panel.example.com/auth/login?ИМЯ=ЗНАЧЕНИЕ`. Если ссылка потеряна, её можно собрать заново из конфигурации nginx:
 
 <Steps>
 
-1. Перейдите в директорию Remnawave
-    
+1. Откройте конфигурацию nginx панели:
+
     ```bash
-    cd /opt/remnawave
+    nano /opt/remnawave/nginx.conf
     ```
 
-2. Откройте конфигурацию nginx в текстовом редакторе:
-    
-    ```bash
-    nano nginx.conf # или любой другой редактор
-    ```
+2. В самом начале файла нас ждёт секция про секретную ссылку: карта `map $arg_...` с вашей парой.
 
-3. В самом начале нас встречают секции про cookie-пути к панели:
-
-    ```nginx title="nginx.conf" "rEmnaprx=aBCDefgh"
-    map $arg_rEmnaprx $set_cookie_header {
-        "aBCDefgh" "rEmnaprx=aBCDefgh; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
+    ```nginx title="nginx.conf" "zIdejKtN=MWbLrRzx"
+    map $arg_zIdejKtN $set_cookie_header {
+        "MWbLrRzx" "zIdejKtN=MWbLrRzx; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000";
         default "";
     }
     ```
 
-4. Скопируйте значение `rEmnaprx=aBCDefgh` из секции `map` и используйте его в качестве cookie-пути к панели.
+    Пару можно достать и одной командой:
 
-    Таким образом, ссылка будет выглядеть так:
-
+    ```bash
+    grep -A3 'map $arg_' /opt/remnawave/nginx.conf | head -6
     ```
-    https://domain.com/auth/login?rEmnaprx=aBCDefgh
+
+3. Скопируйте пару `ИМЯ=ЗНАЧЕНИЕ` и подставьте её в ссылку для входа:
+
+    ```bash "panel.example.com" "zIdejKtN" "MWbLrRzx"
+    https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx
     ```
 
 </Steps>
 
-## Alias не работает в моем терминале
+## Алиас `rr` не работает в zsh или fish
 
-Если вы установили скрипт в другом терминале (например, bash), а теперь, например, zsh не может выполнить команду `rr`, вам нужно:
+Скрипт прописывает алиас `rr` в системный файл `/etc/bash.bashrc`, поэтому он сразу работает в bash. Оболочки zsh и fish этот файл не читают:
 
 <Steps>
 
-1. Открыть конфигурацию zsh (root или пользователь или же оба)
+1. Откройте конфигурацию своей оболочки (для zsh):
 
-    <Tabs>
-        <TabItem label="User">
-        ```bash
-        nano ~/.zsh
-        ```
-        </TabItem>
-        <TabItem label="Root">
-        ```bash
-        nano /root/.zsh
-        ```
-        </TabItem>
-    </Tabs>
+    ```bash
+    nano ~/.zshrc
+    ```
 
-2. Добавить следующие строки
+2. Добавьте строку, которая подключит системные алиасы:
 
-    <Tabs>
-        <TabItem label="User">
-        ```bash
-        source /home/YOURUSERNAME/.bash_profile
-        ```
-        </TabItem>
-        <TabItem label="Root">
-        ```bash
-        source /root/.bash_profile # или source /etc/bash.bashrc
-        ```
-        </TabItem>
-    </Tabs>
+    ```bash
+    source /etc/bash.bashrc
+    ```
 
-3. Перезапустите терминал или выполните команду
+3. Примените изменения:
 
     ```bash
     exec zsh
     ```
 
 </Steps>
+
+:::tip
+Полное имя команды `remnawave_reverse` работает в любой оболочке и без алиаса.
+:::
 
 ## Моей проблемы здесь нет
 
@@ -102,7 +90,7 @@ import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components'
     >
         Создать новую проблему
     </LinkButton>
-    
+
     <LinkButton
         href="https://t.me/remnawave_reverse"
         icon="telegram"

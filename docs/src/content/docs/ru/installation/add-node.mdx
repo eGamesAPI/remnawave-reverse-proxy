@@ -1,10 +1,11 @@
 ---
 title: Добавление ноды в панель
-description: Ручная и автоматическая установка ноды Remnawave на отдельный сервер.
+description: 'Ручная и автоматическая установка ноды Remnawave на отдельный сервер: что спрашивает скрипт на каждом этапе.'
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../../components/version';
 
 ## Установка скрипта
 
@@ -12,21 +13,101 @@ import { LinkButton } from '@astrojs/starlight/components';
 Скрипт нужно запускать с **правами root**, а так же на сервере, на котором установлена панель Remnawave.
 :::
 
-Введите данную команду на вашем сервере:
+Введите эту команду на вашем сервере:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+:::danger[Если GitHub недоступен]
+Запустите установщик с зеркала на jsDelivr:
+
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+:::
+
 ## Добавить ноду в панель
 
 Выберите пункт `Установка компонентов Remnawave`, затем `Добавить ноду в панель`.
 
-![Main menu RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/main_menu.webp)
+<Steps>
 
-![Add node to panel RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/add_node_to_panel.webp)
+1. Выберите пункт `Установка компонентов Remnawave`
 
-После подтверждения, что вы на сервере панели, скрипт спросит, как настроить сервер ноды: `Автоматически по SSH` или `Вручную`. Для автоматического режима затем выбирается веб-сервер, nginx или Caddy. Дальше остаётся ввести домен ноды и её название, а разница только в том, кто будет ставить ноду на сервер.
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установка компонентов Remnawave', pick: true },
+      { kind: 'item', num: '2.', text: 'Переустановить панель и компоненты' },
+      { kind: 'item', num: '3.', text: 'Управление панелью и компонентами' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Управление IPv6' },
+      { kind: 'item', num: '10.', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Проверить обновления скрипта' },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. Затем выберите пункт `Добавить ноду в панель`
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Установка компонентов Remnawave' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установить панель и ноду на один сервер' },
+      { kind: 'item', num: '2.', text: 'Установить панель и страницу подписки' },
+      { kind: 'item', num: '3.', text: 'Добавить ноду в панель', pick: true },
+      { kind: 'item', num: '4.', text: 'Установить только ноду' },
+      { kind: 'item', num: '5.', text: 'Установить только панель' },
+      { kind: 'item', num: '6.', text: 'Установить только страницу подписки' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-6):' },
+    ]} />
+
+3. Подтвердите, что вы на сервере панели
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'err', text: 'ВНИМАНИЕ:' },
+      { kind: 'plain', text: 'Добавление ноды должно выполняться только на сервере, где установлена панель, а не на сервере ноды.' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Вы уверены, что находитесь на сервере с установленной панелью?' },
+      { kind: 'plain', text: "Введите 'y' для продолжения или 'n' для выхода (y/n): ", answer: 'y' },
+    ]} />
+
+4. Выберите, как настроить сервер ноды
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Как настроить сервер ноды?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Автоматически по SSH' },
+      { kind: 'dim', text: '   панель сама поставит ноду на её сервер: пакеты, Docker, сертификат.' },
+      { kind: 'dim', text: '   Домен должен указывать на этот сервер, нужен root-доступ по SSH' },
+      { kind: 'item', num: '2.', text: 'Вручную' },
+      { kind: 'dim', text: '   создам ноду в панели, устанавливать на сервере будете сами' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (1-2):' },
+    ]} />
+
+    Для автоматического режима затем выбирается веб-сервер, nginx или Caddy. Дальше остаётся ввести домен ноды и её название, а разница только в том, кто будет ставить ноду на сервер.
+
+</Steps>
 
 ## Автоматическая установка
 
@@ -60,6 +141,13 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 </Steps>
 
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: 'Готовлю сервер ноды: пакеты, Docker, ufw (может занять пару минут)...' },
+  { kind: 'step', text: '[ * ] NetBird на ноде' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'Сервер ноды настроен, нода работает' },
+]} />
+
 Когда появится сообщение `Сервер ноды настроен, нода работает`, установка закончена. Проверьте, что нода горит зелёным в разделе Nodes панели, а её домен открывает сайт-заглушку в браузере.
 
 :::note[Замена существующей ноды]
@@ -82,7 +170,10 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
     Не забудьте добавить DNS-запись для вашего домена.
     :::
 
-    ![Add node to panel2 RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/add_node_to_panel2.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Введите selfsteal домен ноды (адрес из её карточки в панели): ', answer: 'node.example.com' },
+      { kind: 'plain', text: 'Введите имя для вашей ноды (например, Germany): ', answer: 'Germany' },
+    ]} />
 
 2. После успешного добавления ноды в панель, запустите скрипт на вашем новом сервере, где будет установлена нода Remnawave, выберите пункт `Установка компонентов Remnawave`, а затем [`Установить только ноду`](https://wiki.egam.es/ru/installation/node-only/).
 
@@ -90,7 +181,26 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 ## Обновление скрипта
 
-Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем. Вы можете сделать это, выбрав `Проверить обновления скрипта` в меню скрипта или просмотрев репозиторий GitHub на наличие обновлений.
+Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем.
+
+1. Откройте меню скрипта командой `remnawave_reverse` (или коротким алиасом `rr`) и выберите пункт `12` (`Проверить обновления скрипта`). Когда обновление уже найдено, пункт подсвечивается красным и называется `Обновить скрипт`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION} `, warn: 'доступно обновление скрипта' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Обновить скрипт', pick: true },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. Что нового в каждой версии, смотрите на странице релизов:
+
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton
         href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases/latest"

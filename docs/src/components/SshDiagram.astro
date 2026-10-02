@@ -1,0 +1,106 @@
+---
+/**
+ * Анимированная схема модуля SSH-доступа: сервер панели хранит ssh-ключи
+ * и список целей, один раз ставит свой ключ на удалённый сервер (по паролю
+ * или готовому ключу), после чего ходит на цели по ключу: выполняет
+ * команды, настраивает серверы выхода для роутинга и ноды.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="ss">
+  <svg viewBox="0 0 640 330" role="img" aria-label={en
+    ? 'SSH module scheme: the panel server keeps ssh keys and the target list, installs its key on each remote server once (by password or an existing key), then runs commands and configures exit servers and nodes over the key'
+    : 'Схема модуля SSH: сервер панели хранит ssh-ключи и список целей, один раз ставит свой ключ на удалённый сервер (по паролю или готовому ключу), после чего ходит на цели по ключу: выполняет команды, настраивает серверы выхода и ноды'}>
+    <defs>
+      <linearGradient id="ss-pane" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(188,140,255,.04)" />
+        <stop offset="1" stop-color="rgba(188,140,255,.01)" />
+      </linearGradient>
+    </defs>
+
+    <!-- сервер панели -->
+    <g class="node n-mint">
+      <rect x="36" y="40" width="240" height="88" rx="13" />
+      <text x="156" y="66" class="t">{en ? 'panel server' : 'сервер панели'}</text>
+      <text x="156" y="88" class="s">{en ? 'SSH module of the script' : 'модуль SSH-доступа скрипта'}</text>
+      <text x="156" y="105" class="s">{en ? 'keys and targets:' : 'ключи и цели:'}</text>
+      <text x="156" y="121" class="s">/usr/local/remnawave_reverse</text>
+    </g>
+
+    <!-- цели -->
+    <rect class="targets" x="396" y="24" width="212" height="150" rx="20" />
+    <text x="502" y="44" class="targets-lbl">{en ? 'ssh targets' : 'ssh-цели'}</text>
+    <g class="node n-vio">
+      <rect x="412" y="56" width="180" height="50" rx="11" />
+      <text x="502" y="77" class="t2">{en ? 'node · de-fra-01' : 'нода · de-fra-01'}</text>
+      <text x="502" y="95" class="s">{en ? 'commands, node setup' : 'команды, настройка ноды'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="412" y="116" width="180" height="50" rx="11" />
+      <text x="502" y="137" class="t2">{en ? 'exit server' : 'выходной сервер'}</text>
+      <text x="502" y="155" class="s">{en ? 'nl-ams-02 · bridge' : 'nl-ams-02 · мост'}</text>
+    </g>
+
+    <!-- установка ключа и команды -->
+    <path class="wire w-mint" d="M276 64 C 336 64, 356 74, 412 76" />
+    <path class="flow f-mint" d="M276 64 C 336 64, 356 74, 412 76" />
+    <text x="336" y="52" class="lbl">{en ? 'our key' : 'наш ключ'}</text>
+    <path class="wire w-teal" d="M276 104 C 336 104, 356 134, 412 136" />
+    <path class="flow f-teal" d="M276 104 C 336 104, 356 134, 412 136" />
+    <text x="336" y="126" class="lbl">{en ? 'commands' : 'команды'}</text>
+
+    <!-- настройка целей из панели -->
+    <g class="node n-dim chip">
+      <rect x="36" y="196" width="240" height="64" rx="13" />
+      <text x="156" y="220" class="t2">{en ? 'where targets come from' : 'откуда берутся цели'}</text>
+      <text x="156" y="239" class="s">{en ? 'panel nodes list or manual address' : 'ноды панели или адрес вручную'}</text>
+      <text x="156" y="255" class="s">{en ? 'netbird addresses supported' : 'поддерживаются адреса netbird'}</text>
+    </g>
+    <path class="wire w-mgmt" d="M156 128 V196" />
+  </svg>
+</div>
+
+<style>
+  .ss{
+    background:linear-gradient(180deg,#0b120e,#0a0f0c);
+    border:1px solid #2a4737;border-radius:14px;
+    padding:1.1rem 1.3rem;margin:1.25rem 0;overflow-x:auto;
+    box-shadow:0 16px 44px rgba(0,0,0,.4);
+  }
+  .ss svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mint{stroke:#1d4a3c}
+  .w-teal{stroke:#1d4a4d}
+  .w-mgmt{stroke:#2a4737}
+  .flow{fill:none;stroke-width:2.4;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:ss-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0;filter:drop-shadow(0 0 4px rgba(0,229,160,.55))}
+  .f-teal{stroke:#39c5cf;filter:drop-shadow(0 0 4px rgba(57,197,207,.55))}
+  @keyframes ss-flow{to{stroke-dashoffset:-16}}
+
+  .targets{fill:url(#ss-pane);stroke:#3d3560;stroke-width:1.5;stroke-dasharray:5 4}
+  .targets-lbl{fill:#a9c0b0;font-size:12px;opacity:.95;text-anchor:middle}
+
+  .node rect{fill:#101f17;stroke:#2a4737;stroke-width:1.75}
+  .n-mint rect{stroke:rgba(0,229,160,.55)}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .n-dim rect{stroke:#2f4d3b}
+  .node .t{fill:#eef7f0;font-size:17.5px;font-weight:700;text-anchor:middle}
+  .node .t2{fill:#eef7f0;font-size:14.5px;font-weight:700;text-anchor:middle}
+  .n-mint .t{fill:#00e5a0}
+  .n-vio .t2{fill:#cdaaff}
+  .n-dim .t2{fill:#9db3a4}
+  .node .s{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+  .lbl{fill:#8ca08f;font-size:11.5px;text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

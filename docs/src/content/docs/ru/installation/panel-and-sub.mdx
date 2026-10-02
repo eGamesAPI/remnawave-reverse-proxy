@@ -1,9 +1,11 @@
 ---
 title: Панель и страница подписки
-description: Инструкция по установке панели Remnawave и страницы подписки на одном сервере.
+description: 'Установка панели Remnawave и страницы подписки на одном сервере: что спрашивает установщик и что выводит в конце.'
 ---
 
 import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../../components/version';
 
 ## Установка скрипта
 
@@ -11,51 +13,139 @@ import { Steps, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components'
 Скрипт нужно запускать с **правами root**.
 :::
 
-Введите данную команду на вашем сервере:
+Введите эту команду на вашем сервере:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+:::danger[Если GitHub недоступен]
+Запустите установщик с зеркала на jsDelivr:
+
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+:::
+
 ## Установка панели и страницы подписки
+
+### Что делает установщик
+
+1. **Проверяет сервер перед стартом**: панель ещё не установлена, порт 443 свободен.
+2. **Спрашивает два домена**: панели и страницы подписки. Каждый проверяется на корректность и реальность DNS-записи, а домены должны быть разными.
+3. **Готовит все секреты самостоятельно**: логин и пароль суперадмина, пару «имя=значение» для секретной ссылки входа, отдельную пару для метрики и `APP_SECRET`, всё будет показано в конце.
+4. **Разворачивает сервисы в `/opt/remnawave`**: база PostgreSQL, кэш Valkey, панель Remnawave, обратный прокси и контейнер страницы подписки, который забирает конфигурации прямо у панели по API-токену.
+5. **Выпускает сертификаты Let's Encrypt** на оба домена выбранным методом (DNS API, ACME HTTP-01 или ваш собственный) и настраивает автопродление.
+6. **Настраивает панель через её API**: регистрирует суперадмина и выпускает токен для страницы подписки.
+7. **Перезапускает всё начисто** (`down` + `up`), включая страницу подписки: если что-то не поднялось, ошибка не спрячется за зелёным баннером.
+
+### Пошаговая установка
 
 <Steps>
 
 1. Выберите пункт `Установка компонентов Remnawave`
 
-    ![Главное меню](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/main_menu.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установка компонентов Remnawave', pick: true },
+      { kind: 'item', num: '2.', text: 'Переустановить панель и компоненты' },
+      { kind: 'item', num: '3.', text: 'Управление панелью и компонентами' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Управление IPv6' },
+      { kind: 'item', num: '10.', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Проверить обновления скрипта' },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
 
 2. Затем выберите пункт `Установить панель и страницу подписки`
 
-    ![Установить панель и страницу подписки](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/install_panel_sub.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Установка компонентов Remnawave' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установить панель и ноду на один сервер' },
+      { kind: 'item', num: '2.', text: 'Установить панель и страницу подписки', pick: true },
+      { kind: 'item', num: '3.', text: 'Добавить ноду в панель' },
+      { kind: 'item', num: '4.', text: 'Установить только ноду' },
+      { kind: 'item', num: '5.', text: 'Установить только панель' },
+      { kind: 'item', num: '6.', text: 'Установить только страницу подписки' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-6):' },
+    ]} />
 
 3. Выберите веб-сервер для панели. Скрипт полностью поддерживает оба варианта:
 
-    - **Nginx** — классическая схема, которая использовалась во всех предыдущих версиях.
-    - **Caddy** — автоматические HTTPS-сертификаты из коробки.
+    - **Nginx**: классическая схема, которая использовалась во всех предыдущих версиях.
+    - **Caddy**: автоматические HTTPS-сертификаты из коробки.
 
-    ![Выберите веб-сервер](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/webserver_select.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Выберите веб-сервер:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Nginx' },
+      { kind: 'item', num: '2.', text: 'Caddy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-2):' },
+    ]} />
 
-4. Введите три домена по запросу скрипта — панели, страницы подписки и ноды.
+4. Введите два домена по запросу скрипта, панели и страницы подписки
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Введите домен панели (например, panel.example.com): ', answer: 'panel.example.com' },
+      { kind: 'plain', text: 'Введите домен подписки (например, sub.example.com): ', answer: 'sub.example.com' },
+    ]} />
 
     :::tip
-    Если A-запись домена ещё не указывает на сервер, скрипт предложит создать её автоматически через API **Cloudflare** или **Gcore** — либо вы создадите её вручную, и скрипт проверит запись ещё раз.
+    Если A-запись домена ещё не указывает на сервер, скрипт предложит создать её автоматически через API **Cloudflare** или **Gcore**, либо вы создадите её вручную, и скрипт проверит запись ещё раз.
     :::
 
 5. Выберите способ защиты панели:
 
     <Tabs>
       <TabItem label="Nginx" icon="seti:nginx">
-        1. `Cookie-защита (по умолчанию)` — панель защищена секретной ссылкой, как в предыдущих версиях.
-        2. `Страница входа (TinyAuth)` — дополнительная страница входа перед панелью. Скрипт сам развернёт TinyAuth и создаст пользователя.
+        1. `Cookie-защита (по умолчанию)`: панель защищена секретной ссылкой, как в предыдущих версиях.
+        2. `Страница входа (TinyAuth)`: дополнительная страница входа перед панелью. Скрипт сам развернёт TinyAuth и создаст пользователя.
 
-        ![Способ защиты панели (nginx)](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/panel_auth_nginx.webp)
+        <Terminal title="root@server: ~" lines={[
+          { kind: 'title', text: 'Способ защиты панели:' },
+          { kind: 'plain' },
+          { kind: 'item', num: '1.', text: 'Cookie-защита (по умолчанию)' },
+          { kind: 'item', num: '2.', text: 'Страница входа (TinyAuth)' },
+          { kind: 'plain' },
+          { kind: 'input', text: 'Выберите действие (1-2):' },
+        ]} />
       </TabItem>
       <TabItem label="Caddy" icon="seti:caddy">
-        1. `Cookie-защита (по умолчанию)` — панель защищена секретной ссылкой, как в предыдущих версиях.
-        2. `Страница входа с MFA` — портал входа с многофакторной аутентификацией перед панелью.
+        1. `Cookie-защита (по умолчанию)`: панель защищена секретной ссылкой, как в предыдущих версиях.
+        2. `Страница входа с MFA`: портал входа с многофакторной аутентификацией перед панелью.
 
-        ![Способ защиты панели (caddy)](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/panel_auth_caddy.webp)
+        <Terminal title="root@server: ~" lines={[
+          { kind: 'title', text: 'Способ защиты панели:' },
+          { kind: 'plain' },
+          { kind: 'item', num: '1.', text: 'Cookie-защита (по умолчанию)' },
+          { kind: 'item', num: '2.', text: 'Страница входа с MFA' },
+          { kind: 'plain' },
+          { kind: 'input', text: 'Выберите действие (1-2):' },
+        ]} />
 
         :::note
         При включении портала с MFA настройте MFA для администратора после первого входа.
@@ -63,7 +153,66 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
       </TabItem>
     </Tabs>
 
-6. После завершения процесса скрипт предоставит все необходимые данные для входа в панель.
+6. Выберите метод генерации сертификатов для обоих доменов:
+
+    - **DNS API** (Cloudflare, Gcore, Bunny.net), wildcard-сертификат, DNS-записи создаются сами по API-ключу.
+    - **ACME HTTP-01**: без API-ключа, по одному домену на сертификат.
+    - **Свой сертификат**: загрузите собственные `fullchain.pem` и `privkey.pem`.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Выберите метод генерации сертификатов для всех доменов:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS-записи создаются автоматически по API-ключу' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: '    Без API-ключа, по одному домену на сертификат' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Установить свой сертификат' },
+      { kind: 'dim', text: '    Загрузите свой fullchain.pem и privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-5):' },
+    ]} />
+
+7. Если выбрали выпуск через Let's Encrypt, укажите почту для уведомлений о сертификатах. Можно пропустить нажатием Enter
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: "Введите ваш email для Let's Encrypt (можно пропустить - Enter):" },
+    ]} />
+
+8. Дальше скрипт работает сам: развёртывает сервисы в `/opt/remnawave`, настраивает панель через API и перезапускает всё начисто, включая страницу подписки
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Установка панели' },
+      { kind: 'step', text: '[ * ] Проверка доступности контейнеров...' },
+      { kind: 'step', text: '[ * ] Остановка Remnawave Subscription Page...' },
+      { kind: 'step', text: '[ * ] Запуск Remnawave Subscription Page...' },
+    ]} />
+
+9. После завершения установки скрипт выведет все данные для входа в панель
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '=================================================' },
+      { kind: 'ok', text: '               УСТАНОВКА ЗАВЕРШЕНА!' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'step', text: 'Панель доступна по адресу:' },
+      { kind: 'url', text: 'https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'Для входа в панель используйте следующие данные:' },
+      { kind: 'plain', text: 'Логин: ', val: 'admin' },
+      { kind: 'plain', text: 'Пароль: ', val: 'k7XmQ2vLpR9t' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'Для повторного запуска менеджера используйте команду:' },
+      { kind: 'ok', text: 'remnawave_reverse' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'err', text: 'Нода добавляется после установки панели: запустите этот скрипт на сервере панели, выберите \'Установка компонентов Remnawave\', а затем \'Добавить ноду в панель\'.' },
+    ]} />
 
 </Steps>
 
@@ -73,14 +222,57 @@ bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-pr
 
 Пример ссылки для входа:
 ```
-https://p.example.com/auth/login?SECRET_KEY=SECRET_KEY
+https://p.example.com/auth/login?zIdejKtN=MWbLrRzx
 ```
-Без этого URL-адреса **вы не сможете** войти в панель (если только вы не включили страницу входа).
+
+**Как зависит от выбранного способа защиты:**
+
+<div style="display:grid;gap:0.7rem;margin-top:0.9rem;text-align:left">
+  <div style="border-left:3px solid #3fb950;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6);flex:none"></span>
+      Cookie-защита (по умолчанию)
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">Единственный вход в панель: секретная ссылка. Без неё панель невидима: сканер видит пустую страницу или 404.</div>
+  </div>
+  <div style="border-left:3px solid #58a6ff;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
+      Страница входа (TinyAuth, Nginx)
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">Перед панелью открывается страница входа. Финальный экран покажет её адрес вместе с логином и паролем, а не секретную ссылку.</div>
+  </div>
+  <div style="border-left:3px solid #bc8cff;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Портал с MFA (Caddy)
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">Вход через портал с многофакторной аутентификацией. После первого входа обязательно настройте MFA для администратора: без этого следующий вход не пройдёт.</div>
+  </div>
+</div>
 :::
 
 ## Обновление скрипта
 
-Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем. Вы можете сделать это, выбрав `Проверить обновления скрипта` в меню скрипта или просмотрев репозиторий GitHub на наличие обновлений.
+Убедитесь, что вы обновили скрипт перед выполнением каких-либо действий в нем.
+
+1. Откройте меню скрипта командой `remnawave_reverse` (или коротким алиасом `rr`) и выберите пункт `12` (`Проверить обновления скрипта`). Когда обновление уже найдено, пункт подсвечивается красным и называется `Обновить скрипт`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION} `, warn: 'доступно обновление скрипта' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Обновить скрипт', pick: true },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. Что нового в каждой версии, смотрите на странице релизов:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton

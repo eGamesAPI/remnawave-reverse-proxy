@@ -5,10 +5,17 @@ description: Инструкция по установке и настройке 
 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import ManualNetbirdDiagram from '../../../../components/ManualNetbirdDiagram.astro';
 
 Эта инструкция — ручная и подходит всем. Если вы пользуетесь нашим скриптом `remnawave-reverse-proxy`, всё то же самое делает его модуль автоматически: [NetBird: модуль скрипта](/ru/configuration/netbird-module/).
 
 Netbird — это open-source платформа на базе WireGuard, которая позволяет легко создавать защищённые частные сети. В этом руководстве мы разберём, как установить и настроить Netbird для связывания вашей панели Remnawave и последующих нод, чтобы они могли безопасно взаимодействовать друг с другом.
+
+## Как это устроено
+
+<ManualNetbirdDiagram lang="ru" />
+
+Облако app.netbird.io выдаёт учётную запись и установочный ключ. По этому ключу серверы вступают в сеть: и сервер панели, и сервер ноды выполняют `netbird up --setup-key` и получают адрес вида `100.x.x.x`. Дальше панель обращается к ноде по этому адресу на порт 2222, и порт в файрволе ноды открывается только для адреса панели.
 
 ## Регистрация в Netbird
 

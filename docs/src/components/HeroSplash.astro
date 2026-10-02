@@ -91,10 +91,10 @@ const INSTALL_CMD =
 
 <style>
   .splash {
-    --mint: #50ccab;
-    --mint-hi: #78fecb;
-    --sand: #d8cf7a;
-    --term-bg: #01201e;
+    --mint: #00f0b0;
+    --mint-hi: #62ffd2;
+    --sand: #ffd84d;
+    --term-bg: #0a0f0c;
 
     position: relative;
     min-height: calc(100dvh - var(--sl-nav-height, 3.5rem));
@@ -181,7 +181,7 @@ const INSTALL_CMD =
 
   .btn-primary {
     background: linear-gradient(96deg, var(--mint) 10%, var(--mint-hi) 90%);
-    color: #012624;
+    color: #052e22;
   }
   .btn-primary:hover { transform: translateY(-2px); filter: brightness(1.06); }
 
@@ -206,7 +206,7 @@ const INSTALL_CMD =
     max-width: 34em;
     padding: 0.6rem 0.55rem 0.6rem 0.95rem;
     border-radius: 12px;
-    background: rgba(1, 21, 20, 0.75);
+    background: rgba(8, 17, 13, 0.75);
     border: 1px solid color-mix(in srgb, var(--mint) 18%, transparent);
   }
   :global([data-theme='light']) .cmd-row { background: rgba(255, 255, 255, 0.72); }
@@ -229,7 +229,7 @@ const INSTALL_CMD =
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  :global([data-theme='light']) .cmd-text { color: #00845f; }
+  :global([data-theme='light']) .cmd-text { color: #009267; }
 
   .cmd-copy {
     appearance: none;
@@ -251,13 +251,13 @@ const INSTALL_CMD =
     border-color: color-mix(in srgb, var(--mint) 45%, transparent);
     background: color-mix(in srgb, var(--mint) 8%, transparent);
   }
-  :global([data-theme='light']) .cmd-copy:hover { color: #00845f; }
+  :global([data-theme='light']) .cmd-copy:hover { color: #009267; }
 
   /* terminal */
   .term {
     border-radius: 16px;
     border: 1px solid color-mix(in srgb, var(--mint) 16%, transparent);
-    background: linear-gradient(180deg, rgba(0, 46, 43, 0.88), rgba(1, 21, 20, 0.95));
+    background: linear-gradient(180deg, rgba(14, 26, 20, 0.9), rgba(8, 15, 12, 0.96));
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     overflow: hidden;
@@ -269,17 +269,17 @@ const INSTALL_CMD =
     gap: 7px;
     padding: 11px 14px;
     border-bottom: 1px solid color-mix(in srgb, var(--mint) 14%, transparent);
-    background: rgba(1, 21, 20, 0.5);
+    background: rgba(14, 26, 20, 0.55);
   }
-  .dot { width: 10px; height: 10px; border-radius: 50%; background: #00514b; }
-  .dot:nth-child(1) { background: #00645c; }
-  .dot:nth-child(2) { background: #007d6f; }
-  .dot:nth-child(3) { background: var(--mint); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #27c93f; }
+  .dot:nth-child(1) { background: #ff5f56; }
+  .dot:nth-child(2) { background: #ffbd2e; }
+  .dot:nth-child(3) { background: #27c93f; }
 
   .term-title {
     margin-inline: auto;
     font-size: 11px;
-    color: #70807d;
+    color: #6d8a7c;
   }
 
   .term-body {
@@ -291,7 +291,7 @@ const INSTALL_CMD =
     font-family: 'SplashMono', ui-monospace, monospace;
     font-size: 12.5px;
     line-height: 1.68;
-    color: #bbc7c6;
+    color: #c9ded1;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -300,7 +300,7 @@ const INSTALL_CMD =
   .term-body :global(.t-prompt) { color: var(--mint); }
   .term-body :global(.t-cmd) { color: var(--mint-hi); }
   .term-body :global(.t-title) { color: var(--mint); font-weight: 700; }
-  .term-body :global(.t-meta) { color: #70807d; }
+  .term-body :global(.t-meta) { color: #6d8a7c; }
   .term-body :global(.t-opt) { color: var(--sand); }
   .term-body :global(.t-sel) { color: var(--mint-hi); }
   .term-body :global(.t-cur) {
@@ -605,7 +605,7 @@ const INSTALL_CMD =
             const alpha = (0.16 + 0.5 * Math.max(0, (z + 1) / 2)) * (narrow ? 0.5 : 1);
             ctx!.beginPath();
             ctx!.arc(sx, sy, size, 0, Math.PI * 2);
-            ctx!.fillStyle = p.white ? `rgba(237, 255, 254, ${alpha})` : `rgba(80, 204, 171, ${alpha})`;
+            ctx!.fillStyle = p.white ? `rgba(234, 245, 238, ${alpha})` : `rgba(0, 240, 176, ${alpha})`;
             ctx!.fill();
           }
         };

@@ -5,10 +5,17 @@ description: A guide on installing and configuring Netbird to link servers
 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import ManualNetbirdDiagram from '../../../components/ManualNetbirdDiagram.astro';
 
 This is the manual guide and it works for everyone. If you use our `remnawave-reverse-proxy` script, its module does all of this automatically: [NetBird: the script module](/configuration/netbird-module/).
 
 Netbird is an open-source platform based on WireGuard that allows you to easily create secure private networks. In this guide, we will walk through how to install and configure Netbird to link your Remnawave panel and nodes so they can communicate securely with each other.
+
+## How it is arranged
+
+<ManualNetbirdDiagram lang="en" />
+
+The app.netbird.io cloud issues an account and a setup key. Servers join the network with that key: both the panel server and the node server run `netbird up --setup-key` and receive an address like `100.x.x.x`. The panel then reaches the node at that address on port 2222, and the node firewall opens the port for the panel address only.
 
 ## Registering on Netbird
 

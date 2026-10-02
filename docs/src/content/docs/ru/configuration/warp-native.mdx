@@ -1,19 +1,42 @@
 ---
 title: Warp Native
-description: Инструкция по установке и настройке Warp Native
+description: 'Установка и настройка Warp Native: меню модуля, добавление и удаление WARP-настроек в конфигурации нод.'
 ---
+
 import { Code } from '@astrojs/starlight/components';
 import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
 
-`Cloudflare Warp Native` — это способ использования сервиса Cloudflare Warp через протокол WireGuard в `нативном` режиме, то есть с прямой настройкой WireGuard без зависимости от официального клиента Cloudflare (например, приложения 1.1.1.1 или warp-cli). В контексте инструмента wgcf, это означает настройку соединения с инфраструктурой Cloudflare Warp с помощью сгенерированного WireGuard-профиля, который можно использовать в любом совместимом WireGuard-клиенте.
+Модуль `WARP Native` поднимает Cloudflare WARP на сервере в нативном режиме, то есть как обычный сетевой интерфейс WireGuard: профиль генерирует инструмент wgcf, а официальный клиент Cloudflare (приложение 1.1.1.1 или warp-cli) не нужен. Через этот интерфейс нода отправляет в WARP только выбранные домены, остальной трафик идёт напрямую.
 
-## Что такое Cloudflare Warp?
-`Cloudflare Warp` — это сервис, который перенаправляет интернет-трафик пользователя через серверы Cloudflare, обеспечивая:
+## Что такое Cloudflare WARP?
 
-- Безопасность: шифрование трафика для защиты данных.
-- Конфиденциальность: сокрытие IP-адреса пользователя.
-- Оптимизацию: маршрутизация через глобальную сеть Cloudflare для повышения скорости и надежности соединения.
+`Cloudflare Warp` перенаправляет интернет-трафик через серверы Cloudflare:
+
+- **Шифрование**: канал между сервером и Cloudflare работает по WireGuard, данные защищены на этом участке пути.
+- **Другой адрес**: сайты видят адрес Cloudflare, а не адрес вашего сервера. Именно это проверяют сервисы whoer.net и 2ip.io из примеров ниже.
+- **Маршрут через сеть Cloudflare**: трафик идёт по магистралям глобальной сети Cloudflare.
+
+## Меню модуля
+
+Пункт `WARP Native от distillium` в главном меню скрипта открывает четыре действия:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'WARP Native' },
+  { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/warp-native' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Установить WARP Native' },
+  { kind: 'item', num: '2.', text: 'Удалить WARP Native' },
+  { kind: 'plain' },
+  { kind: 'item', num: '3.', text: 'Добавить WARP-настройки в конфигурацию ноды' },
+  { kind: 'item', num: '4.', text: 'Удалить WARP-настройки из конфигурации ноды' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-4):' },
+]} />
+
+Если ноды на сервере нет, установка начнётся с красного предупреждения «Нода Remnawave не найдена. Сначала установите ноду.».
 
 ### Установка Warp Native
 
@@ -23,17 +46,28 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 <Steps>
 
-1. Выберите пункт `WARP Native от distillium`
+1. Выберите пункт `Установить WARP Native`
 
-    ![Warp Native Main Menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'WARP Native' },
+      { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/warp-native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установить WARP Native', pick: true },
+      { kind: 'item', num: '2.', text: 'Удалить WARP Native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '3.', text: 'Добавить WARP-настройки в конфигурацию ноды' },
+      { kind: 'item', num: '4.', text: 'Удалить WARP-настройки из конфигурации ноды' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-4):' },
+    ]} />
 
-2. Затем выберите пункт `Установить WARP Native`
-
-    ![Warp Native Install](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_main_menu.png)
+2. Скрипт скачает и запустит установщик wgcf: перед запуском он проверяется по контрольным суммам двух независимых источников, при несовпадении запуск отменяется.
 
 </Steps>
 
-### Настройка Warp-настроек
+### Добавление WARP-настроек
 
 :::danger[Важно]
 Запускать только на сервере, на котором установлена панель Remnawave.
@@ -41,15 +75,38 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 <Steps>
 
-1. Выберите пункт `Добавить WARP-настройки в конфигурацию ноды`
+1. Выберите пункт `Добавить WARP-настройки в конфигурацию ноды` и подтвердите, что вы на сервере панели:
 
-    ![Warp Native Add Config](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_add_config.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'WARP Native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '3.', text: 'Добавить WARP-настройки в конфигурацию ноды', pick: true },
+      { kind: 'plain' },
+      { kind: 'err', text: 'Вы уверены, что находитесь на сервере с установленной панелью?' },
+      { kind: 'plain', text: 'Добавление WARP-настроек должно выполняться только на сервере, где установлена панель, а не на сервере ноды' },
+      { kind: 'input', text: '(y/n): ', answer: 'y' },
+    ]} />
 
-2. Затем выберите на какую ноду добавить конфигурацию warp-настроек
+2. Затем выберите, в конфигурацию какой ноды добавить WARP-настройки:
 
-    ![Warp Native Add Node](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/warp_native_add_node.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'На какую ноду добавить WARP-настройки?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Default-Profile ', warn: '(de-fra-01)' },
+      { kind: 'item', num: '2.', text: 'StealConfig ', warn: '(nl-ams-02)' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие:' },
+    ]} />
+
+3. Модуль добавит блоки в конфигурационный профиль и ответит:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'ok', text: 'Конфигурация успешно обновлена!' },
+    ]} />
 
 </Steps>
+
+Если WARP уже настроен, модуль предупредит: «warp-out уже существует в outbounds.», настройка не задваивается.
 
 В секцию вашего конфигурационного профиля ноды, добавляются следующие блоки:
 
@@ -86,3 +143,20 @@ export const exampleCode2 = `{
 }`;
 
 <Code code={exampleCode2} lang="json" title={fileName2} mark={highlights} />
+
+### Удаление WARP-настроек
+
+Пункт `Удалить WARP-настройки из конфигурации ноды` спрашивает ту же ноду и убирает добавленное:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'На какой ноде удалить WARP-настройки?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Default-Profile ', warn: '(de-fra-01)' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие:' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'Удален warp-out из outbounds' },
+  { kind: 'ok', text: 'Удален warp rule из routing rules' },
+]} />
+
+Если блоков в профиле уже нет, модуль скажет об этом прямо: «warp-out не найден в outbounds». Сам WireGuard-интерфейс удаляется пунктом `Удалить WARP Native`, после него модуль ответит «WARP успешно удалён».

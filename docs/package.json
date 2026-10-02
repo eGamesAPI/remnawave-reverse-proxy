@@ -3,6 +3,9 @@
   "type": "module",
   "version": "v3.7.0",
   "scripts": {
+    "sync-version": "node sync-version.mjs",
+    "predev": "node sync-version.mjs",
+    "prebuild": "node sync-version.mjs",
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",

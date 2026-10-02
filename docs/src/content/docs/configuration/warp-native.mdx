@@ -1,57 +1,114 @@
 ---
 title: Warp Native
-description: Installation and configuration of Warp Native
+description: 'Installing and configuring Warp Native: the module menu, adding and removing WARP settings from node configurations.'
 ---
+
 import { Code } from '@astrojs/starlight/components';
 import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
 
-`Cloudflare Warp Native` is a way to use the Cloudflare Warp service through the WireGuard protocol in `native` mode, that is, with direct WireGuard configuration without depending on the official Cloudflare client (for example, the 1.1.1.1 or warp-cli application). In the context of the wgcf tool, this means setting up a connection to the Cloudflare Warp infrastructure using a generated WireGuard profile, which can be used in any compatible WireGuard client.
+`Cloudflare Warp Native` is a way to use the Cloudflare Warp service over WireGuard in `native` mode: a direct WireGuard setup with no dependency on the official Cloudflare client (the 1.1.1.1 app or warp-cli). In wgcf terms, it means a generated WireGuard profile connected to the Cloudflare Warp infrastructure, usable in any WireGuard-compatible client.
 
 ## What is Cloudflare Warp?
-`Cloudflare Warp` is a service that redirects user internet traffic through Cloudflare servers, providing:
 
-- Security: encrypting traffic to protect data.
-- Confidentiality: hiding the user's IP address.
-- Optimization: routing through the global Cloudflare network to improve speed and connection reliability.
+`Cloudflare Warp` is a service that routes user traffic through Cloudflare servers, providing:
 
-### Installation of Warp Native
+- Security: traffic encryption to protect the data.
+- Privacy: hiding the user's IP address.
+- Optimization: routing through Cloudflare's global network for better speed and reliability.
+
+## The module menu
+
+The `WARP Native by distillium` item in the script's main menu opens four actions:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'WARP Native' },
+  { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/warp-native' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Install WARP Native' },
+  { kind: 'item', num: '2.', text: 'Uninstall WARP Native' },
+  { kind: 'plain' },
+  { kind: 'item', num: '3.', text: 'Add WARP-configuration to node configuration' },
+  { kind: 'item', num: '4.', text: 'Remove WARP-configuration from node configuration' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-4):' },
+]} />
+
+If there is no node on the server, the install starts with the red warning "Node RemnaWave not found. First install the node.".
+
+### Installing WARP Native
 
 :::danger[Important]
-Installation of Warp Native is only performed on the server where the Remnawave node is installed.
+WARP Native is installed only on a server that runs a RemnaWave node.
 :::
 
 <Steps>
 
-1. Select the `WARP Native from distillium` option
+1. Select `Install WARP Native`
 
-    ![Warp Native Main Menu](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'WARP Native' },
+      { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/warp-native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install WARP Native', pick: true },
+      { kind: 'item', num: '2.', text: 'Uninstall WARP Native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '3.', text: 'Add WARP-configuration to node configuration' },
+      { kind: 'item', num: '4.', text: 'Remove WARP-configuration from node configuration' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-4):' },
+    ]} />
 
-2. Then select the `Install WARP Native` option
-
-    ![Warp Native Install](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_main_menu.png)
+2. The script downloads and runs the wgcf installer: before running, it is verified against checksums from two independent sources; on a mismatch the run is cancelled.
 
 </Steps>
 
-### Configuration of Warp-Settings
+### Adding WARP settings
 
 :::danger[Important]
-Run only on the server where the Remnawave panel is installed.
+Run only on the server with the RemnaWave panel installed.
 :::
 
 <Steps>
 
-1. Select the `Add WARP-Settings to node configuration` option
+1. Select `Add WARP-configuration to node configuration` and confirm you are on the panel server:
 
-    ![Warp Native Add Config](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_add_config.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'WARP Native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '3.', text: 'Add WARP-configuration to node configuration', pick: true },
+      { kind: 'plain' },
+      { kind: 'err', text: 'Are you sure you are on the server with the installed panel?' },
+      { kind: 'plain', text: 'Adding WARP-configuration should only be done on the server where the panel is installed, not on the node server' },
+      { kind: 'input', text: '(y/n): ', answer: 'y' },
+    ]} />
 
-2. Then select which node to add warp-settings configuration
+2. Then pick which node gets the WARP settings:
 
-    ![Warp Native Add Node](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/warp_native_add_node.png)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select node to add WARP-configuration?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Default-Profile ', warn: '(de-fra-01)' },
+      { kind: 'item', num: '2.', text: 'StealConfig ', warn: '(nl-ams-02)' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action:' },
+    ]} />
+
+3. The module adds the blocks to the node's configuration profile and answers:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'ok', text: 'Configuration successfully updated!' },
+    ]} />
 
 </Steps>
 
-The following blocks are added to the node's configuration profile:
+If WARP is already configured, the module warns: "warp-out already exists in outbounds." Nothing is duplicated.
+
+The following blocks are added to your node's configuration profile section:
 
 export const exampleCode = `{
   "tag": "warp-out",
@@ -70,7 +127,7 @@ export const fileName = 'outbound';
 
 <Code code={exampleCode} lang="json" title={fileName} />
 
-The highlighted domains will be sent through WARP, replace them with your own.
+The highlighted domains will be sent through WARP; replace them with your own.
 
 export const fileName2 = 'routing rule';
 export const highlights = ['whoer.net', 'browserleaks.com', '2ip.io', '2ip.ru'];
@@ -86,3 +143,20 @@ export const exampleCode2 = `{
 }`;
 
 <Code code={exampleCode2} lang="json" title={fileName2} mark={highlights} />
+
+### Removing WARP settings
+
+The `Remove WARP-configuration from node configuration` item asks for the same node and takes the additions out:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Select node to remove WARP-configuration?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Default-Profile ', warn: '(de-fra-01)' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action:' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'Removed warp-out from outbounds' },
+  { kind: 'ok', text: 'Removed warp rule from routing rules' },
+]} />
+
+If the profile has no blocks left, the module says so directly: "warp-out not found in outbounds". The WireGuard interface itself is removed by the `Uninstall WARP Native` item, after which the module answers "WARP deleted successfully".

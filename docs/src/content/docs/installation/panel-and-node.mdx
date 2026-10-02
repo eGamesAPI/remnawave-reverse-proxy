@@ -1,68 +1,297 @@
 ---
 title: Panel and Node
-description: Instructions for installing the RemnaWave panel and node on your server.
+description: 'Installing the RemnaWave panel and node on one server: what the installer does and what it prints at the end.'
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../components/version';
 
 ## Running the script
 
-:::danger[Warning]
-Script must be run as **root**.
+:::danger[Important]
+The script must be run as **root**.
 :::
 
-Enter the command on your server:
+Run this command on your server:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
-## Install panel and node on one server
+:::danger[If GitHub is unreachable]
+Run the installer from the jsDelivr mirror:
 
-:::danger[Warning]
-This installation method is not recommended for production environments, as it is not covered in the official Remnawave documentation.
-
-For the best experience and stable operation, please choose the [`Panel Only`](https://wiki.egam.es/installation/panel-only/) or [`Node Only`](https://wiki.egam.es/installation/node-only/) installation methods, depending on your requirements.
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
 :::
+
+## Installing the panel and node
+
+:::danger[Important]
+This installation method is not recommended for production use because it is absent from the official RemnaWave documentation.
+
+For best results and stability, choose the [`Panel only`](https://wiki.egam.es/installation/panel-only/) or [`Node only`](https://wiki.egam.es/installation/node-only/) method depending on your needs.
+:::
+
+### What the installer does
+
+While you answer the questions, the script does all the work itself:
+
+1. **Checks the server before starting**: port 443 is free, neither the panel nor the node is running, so the install never lands on top of a live setup.
+2. **Asks for three domains**: the panel, the subscription page and the camouflage site (selfsteal). Each domain is validated, its DNS record is checked, and all three must be different.
+3. **Generates every secret itself**: the superadmin login and password, the `name=value` pair for the secret login link, a separate metrics login and password, and `APP_SECRET`. Nothing to invent or remember: everything is shown at the end.
+4. **Deploys the services into `/opt/remnawave`**: the PostgreSQL database, the Valkey cache, the RemnaWave panel, a reverse proxy behind a Unix socket, the subscription page and the `remnanode` node. The node's Xray owns port 443 and hands web traffic to the proxy over the socket, with no extra TCP hops.
+5. **Issues Let's Encrypt certificates** for all domains at once, using the method you pick (DNS API, ACME HTTP-01 or your own), and sets up renewal.
+6. **Installs the camouflage site**: a random template of an ordinary website on the selfsteal domain, so the node does not stand out from regular traffic.
+7. **Configures the panel through its API**: registers the superadmin, creates the StealConfig profile, the node and the host, binds them to the default squad and issues a token for the subscription page.
+8. **Restarts the stack cleanly** (`down` + `up`): if something did not come up, the error cannot hide behind the green "installation complete" banner.
+
+### Step-by-step installation
 
 <Steps>
 
-1. Select `Install Remnawave components`
+1. Select `Install Remnawave Components`
 
-    ![Main menu RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install Remnawave Components', pick: true },
+      { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
+      { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Manage IPv6' },
+      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Check for updates script' },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
 
 2. Then select `Install panel and node on one server`
 
-    ![Install panel and node RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_panel_node.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Install Remnawave Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install panel and node on one server', pick: true },
+      { kind: 'item', num: '2.', text: 'Install panel and subscription page' },
+      { kind: 'item', num: '3.', text: 'Add node to panel' },
+      { kind: 'item', num: '4.', text: 'Install only the node' },
+      { kind: 'item', num: '5.', text: 'Install only the panel' },
+      { kind: 'item', num: '6.', text: 'Install only the subscription page' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-6):' },
+    ]} />
 
-3. Select the web server for the panel. Both options are fully supported by the script:
+3. Select the web server for the panel. Both options are fully supported:
 
-    - **Nginx** — the classic setup used in all previous versions.
-    - **Caddy** — automatic HTTPS certificates out of the box; additionally offers a login portal with MFA in front of the panel.
+    - **Nginx**: the classic scheme used in all previous versions.
+    - **Caddy**: automatic HTTPS certificates out of the box.
 
-    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select web server:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Nginx' },
+      { kind: 'item', num: '2.', text: 'Caddy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):' },
+    ]} />
 
-4. After the process is complete, the script will automatically restart the panel and provide all the necessary login information.
+4. Answer the installer's questions: enter the panel, subscription and selfsteal domains one by one, each is checked separately
 
-    ![Menu end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_end.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Enter panel domain (e.g. panel.example.com): ', answer: 'panel.example.com' },
+      { kind: 'plain', text: 'Enter subscription domain (e.g. sub.example.com): ', answer: 'sub.example.com' },
+      { kind: 'plain', text: 'Enter selfsteal domain for node (e.g. node.example.com):' },
+    ]} />
+
+5. Select the panel protection method:
+
+    <Tabs>
+      <TabItem label="Nginx" icon="seti:nginx">
+        1. `Cookie protection (default)`: the panel is hidden behind a secret link, as in previous versions.
+        2. `Login page (TinyAuth)`: an extra login page in front of the panel. The script deploys TinyAuth and creates the user itself.
+
+        <Terminal title="root@server: ~" lines={[
+          { kind: 'title', text: 'Panel protection method:' },
+          { kind: 'plain' },
+          { kind: 'item', num: '1.', text: 'Cookie protection (default)' },
+          { kind: 'item', num: '2.', text: 'Login page (TinyAuth)' },
+          { kind: 'plain' },
+          { kind: 'input', text: 'Select action (1-2):' },
+        ]} />
+      </TabItem>
+      <TabItem label="Caddy" icon="seti:caddy">
+        1. `Cookie protection (default)`: the panel is hidden behind a secret link, as in previous versions.
+        2. `Login page with MFA`: a login portal with multi-factor authentication in front of the panel.
+
+        <Terminal title="root@server: ~" lines={[
+          { kind: 'title', text: 'Panel protection method:' },
+          { kind: 'plain' },
+          { kind: 'item', num: '1.', text: 'Cookie protection (default)' },
+          { kind: 'item', num: '2.', text: 'Login page with MFA' },
+          { kind: 'plain' },
+          { kind: 'input', text: 'Select action (1-2):' },
+        ]} />
+
+        :::note
+        When the MFA portal is enabled, set up MFA for the administrator after the first login.
+        :::
+      </TabItem>
+    </Tabs>
+
+6. Select the certificate generation method for all domains at once:
+
+    - **DNS API** (Cloudflare, Gcore, Bunny.net): a wildcard certificate, DNS records are created automatically via an API key.
+    - **ACME HTTP-01**: no API key, one domain per certificate.
+    - **Your own certificate**: upload your own `fullchain.pem` and `privkey.pem`.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select certificate generation method for all domains:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: '    No API key, one domain per certificate' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Install your own certificate' },
+      { kind: 'dim', text: '    Upload your own fullchain.pem and privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-5):' },
+    ]} />
+
+7. If you chose Let's Encrypt, enter the email for certificate notifications, or just press Enter to skip
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: "Enter your Let's Encrypt email (or press Enter to skip):" },
+    ]} />
+
+8. From here the script works on its own and marks each stage: it writes the services into `/opt/remnawave`, generates certificates, installs the camouflage site, configures the panel through the API and restarts everything cleanly
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Installing panel and node' },
+      { kind: 'plain' },
+      { kind: 'step', text: '[ * ] Checking containers availability...' },
+      { kind: 'step', text: 'Generating certificates for panel.example.com' },
+      { kind: 'step', text: '[ * ] Stopping panel and node' },
+      { kind: 'step', text: '[ * ] Starting panel and node' },
+    ]} />
+
+9. When the installation finishes, the script prints all login data
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '=================================================' },
+      { kind: 'ok', text: '               INSTALLATION COMPLETE!' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'step', text: 'Panel URL:' },
+      { kind: 'url', text: 'https://panel.example.com/auth/login?zIdejKtN=MWbLrRzx' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'To log into the panel, use the following data:' },
+      { kind: 'plain', text: 'Username: ', val: 'admin' },
+      { kind: 'plain', text: 'Password: ', val: 'k7XmQ2vLpR9t' },
+      { kind: 'step', text: '-------------------------------------------------' },
+      { kind: 'step', text: 'To relaunch the manager, use the following command:' },
+      { kind: 'ok', text: 'remnawave_reverse' },
+      { kind: 'step', text: '=================================================' },
+      { kind: 'plain' },
+      { kind: 'step', text: 'Installing random template for camouflage site' },
+      { kind: 'plain', text: 'Selected template: corporate-business' },
+      { kind: 'plain', text: 'Template copied to /var/www/html' },
+    ]} />
+
+    On the final screen:
+
+    - the panel login URL with the secret parameter, like `https://panel.example.com/auth/login?NAME=VALUE` (or the login portal address if TinyAuth / MFA was selected);
+    - the superadmin username and password;
+    - the command to reopen the menu, `remnawave_reverse`;
+    - which random camouflage template was picked and where it was copied.
 
 </Steps>
 
-:::danger[Warning]
-After the installation is complete, the script will display a unique URL for logging into the control panel.  
-**Be sure to save this URL.** It contains the secret key needed for access.
+:::danger[Important]
+When the installation finishes, the script shows a unique login URL for the panel.  
+**Save this URL.** It contains the secret key required for access.
 
 Example login link:
 ```
-https://p.example.com/auth/login?SECRET_KEY=SECRET_KEY
+https://p.example.com/auth/login?zIdejKtN=MWbLrRzx
 ```
-Without this URL, **you will not be able** to log into the panel.
+
+**How it depends on the protection method:**
+
+<div style="display:grid;gap:0.7rem;margin-top:0.9rem;text-align:left">
+  <div style="border-left:3px solid #3fb950;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.6);flex:none"></span>
+      Cookie protection — default
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">The secret link is the only way in. Without it the panel is invisible: a scanner sees an empty page or a 404.</div>
+  </div>
+  <div style="border-left:3px solid #58a6ff;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
+      Login page — TinyAuth, Nginx
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">A login page opens in front of the panel. The final screen shows its address together with the username and password instead of the secret link.</div>
+  </div>
+  <div style="border-left:3px solid #bc8cff;padding:0.55rem 0.85rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      MFA portal — Caddy
+    </div>
+    <div style="margin-top:0.25rem;opacity:.85;font-size:.92em">Login goes through a portal with multi-factor authentication. After the first login, set up MFA for the administrator: without it the next login will not pass.</div>
+  </div>
+</div>
 :::
 
 ## Updating the script
 
-Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+Make sure the script is up to date before you do anything else with it.
+
+1. Open the script menu with the `remnawave_reverse` command (or the short alias `rr`) and select item `12`, `Check for updates script`. When an update is already found, the item lights up red and reads `Update script`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION} `, warn: 'script update available' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Update script', pick: true },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. What changed in each version is on the releases page:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton
@@ -70,6 +299,6 @@ Make sure to update the script before running things in it. You can do this by s
         icon="github"
         iconPlacement="start"
     >
-        View latest release
+        View the latest release
     </LinkButton>
 </div>

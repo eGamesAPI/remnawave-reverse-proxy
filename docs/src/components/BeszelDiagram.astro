@@ -1,0 +1,107 @@
+---
+/**
+ * Анимированная схема Beszel: браузер открывает веб-панель хаба по https,
+ * агенты на нодах сами подключаются к хабу на порт 45876 по выданному
+ * ключу и отправляют метрики системы и Docker; уведомления уходят
+ * вебхуком в Telegram. Порт 45876 открывается в ufw только для IP хаба.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="bz">
+  <svg viewBox="0 0 640 380" role="img" aria-label={en
+    ? 'Beszel scheme: the browser opens the hub web panel over https; agents on the nodes dial the hub on port 45876 with the issued key and send system and Docker metrics; notifications go to Telegram via webhook; the firewall opens 45876 for the hub IP only'
+    : 'Схема Beszel: браузер открывает веб-панель хаба по https; агенты на нодах сами подключаются к хабу на порт 45876 по выданному ключу и отправляют метрики системы и Docker; уведомления уходят вебхуком в Telegram; порт 45876 открывается в файрволе только для IP хаба'}>
+    <defs>
+      <linearGradient id="bz-pane" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="rgba(0,229,160,.04)" />
+        <stop offset="1" stop-color="rgba(0,229,160,.008)" />
+      </linearGradient>
+    </defs>
+
+    <!-- браузер -->
+    <g class="node n-dim chip">
+      <rect x="240" y="16" width="160" height="34" rx="10" />
+      <text x="320" y="38" class="t2">{en ? 'browser · https' : 'браузер · https'}</text>
+    </g>
+    <path class="wire w-mint" d="M320 50 V96" />
+    <path class="flow f-mint" d="M320 50 V96" />
+
+    <!-- хаб -->
+    <g class="node n-teal">
+      <rect x="180" y="96" width="280" height="64" rx="13" />
+      <text x="320" y="121" class="t">Beszel Hub</text>
+      <text x="320" y="142" class="s">{en ? ':8090 · web panel and history' : ':8090 · веб-панель и история'}</text>
+    </g>
+
+    <!-- telegram -->
+    <path class="wire w-pub" d="M460 128 H500" />
+    <g class="node n-dim chip">
+      <rect x="500" y="104" width="116" height="48" rx="11" />
+      <text x="558" y="124" class="t2">Telegram</text>
+      <text x="558" y="141" class="s">{en ? 'webhook alerts' : 'уведомления'}</text>
+    </g>
+
+    <!-- агенты подключаются к хабу сами -->
+    <path class="wire w-vio" d="M126 246 C 126 190, 240 160, 296 160" />
+    <path class="flow f-vio" d="M126 246 C 126 190, 240 160, 296 160" />
+    <path class="wire w-vio" d="M514 246 C 514 190, 400 160, 344 160" />
+    <path class="flow f-vio" d="M514 246 C 514 190, 400 160, 344 160" />
+    <text x="320" y="196" class="lbl">{en ? 'agents dial the hub themselves' : 'агенты сами подключаются к хабу'}</text>
+    <text x="320" y="214" class="lbl">:45876 · {en ? 'key from the hub' : 'ключ с хаба'}</text>
+
+    <g class="node n-vio">
+      <rect x="36" y="246" width="180" height="64" rx="13" />
+      <text x="126" y="270" class="t2">{en ? 'agent · de-fra-01' : 'агент · de-fra-01'}</text>
+      <text x="126" y="289" class="s">{en ? 'system + Docker metrics' : 'метрики системы и Docker'}</text>
+      <text x="126" y="305" class="s">ufw 45876 ← {en ? 'hub IP' : 'IP хаба'}</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="424" y="246" width="180" height="64" rx="13" />
+      <text x="514" y="270" class="t2">{en ? 'agent · nl-ams-02' : 'агент · nl-ams-02'}</text>
+      <text x="514" y="289" class="s">{en ? 'system + Docker metrics' : 'метрики системы и Docker'}</text>
+      <text x="514" y="305" class="s">ufw 45876 ← {en ? 'hub IP' : 'IP хаба'}</text>
+    </g>
+  </svg>
+</div>
+
+<style>
+  .bz{
+    background:linear-gradient(180deg,#0b120e,#0a0f0c);
+    border:1px solid #2a4737;border-radius:14px;
+    padding:1.1rem 1.3rem;margin:1.25rem 0;overflow-x:auto;
+    box-shadow:0 16px 44px rgba(0,0,0,.4);
+  }
+  .bz svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mint{stroke:#1d4a3c}
+  .w-vio{stroke:#3d3560}
+  .w-pub{stroke:#4a5a50;stroke-dasharray:3 7}
+  .flow{fill:none;stroke-width:2.4;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:bz-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0;filter:drop-shadow(0 0 4px rgba(0,229,160,.55))}
+  .f-vio{stroke:#bc8cff;filter:drop-shadow(0 0 4px rgba(188,140,255,.5))}
+  @keyframes bz-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#101f17;stroke:#2a4737;stroke-width:1.75}
+  .n-teal rect{stroke:rgba(57,197,207,.6);filter:drop-shadow(0 0 11px rgba(57,197,207,.28))}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .n-dim rect{stroke:#2f4d3b}
+  .node .t{fill:#eef7f0;font-size:17.5px;font-weight:700;text-anchor:middle}
+  .node .t2{fill:#eef7f0;font-size:14.5px;font-weight:700;text-anchor:middle}
+  .n-teal .t{fill:#39c5cf}
+  .n-vio .t2{fill:#cdaaff}
+  .n-dim .t2{fill:#9db3a4}
+  .node .s{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+  .lbl{fill:#8ca08f;font-size:11.5px;text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

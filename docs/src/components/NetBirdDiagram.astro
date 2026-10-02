@@ -1,0 +1,119 @@
+---
+/**
+ * Анимированная схема NetBird-сети модуля (вертикальная компоновка):
+ * сервер управления сверху, mesh-облако WireGuard с панелью в центре,
+ * нодами слева, страницей подписки и чекером справа; публичный 2222 —
+ * запасной путь вне облака. Пунктиры внутри облака «бегут»,
+ * запасной путь статичный и приглушённый.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="nb">
+  <svg viewBox="0 0 640 400" role="img" aria-label={en
+    ? 'NetBird scheme: the management server issues addresses, keys and policies; the panel, nodes, subscription page and checker are linked by a WireGuard mesh; public port 2222 stays a backup path'
+    : 'Схема NetBird: сервер управления выдаёт адреса, ключи и политики; панель, ноды, страница подписки и чекер связаны mesh-сетью WireGuard, публичный порт 2222 остаётся запасным путём'}>
+    <!-- сервер управления -->
+    <g class="node n-mgmt">
+      <rect x="200" y="16" width="240" height="44" rx="11" />
+      <text x="320" y="35" class="t">{en ? 'management server' : 'сервер управления'}</text>
+      <text x="320" y="52" class="s">{en ? 'app.netbird.io or self-hosted' : 'app.netbird.io или свой'}</text>
+    </g>
+    <path class="wire w-mgmt" d="M320 60 V150" />
+    <text x="452" y="80" class="lbl2 mid">{en ? 'addresses, keys, policies' : 'адреса, ключи, политики'}</text>
+
+    <!-- mesh-облако -->
+    <rect class="cloud" x="12" y="92" width="616" height="250" rx="26" />
+    <text x="180" y="110" class="cloud-lbl">NetBird · WireGuard mesh · 100.88.0.0/16</text>
+
+    <!-- связи внутри облака: база + бегущий пунктир -->
+    <path class="wire w-vio" d="M240 168 C 213 168, 213 142, 188 142" />
+    <path class="flow f-vio" d="M240 168 C 213 168, 213 142, 188 142" />
+    <path class="wire w-vio" d="M240 185 C 213 185, 213 218, 188 218" />
+    <path class="flow f-vio" d="M240 185 C 213 185, 213 218, 188 218" />
+    <path class="wire w-teal" d="M400 168 C 428 168, 428 142, 448 142" />
+    <path class="flow f-teal" d="M400 168 C 428 168, 428 142, 448 142" />
+    <path class="wire w-teal" d="M400 185 C 428 185, 428 218, 448 218" />
+    <path class="flow f-teal" d="M400 185 C 428 185, 428 218, 448 218" />
+
+    <!-- узлы -->
+    <g class="node n-vio">
+      <rect x="28" y="120" width="160" height="44" rx="11" />
+      <text x="108" y="139" class="t">{en ? 'node · de-fra-01' : 'нода · de-fra-01'}</text>
+      <text x="108" y="155" class="s">100.88.4.12</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="28" y="196" width="160" height="44" rx="11" />
+      <text x="108" y="215" class="t">{en ? 'node · nl-ams-02' : 'нода · nl-ams-02'}</text>
+      <text x="108" y="231" class="s">100.88.7.3</text>
+    </g>
+    <g class="node n-entry">
+      <rect x="240" y="150" width="160" height="56" rx="12" />
+      <text x="320" y="174" class="t">{en ? 'panel' : 'панель'}</text>
+      <text x="320" y="192" class="s">100.88.10.7</text>
+    </g>
+    <g class="node n-teal">
+      <rect x="448" y="120" width="168" height="44" rx="11" />
+      <text x="532" y="139" class="t">{en ? 'subscription page' : 'страница подписки'}</text>
+      <text x="532" y="155" class="s">{en ? 'port 31xx, closed' : 'порт 31xx · закрыт'}</text>
+    </g>
+    <g class="node n-teal">
+      <rect x="448" y="196" width="168" height="44" rx="11" />
+      <text x="532" y="215" class="t">Xray Checker</text>
+      <text x="532" y="231" class="s">{en ? 'metrics inside the network only' : 'метрики только в сети'}</text>
+    </g>
+
+    <!-- публичный запасной путь — вне облака, статичный -->
+    <path class="backup" d="M108 240 C 108 372, 320 372, 320 206" />
+    <text x="240" y="390" class="backup-lbl">{en ? 'public 2222 · backup path' : 'публичный 2222 · запасной путь'}</text>
+  </svg>
+</div>
+
+<style>
+  .nb{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .nb svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mgmt{stroke:#2a4737}
+  .w-teal{stroke:#1d4a4d}
+  .w-vio{stroke:#3d3560}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:nb-flow 1.1s linear infinite}
+  .f-teal{stroke:#39c5cf}
+  .f-vio{stroke:#bc8cff}
+  @keyframes nb-flow{to{stroke-dashoffset:-16}}
+
+  .cloud{fill:rgba(0,229,160,.02);stroke:rgba(0,229,160,.35);
+    stroke-width:1.5;stroke-dasharray:7 7}
+  .cloud-lbl{fill:#00e5a0;font-size:13px;opacity:.95;text-anchor:middle}
+  .lbl2{fill:#a9c0b0;font-size:13px}
+  .lbl2.mid{text-anchor:middle}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-mgmt rect{stroke:#2a4737;stroke-dasharray:5 4}
+  .n-entry rect{stroke:rgba(0,229,160,.6)}
+  .n-teal rect{stroke:rgba(57,197,207,.55)}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .node .t{fill:#e9f4ec;font-size:16px;font-weight:600;text-anchor:middle}
+  .n-entry .t{fill:#00e5a0}
+  .n-teal .t{fill:#39c5cf}
+  .n-vio .t{fill:#cdaaff}
+  .n-mgmt .t{fill:#8ca08f}
+  .node .s{fill:#a9c0b0;font-size:13px;text-anchor:middle}
+
+  .backup{fill:none;stroke:#5c6a7d;stroke-width:1.5;stroke-dasharray:3 7;opacity:.75}
+  .backup-lbl{fill:#8ca08f;font-size:12.5px;text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

@@ -1,57 +1,159 @@
 ---
 title: Внешний доступ к API
-description: Как настроить внешний доступ к API
+description: 'Как открыть API панели Remnawave наружу через nginx и проходить cookie-защиту, TinyAuth или Caddy MFA из внешних клиентов.'
 ---
 
-## Модификация конфигурации Nginx для внешнего доступа к API
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Добавляем в `nginx.conf` в блок сервера с доменом панели `server_name panel.domen.com;`
+Панель Remnawave умеет отдавать свой API внешним клиентам: ботам, панелям управления, статистике. По умолчанию скрипт прячет всё за cookie-защитой или страницей входа, поэтому наружу выходит только то, что вы откроете сами: один `location` в nginx.conf, а дальше любой запрос проходит ту же защиту, что и браузер, плюс токен панели (`Настройки → API-токены`).
 
-```
-location ^~ /api/ {
-    proxy_http_version 1.1;
-    proxy_pass http://remnawave;
-    proxy_set_header Host $host;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header X-Forwarded-Port $server_port;
-    proxy_send_timeout 60s;
-    proxy_read_timeout 60s;
-}
-```
- 
-Это открывает доступ к API из-вне, при этом API будут по прежнему защищены токеном авторизации.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Шаг 1. Публичный путь
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Маршрут <code>/api/</code> в nginx.conf или Caddyfile: API открывается наружу, токен панели остаётся.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Шаг 2. Ваш способ входа
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Кука, страница входа TinyAuth или ключ Caddy: что выбрано при установке панели.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Токен везде
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85"><code>Authorization: Bearer …</code> отправляется в каждом запросе независимо от способа входа.</div>
+  </div>
+</div>
+
+## Открытие API наружу
+
+<Tabs>
+<TabItem label="Nginx">
+
+Блок одинаков для всех вариантов установки («только панель» и «панель + нода»).
+
+<Steps>
+
+1. Откройте конфигурацию nginx:
+
+    ```bash
+    nano /opt/remnawave/nginx.conf
+    ```
+
+2. В блок сервера с доменом панели (`server_name panel.example.com;`) добавьте `location`: он выводит `/api/` из-под проверки cookie и отдаёт запросы напрямую панели:
+
+    ```nginx title="nginx.conf"
+    location ^~ /api/ {
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    ```
+
+3. Перезапустите веб-сервер, чтобы конфигурация применилась:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-nginx
+    ```
+
+4. Проверьте доступность снаружи (запрос без токена должен вернуть ошибку авторизации, а не таймаут):
+
+    ```bash "panel.example.com"
+    curl -i https://panel.example.com/api/nodes
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Caddy">
+
+Caddy ставится в двух видах, и API в них устроен по-разному.
+
+**Портал с MFA (caddy-with-auth).** Ничего добавлять не нужно: маршрут `route /api/*` уже открыт в Caddyfile из коробки. API защищён собственным токеном, вход в панель остаётся за порталом, а для программных клиентов есть ключ `X-Api-Key` (способ «Портал с MFA» ниже).
+
+**Cookie-защита.** API закрыт вместе с панелью: запрос без куки упирается в `abort`. Чтобы открыть его, добавьте отдельный маршрут.
+
+<Steps>
+
+1. Откройте Caddyfile:
+
+    ```bash
+    nano /opt/remnawave/Caddyfile
+    ```
+
+2. Внутри блока `https://{$PANEL_DOMAIN}` добавьте маршрут в начало, до матчеров `@has_token_param` и `@unauthorized`:
+
+    ```caddyfile title="Caddyfile"
+    route /api/* {
+        reverse_proxy {$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+    ```
+
+3. Перезапустите Caddy:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-caddy
+    ```
+
+4. Проверьте доступность снаружи (запрос без токена должен вернуть ошибку авторизации, а не таймаут):
+
+    ```bash "panel.example.com"
+    curl -i https://panel.example.com/api/nodes
+    ```
+
+</Steps>
+
+</TabItem>
+</Tabs>
 
 :::danger[Важно]
-В Remnawave 3.x переключателя `IS_DOCS_ENABLED` больше нет: документация API живёт за `/api/backend-tools` и закрыта кукой, подписанной `APP_SECRET`. Если не хотите отдавать её наружу — закройте этот путь на реверс-прокси
+В Remnawave 3.x переключателя `IS_DOCS_ENABLED` больше нет: документация API живёт за `/api/backend-tools` и закрыта кукой, подписанной `APP_SECRET`. Если не хотите отдавать её наружу, закройте этот путь на реверс-прокси.
 :::
 
+## Прохождение защиты
 
-## Получение доступа к API с использованием cookie
+Дальше всё зависит от способа защиты панели, выбранного при установке. Токен панели (`Authorization: Bearer …`) отправляется в каждом запросе поверх любого из вариантов.
+
+<Tabs>
+<TabItem label="Cookie-защита">
 
 ### Получение cookie
 
-Открываем nginx.conf и ищем строку `map $http_cookie $auth_cookie`. Нам понадобиться значение после `*`, i.e. для
+Скрипт генерирует случайную пару `ИМЯ=ЗНАЧЕНИЕ`. Откройте `nginx.conf` и найдите строку `map $http_cookie $auth_cookie`, ваши данные это значение после `~*`:
 
-```
+```nginx
 map $http_cookie $auth_cookie {
-default 0;
-"~*aEmFnBcC=WbYWpixX" 1;
+    default 0;
+    "~*zIdejKtN=MWbLrRzx" 1;
 }
 ```
 
-нашими cookie будут `aEmFnBcC=WbYWpixX`.
+Здесь кука `zIdejKtN=MWbLrRzx`.
 
-### Отправка cookies в header'е
+### Отправка cookie в заголовке
 
-На примере HTTP клиента `httpx` и записи `COOKIES` в `.env` файле вашего проекта рассмотрим отправку cookies в заголовке:
+На примере HTTP-клиента `httpx` и записи `COOKIES` в `.env` вашего проекта:
 
-```json
-COOKIES={"aEmFnBcC":"WbYWpixX"}
+```json title=".env"
+COOKIES={"zIdejKtN":"MWbLrRzx"}
 ```
 
 ```python
@@ -71,11 +173,16 @@ async def get_all_nodes():
     return response.json()
 ```
 
-## Доступ к API при включённой странице входа
+Быстрая проверка curl:
 
-Если при установке панели выбрана не cookie-защита, а страница входа (TinyAuth для Nginx или caddy-with-auth для Caddy), API тоже закрыт. Данные для входа передаются в отдельном заголовке `X-Api-Key`, а `Authorization` с токеном панели доходит до API нетронутым — оба заголовка отправляются в одном запросе.
+```bash "panel.example.com"
+curl -b "zIdejKtN=MWbLrRzx" -H "Authorization: Bearer <токен>" https://panel.example.com/api/nodes
+```
 
-### Страница входа (TinyAuth, Nginx)
+</TabItem>
+<TabItem label="Страница входа (TinyAuth, Nginx)">
+
+Данные для входа передаются в отдельном заголовке `X-Api-Key`, а `Authorization` с токеном панели доходит до API нетронутым, оба заголовка отправляются в одном запросе.
 
 В `X-Api-Key` передаются данные для входа TinyAuth в формате `Basic base64(логин:пароль)`. Собрать пару:
 
@@ -85,7 +192,7 @@ printf '%s' 'логин:пароль' | base64
 ```
 
 :::caution[Частая ошибка]
-Пишите именно `printf '%s' 'логин:пароль'` — с форматом первым аргументом. Без него команда `printf 'логин:пароль'` воспринимает строку как формат: символы `%` в пароле превращаются в спецификаторы, и на выходе получается мусорный base64.
+Пишите именно `printf '%s' 'логин:пароль'`, с форматом первым аргументом. Без него команда `printf 'логин:пароль'` воспринимает строку как формат: символы `%` в пароле превращаются в спецификаторы, и на выходе получается мусорный base64.
 :::
 
 Итоговые заголовки запроса:
@@ -97,7 +204,14 @@ printf '%s' 'логин:пароль' | base64
 }
 ```
 
-### Caddy с MFA (caddy-with-auth)
+Быстрая проверка curl:
+
+```bash "panel.example.com"
+curl -H "X-Api-Key: Basic dXNlcm5hbWU6cGFzc3dvcmQ=" -H "Authorization: Bearer <токен>" https://panel.example.com/api/nodes
+```
+
+</TabItem>
+<TabItem label="Портал с MFA (Caddy)">
 
 Ключ создаётся на самой странице входа: `https://<домен панели>/r/settings/apikeys` (ссылка «API Keys»). Отправляется как есть, без обёртки Basic:
 
@@ -108,16 +222,25 @@ printf '%s' 'логин:пароль' | base64
 }
 ```
 
-### Отдельная страница подписки
+Быстрая проверка curl:
 
-Установка «только страница подписки» спрашивает способ защиты панели и подставляет всё сама: при TinyAuth достаточно ввести логин и пароль страницы входа — base64-пару инсталлер собирает самостоятельно.
+```bash "panel.example.com"
+curl -H "X-Api-Key: <ключ со страницы входа>" -H "Authorization: Bearer <токен>" https://panel.example.com/api/nodes
+```
 
-| Защита панели | Что спрашивает инсталлер | Переменная в compose сабки |
+</TabItem>
+</Tabs>
+
+## Отдельная страница подписки
+
+Установка «только страница подписки» спрашивает способ защиты панели и подставляет всё сама: при TinyAuth достаточно ввести логин и пароль страницы входа: base64-пару установщик собирает самостоятельно.
+
+| Защита панели | Что спрашивает инсталлер | Переменная в compose страницы подписки |
 |---|---|---|
 | Cookie-защита | кука `ИМЯ=ЗНАЧЕНИЕ` | `EGAMES_COOKIE=ИМЯ=ЗНАЧЕНИЕ` |
 | Страница входа (TinyAuth) | логин и пароль | `CADDY_AUTH_API_TOKEN=Basic base64(...)` |
 | Caddy с MFA | ключ со страницы входа | `CADDY_AUTH_API_TOKEN=<ключ>` |
 
 :::note[Важно]
-Ключи и данные для входа в `X-Api-Key` — это доступ к панели: при смене пароля страницы входа или переустановке панели не забудьте обновить их у всех клиентов, включая compose страницы подписки.
+Ключи и данные для входа в `X-Api-Key` дают доступ к панели: при смене пароля страницы входа или переустановке панели не забудьте обновить их у всех клиентов, включая compose страницы подписки.
 :::

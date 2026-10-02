@@ -5,61 +5,66 @@ description: Как внести изменения в проект Remnawave Re
 
 import { Steps, LinkButton, FileTree } from '@astrojs/starlight/components';
 
-## Установка Node.js и npm
+Вики живёт в папке `docs` репозитория и собирается на Astro Starlight. Ниже весь путь от чистой машины до отправленного pull request.
 
-Чтобы внести изменения в проект Remnawave Reverse-proxy, вам необходимо установить Node.js и npm на вашу систему. Вы можете скачать и установить их с [официального сайта Node.js](https://nodejs.org/en/download/).
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Шаг 1. Окружение
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Node.js с npm и git. Всё ставится с официальных сайтов.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Шаг 2. Локальный запуск
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Клон, зависимости и dev-сервер на `localhost:4321` с горячей перезагрузкой.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Шаг 3. Правки и PR
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Ветка, коммит, push и pull request. Русские страницы лежат рядом с английскими.</div>
+  </div>
+</div>
 
-## Установка git
+## Установка Node.js и git
 
-Если вы еще не установили git на свою систему, вы можете найти инструкции по установке на [официальном сайте git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) и страницу загрузок [git-scm.com](https://git-scm.com/downloads).
+Node.js с npm нужны для сборки документации: скачайте их с [официального сайта Node.js](https://nodejs.org/en/download/). Инструкции по установке git есть на [git-scm.com](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
 
-## Клонирование репозитория
-
-Чтобы начать, клонируйте репозиторий Remnawave Reverse-proxy на вашу локальную машину.
+## Клонирование и запуск
 
 <Steps>
 
-1. Склонируйте репозиторий
+1. Склонируйте репозиторий:
 
     ```bash
     git clone https://github.com/eGamesAPI/remnawave-reverse-proxy
     ```
 
-2. Перейдите в директорию проекта
+2. Перейдите в директорию документации и установите зависимости:
 
     ```bash
     cd remnawave-reverse-proxy/docs
-    ```
-
-</Steps>
-
-## Установка зависимостей
-
-<Steps>
-
-1. Перед тем как вы сможете собрать документацию, вам необходимо установить необходимые зависимости. Выполните следующую команду в директории `docs`.
-
-    ```bash
     npm install
     ```
 
-2. Чтобы собрать документацию локально, выполните следующую команду.
+3. Запустите dev-сервер:
 
     ```bash
     npm run dev
     ```
 
+    Документация откроется на `http://localhost:4321`, изменения подхватываются на лету.
+
 </Steps>
 
-Это запустит локальный сервер разработки, и вы сможете просмотреть документацию по адресу `http://localhost:4321`.
+## Где что лежит
 
-## ✨ Документация, включенная в Starlight
-
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
-
-### 🚀 Структура проекта
-
-Внутри вашего проекта Astro + Starlight вы увидите следующие папки и файлы:
+Английские страницы лежат в `src/content/docs/`, русские в `src/content/docs/ru/` с теми же путями. Меняя страницу, проверьте её парную версию на другом языке.
 
 <FileTree>
 
@@ -72,7 +77,7 @@ import { Steps, LinkButton, FileTree } from '@astrojs/starlight/components';
         - components/
         - **content/docs** корневая (en) директория документации
             - index.mdx
-            - **ru/** i18n файлы
+            - **ru/** русские страницы, те же пути
                 - index.mdx
         - styles/
         - content.config.ts
@@ -82,35 +87,53 @@ import { Steps, LinkButton, FileTree } from '@astrojs/starlight/components';
 
 </FileTree>
 
-Starlight ищет файлы `.md` или `.mdx` в директории `src/content/docs/`. Каждый файл доступен как маршрут на основе его имени.
+Starlight ищет файлы `.md` и `.mdx` в `src/content/docs/`: каждый файл становится страницей по своему пути. Изображения складываются в `src/assets/` и встраиваются относительной ссылкой, статические файлы вроде фавиконов живут в `public/`.
 
-Изображения можно добавлять в `src/assets/` и встраивать в Markdown с помощью относительной ссылки.
+## Команды
 
-Статические ресурсы, такие как фавиконы, можно разместить в директории `public/`.
-
-### 🧞 Команды
-
-Все команды выполняются из корневой директории проекта, из терминала:
+Все команды выполняются из директории `docs`:
 
 | Команда                   | Действие                                         |
 | :------------------------ | :----------------------------------------------- |
 | `npm install`             | Устанавливает зависимости                        |
-| `npm run dev`             | Запускает локальный сервер разработки на `localhost:4321` |
-| `npm run build`           | Собирает ваш производственный сайт в `./dist/`  |
-| `npm run preview`         | Предварительный просмотр вашей сборки локально, перед развертыванием |
-| `npm run astro ...`       | Выполняет команды CLI, такие как `astro add`, `astro check` |
-| `npm run astro -- --help` | Получить помощь по использованию Astro CLI      |
+| `npm run dev`             | Запускает локальный сервер на `localhost:4321`   |
+| `npm run build`           | Собирает сайт в `./dist/`                        |
+| `npm run preview`         | Показывает сборку локально перед деплоем         |
+| `npm run astro ...`       | Выполняет команды CLI, например `astro check`    |
 
-### 👀 Хотите узнать больше?
+## Отправка изменений
 
-Посмотрите [документацию Starlight](https://starlight.astro.build/), прочитайте [документацию Astro](https://docs.astro.build) или присоединяйтесь к [серверу Discord Astro](https://astro.build/chat).
+<Steps>
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-    <LinkButton
-        href="https://starlight.astro.build"
-        icon="open-book"
-        iconPlacement="start"
-    >
-        Перейти в документацию
-    </LinkButton>
+1. Создайте ветку под правку:
+
+    ```bash
+    git checkout -b my-change
+    ```
+
+2. Внесите изменения и закоммитьте:
+
+    ```bash
+    git add . && git commit -m "docs: моя правка"
+    ```
+
+3. Отправьте ветку и откройте pull request в [репозитории](https://github.com/eGamesAPI/remnawave-reverse-proxy/pulls):
+
+    ```bash
+    git push -u origin my-change
+    ```
+
+</Steps>
+
+После проверки мы вольём правку, и она появится на [wiki.egam.es](https://wiki.egam.es). Вопросы можно задать в [Telegram-чате](https://t.me/remnawave_reverse).
+
+[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+
+<div class="not-content" style="display:flex;flex-wrap:wrap;justify-content:center;gap:0.6rem;margin:1rem 0">
+  <LinkButton href="https://starlight.astro.build" icon="open-book" iconPlacement="start">
+    Документация Starlight
+  </LinkButton>
+  <LinkButton href="https://t.me/remnawave_reverse" icon="telegram" iconPlacement="start">
+    Telegram-чат
+  </LinkButton>
 </div>

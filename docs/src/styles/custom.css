@@ -1,6 +1,8 @@
 /* ============================================================
    Remnawave Reverse-Proxy wiki — custom theme
-   "Abyssal terminal" palette: deep teal surfaces, mint accent.
+   Brand "terminal" palette: green-black surfaces from the logo
+   (#08110d family), vivid mint accent #00f0b0 → #00c080,
+   yellow #ffd84d reserved for numbers/warnings, CRT scanlines.
    Depth comes from surface steps, not shadows.
    ============================================================ */
 
@@ -22,65 +24,112 @@
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
 
-/* ---------- Dark mode (default): deep teal stack ----------
+/* ---------- Dark mode (default): brand terminal stack ----------
    !important — the galaxy theme plugin loads after user CSS and
    redefines the whole palette on :root with equal specificity. */
 :root {
-  --sl-color-accent-low: #14463c !important;
-  --sl-color-accent: #50ccab !important;
-  --sl-color-accent-high: #78fecb !important;
-  --sl-color-white: #edfffe !important;
-  --sl-color-gray-1: #dcefe9 !important;
-  --sl-color-gray-2: #b7c9c4 !important;
-  --sl-color-gray-3: #8aa39c !important;
-  --sl-color-gray-4: #5c7a73 !important;
-  --sl-color-gray-5: #123f39 !important;
-  --sl-color-gray-6: #0a2f2b !important;
-  --sl-color-gray-7: #012523 !important;
-  --sl-color-black: #011d1c !important;
+  --sl-color-accent-low: #0e4d3a !important;
+  --sl-color-accent: #00f0b0 !important;
+  --sl-color-accent-high: #62ffd2 !important;
+  --sl-color-white: #eaf5ee !important;
+  --sl-color-gray-1: #d7e8de !important;
+  --sl-color-gray-2: #b3ccbf !important;
+  --sl-color-gray-3: #7f9d8e !important;
+  --sl-color-gray-4: #4d6b5d !important;
+  --sl-color-gray-5: #1d3328 !important;
+  --sl-color-gray-6: #0e1a14 !important;
+  --sl-color-gray-7: #0b1510 !important;
+  --sl-color-black: #08110d !important;
 
-  --sl-color-text: #bbc7c6 !important;
-  --sl-color-bg: #011d1c !important;
-  --sl-color-bg-sidebar: #012523 !important;
-  --sl-color-bg-nav: #012523 !important;
-  --sl-color-hairline: #0a3a35 !important;
-  --sl-color-hairline-shade: #083129 !important;
-  --sl-scrollbar-color: #50ccab !important;
+  --sl-color-text: #c3d8cb !important;
+  --sl-color-bg: #08110d !important;
+  --sl-color-bg-sidebar: #060d0a !important;
+  --sl-color-bg-nav: #060d0a !important;
+  --sl-color-hairline: #172b21 !important;
+  --sl-color-hairline-shade: #122019 !important;
+  --sl-scrollbar-color: #00c48d !important;
 
   /* galaxy component tokens */
-  --fb-code-block-bg-color: #01201e !important;
-  --fb-ec-caption-bg-color: #012a27 !important;
-  --fb-ec-caption-bb-color: #0a3a35 !important;
-  --fb-level-2-bg: #00322e !important;
-  --fb-sidebar-color-current-bg: #0a2f2b !important;
-  --fb-sidebar-color-current-hover: #0d3833 !important;
-  --fb-sidebar-color-text-current: #edfffe !important;
-  --fb-table-header-bg-color: #012c29 !important;
-  --fb-toc-color-current-bg: rgba(80, 204, 171, 0.19) !important;
+  --fb-body-color: #c3d8cb !important;
+  --fb-code-block-bg-color: #0a0f0c !important;
+  --fb-ec-caption-bg-color: #0b1510 !important;
+  --fb-ec-caption-bb-color: #172b21 !important;
+  --fb-ec-language-color: #6d8a7c !important;
+  --fb-level-2-bg: #0b1510 !important;
+  --fb-sidebar-color-current-bg: rgba(0, 240, 176, 0.09) !important;
+  --fb-sidebar-color-current-hover: rgba(0, 240, 176, 0.16) !important;
+  --fb-sidebar-color-text-current: #00f0b0 !important;
+  --fb-steps-bg-color: #0e4d3a !important;
+  --fb-steps-text-color: #eaf5ee !important;
+  --fb-table-border-color: #172b21 !important;
+  --fb-table-header-bg-color: #0b1510 !important;
+  --fb-theme-btn-color-text: #7f9d8e !important;
+  --fb-toc-color-current-bg: rgba(0, 240, 176, 0.12) !important;
+  --fb-toc-current-text-color: #00f0b0 !important;
 }
 
-/* ---------- Light mode: pale mint paper ---------- */
+/* ---------- Light mode: mint paper ---------- */
 :root[data-theme='light'] {
-  --sl-color-accent-low: #50ccab !important;
-  --sl-color-accent: #009166 !important;
+  --sl-color-accent-low: #8df2cd !important;
+  --sl-color-accent: #009267 !important;
   --sl-color-accent-high: #00674a !important;
-  --sl-color-white: #0d2622 !important;
-  --sl-color-gray-1: #1c3a34 !important;
-  --sl-color-gray-2: #3a5a53 !important;
-  --sl-color-gray-3: #5d7a73 !important;
-  --sl-color-gray-4: #8aa39c !important;
-  --sl-color-gray-5: #c4dcd5 !important;
-  --sl-color-gray-6: #ddeee9 !important;
-  --sl-color-gray-7: #eaf5f1 !important;
-  --sl-color-black: #f2faf7 !important;
+  --sl-color-white: #0b2b22 !important;
+  --sl-color-gray-1: #143027 !important;
+  --sl-color-gray-2: #32564a !important;
+  --sl-color-gray-3: #5c7a6d !important;
+  --sl-color-gray-4: #8aa396 !important;
+  --sl-color-gray-5: #c9e7da !important;
+  --sl-color-gray-6: #e3f5ed !important;
+  --sl-color-gray-7: #eef9f3 !important;
+  --sl-color-black: #f5fcf8 !important;
 
-  --sl-color-text: #1c3a34 !important;
-  --sl-color-bg: #f2faf7 !important;
-  --sl-color-bg-sidebar: #eaf5f1 !important;
-  --sl-color-bg-nav: #eaf5f1 !important;
-  --sl-color-hairline: #d3e6e0 !important;
-  --sl-color-hairline-shade: #e0efe9 !important;
-  --sl-scrollbar-color: #009166 !important;
+  --sl-color-text: #1e3c31 !important;
+  --sl-color-bg: #f5fcf8 !important;
+  --sl-color-bg-sidebar: #eef9f3 !important;
+  --sl-color-bg-nav: #eef9f3 !important;
+  --sl-color-hairline: #d7ece2 !important;
+  --sl-color-hairline-shade: #e3f3ea !important;
+  --sl-scrollbar-color: #009267 !important;
+
+  --fb-body-color: #1e3c31 !important;
+  --fb-code-block-bg-color: #eef9f3 !important;
+  --fb-ec-caption-bg-color: #e3f5ed !important;
+  --fb-ec-caption-bb-color: #d7ece2 !important;
+  --fb-ec-language-color: #5c7a6d !important;
+  --fb-level-2-bg: #e3f5ed !important;
+  --fb-sidebar-color-current-bg: rgba(0, 146, 103, 0.1) !important;
+  --fb-sidebar-color-current-hover: rgba(0, 146, 103, 0.16) !important;
+  --fb-sidebar-color-text-current: #009267 !important;
+  --fb-steps-bg-color: #8df2cd !important;
+  --fb-steps-text-color: #0b2b22 !important;
+  --fb-table-border-color: #d7ece2 !important;
+  --fb-table-header-bg-color: #e3f5ed !important;
+  --fb-theme-btn-color-text: #5c7a6d !important;
+  --fb-toc-color-current-bg: rgba(0, 146, 103, 0.12) !important;
+  --fb-toc-current-text-color: #009267 !important;
+}
+
+/* ---------- Brand surface: mint glow + CRT scanlines ---------- */
+html[data-theme='dark'] body {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 240, 176, 0.013) 0px,
+      rgba(0, 240, 176, 0.013) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    radial-gradient(1100px 460px at 50% -12%, rgba(0, 240, 176, 0.07), transparent 62%),
+    radial-gradient(900px 420px at 88% 112%, rgba(0, 192, 128, 0.05), transparent 60%),
+    var(--sl-color-bg) !important;
+  background-attachment: fixed;
+}
+html[data-theme='light'] body {
+  background:
+    radial-gradient(1100px 460px at 50% -12%, rgba(0, 146, 103, 0.06), transparent 62%),
+    radial-gradient(900px 420px at 88% 112%, rgba(0, 146, 103, 0.04), transparent 60%),
+    var(--sl-color-bg) !important;
+  background-attachment: fixed;
 }
 
 /* Banner variants on the overview pages */
@@ -98,6 +147,225 @@
   display: block;
 }
 
+/* ---------- Details: selection, focus, links ---------- */
+::selection {
+  background: rgba(0, 240, 176, 0.28);
+}
+html[data-theme='light'] ::selection {
+  background: rgba(0, 146, 103, 0.22);
+}
+
+:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+.sl-markdown-content a {
+  text-decoration-color: color-mix(in srgb, var(--sl-color-accent) 45%, transparent);
+  text-underline-offset: 3px;
+  transition: text-shadow 0.18s ease, text-decoration-color 0.18s ease;
+}
+html[data-theme='dark'] .sl-markdown-content a:hover {
+  text-shadow: 0 0 16px rgba(0, 240, 176, 0.4);
+  text-decoration-color: var(--sl-color-accent);
+}
+
+/* Sidebar: the open page gets a mint wash + left marker bar */
+.sidebar-content a[aria-current='page'] {
+  background: color-mix(in srgb, var(--sl-color-accent) 9%, transparent) !important;
+  box-shadow: inset 2px 0 0 var(--sl-color-accent) !important;
+}
+
+/* Sidebar: terminal-style section groups (`// УСТАНОВКА`) */
+sl-sidebar-pane,
+.sidebar-pane {
+  border-right: 1px solid var(--sl-color-hairline);
+}
+.sidebar-content summary {
+  transition: background-color 0.15s ease;
+}
+.sidebar-content summary:hover {
+  background: color-mix(in srgb, var(--sl-color-accent) 6%, transparent) !important;
+}
+.sidebar-content .group-label .large {
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: color-mix(in srgb, var(--sl-color-accent) 50%, var(--sl-color-gray-3)) !important;
+}
+.sidebar-content .group-label .large::before {
+  content: '//';
+  margin-right: 0.5em;
+  color: var(--sl-color-accent) !important;
+}
+.sidebar-content .caret {
+  color: color-mix(in srgb, var(--sl-color-accent) 65%, var(--sl-color-gray-3)) !important;
+}
+.sidebar-content ul.top-level > li + li {
+  border-top: 1px solid var(--sl-color-hairline-shade);
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+}
+.sidebar-content a {
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+html[data-theme='dark'] .sidebar-content a:hover {
+  color: var(--sl-color-white);
+  background: color-mix(in srgb, var(--sl-color-accent) 7%, transparent) !important;
+}
+html[data-theme='light'] .sidebar-content a:hover {
+  color: var(--sl-color-white);
+  background: color-mix(in srgb, var(--sl-color-accent) 12%, transparent) !important;
+}
+
+/* ---------- Header: frosted brand glass + terminal details ---------- */
+header,
+header .header {
+  background: color-mix(in srgb, var(--sl-color-bg-nav) 72%, transparent) !important;
+}
+
+/* mint gleam line instead of the flat hairline */
+header {
+  border-bottom: 1px solid transparent !important;
+}
+header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--sl-color-accent) 55%, transparent) 30%,
+    color-mix(in srgb, var(--sl-color-accent) 55%, transparent) 70%,
+    transparent
+  );
+}
+
+/* site title: mono, original 20px size */
+.site-title {
+  font-family: var(--sl-font-mono) !important;
+  font-weight: 600 !important;
+  font-size: 1.25rem !important;
+  letter-spacing: -0.01em;
+}
+
+/* version: typed command-line fragment — `$ v3.7.0`, no chrome,
+   so any future version string just flows in. Yellow like the
+   script TUI prints values. */
+.title-wrapper .version-link {
+  font-family: var(--sl-font-mono) !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+  color: #ffd84d !important;
+  margin-left: 0.9rem !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  transition: color 0.15s ease;
+}
+.title-wrapper .version-link::before {
+  content: '$';
+  color: var(--sl-color-accent);
+  margin-right: 0.35em;
+  font-weight: 700;
+}
+.title-wrapper .version-link:hover {
+  opacity: 1 !important;
+  filter: brightness(1.15);
+}
+:root[data-theme='light'] .title-wrapper .version-link {
+  color: #8a6a00 !important;
+}
+
+/* logo: soft mint halo */
+.title-wrapper img {
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--sl-color-accent) 30%, transparent));
+  transition: filter 0.2s ease;
+}
+.title-wrapper img:hover {
+  filter: drop-shadow(0 0 14px color-mix(in srgb, var(--sl-color-accent) 55%, transparent));
+}
+
+/* search trigger (the only header button carrying a <kbd>): bordered pill */
+.header button:has(kbd) {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.header button:has(kbd):hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--sl-color-accent) 7%, transparent);
+}
+.header button:has(kbd) kbd {
+  font-family: var(--sl-font-mono);
+}
+
+/* right group: neutral icons that light up mint on hover;
+   icons form a tight cluster, functional groups get equal wide gaps */
+.header .right-group {
+  gap: 0.75rem !important;
+}
+.header .social-icons {
+  gap: 0.75rem !important;
+}
+.social-icons a {
+  color: var(--sl-color-gray-2) !important;
+  border-radius: 8px !important;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
+}
+.social-icons a:hover {
+  color: var(--sl-color-accent) !important;
+  background: color-mix(in srgb, var(--sl-color-accent) 9%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sl-color-accent) 18%, transparent) !important;
+}
+.right-group button {
+  color: var(--sl-color-gray-2) !important;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
+}
+.right-group button:hover {
+  color: var(--sl-color-accent) !important;
+  background: color-mix(in srgb, var(--sl-color-accent) 9%, transparent) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--sl-color-accent) 18%, transparent) !important;
+}
+
+/* language picker: chrome sits on the label wrapper (Starlight keeps
+   absolute globe/caret icons inside it); native select gets neutral geometry */
+.header starlight-lang-select label {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.header starlight-lang-select label:hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--sl-color-accent) 6%, transparent);
+}
+.header starlight-lang-select label:hover select {
+  color: var(--sl-color-accent) !important;
+}
+.header starlight-lang-select select {
+  border: 0 !important;
+  height: 30px !important;
+  width: max-content !important;
+  margin-inline: 0 !important;
+  padding-block: 0.2rem !important;
+  padding-inline: 1.6rem 1.55rem !important;
+  color: var(--sl-color-text) !important;
+  background: transparent !important;
+  font-size: 0.85rem !important;
+  text-overflow: clip !important;
+  cursor: pointer;
+}
+
 /* Fix primary button text color on the mint gradient */
 .sl-link-button.primary {
   color: black !important;
@@ -105,6 +373,8 @@
 .sl-link-button.primary * {
   color: black !important;
 }
+
+/* ---------- Asides ---------- */
 
 /* Aside "tip" cards: galaxy ships them emerald green, which drowns in the
    mint accent — recolored to the blue of "note" cards and NEW sidebar badges. */
@@ -118,6 +388,148 @@
   --galaxy-aside-bg: #3b82f614 !important;
   --galaxy-aside-border: #3b82f640 !important;
   --galaxy-aside-code-bg: #3b82f61f !important;
+}
+
+/* Aside "caution" cards: the brand yellow #ffd84d — same tone the script's
+   TUI uses for menu numbers and warnings. */
+.starlight-aside--caution {
+  --galaxy-aside-accent: #ffd84d !important;
+  --galaxy-aside-bg: #ffd84d0d !important;
+  --galaxy-aside-border: #ffd84d40 !important;
+  --galaxy-aside-code-bg: #ffd84d14 !important;
+}
+:root[data-theme='dark'] .starlight-aside--caution {
+  --galaxy-aside-bg: #ffd84d12 !important;
+  --galaxy-aside-border: #ffd84d4d !important;
+  --galaxy-aside-code-bg: #ffd84d1a !important;
+}
+
+/* Aside "danger" cards: command blocks keep the same near-black terminal
+   background as regular code blocks (#010409), not the red tint. */
+.starlight-aside--danger {
+  --galaxy-aside-code-bg: #010409 !important;
+}
+.starlight-aside--danger pre {
+  background: #010409 !important;
+  border: none !important;
+}
+
+/* list bullets: mint terminal arrows instead of galaxy's ■ squares */
+main .sl-markdown-content ul > li::before {
+  content: '▸' !important;
+  color: var(--sl-color-accent) !important;
+  font-size: 0.9em !important;
+  top: 0.28em !important;
+}
+/* ...but never inside component widgets: tab lists and file trees carry
+   their own chrome (galaxy renders a marker box there — our ▸ landed
+   inside it as an arrow in a dark box) */
+main .sl-markdown-content [role='tablist'] > li::before,
+main .sl-markdown-content starlight-file-tree li::before {
+  content: none !important;
+  background: transparent !important;
+}
+
+/* ---------- Code blocks: brand terminal windows ---------- */
+main .sl-markdown-content figure.frame {
+  border: 1px solid var(--sl-color-gray-5) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5) !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+html[data-theme='dark'] main .sl-markdown-content figure.frame:hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 30%, var(--sl-color-gray-5)) !important;
+  box-shadow:
+    0 12px 32px -14px rgba(0, 0, 0, 0.5),
+    0 0 20px -6px rgba(0, 240, 176, 0.22) !important;
+}
+
+/* shell blocks: traffic lights inside the native terminal header */
+html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal figcaption.header {
+  position: relative;
+}
+html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal figcaption.header::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 84px;
+  background-image:
+    radial-gradient(circle at 18px 50%, #ff5f56 5px, transparent 5.5px),
+    radial-gradient(circle at 40px 50%, #ffbd2e 5px, transparent 5.5px),
+    radial-gradient(circle at 62px 50%, #27c93f 5px, transparent 5.5px);
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal pre {
+  border-radius: 0 0 11px 11px !important;
+}
+
+/* copy button: bordered chip, mint on hover */
+main .sl-markdown-content .copy-button {
+  border: 1px solid var(--sl-color-gray-5) !important;
+  background: color-mix(in srgb, var(--sl-color-bg) 72%, transparent) !important;
+  border-radius: 8px !important;
+  color: var(--sl-color-gray-1) !important;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease !important;
+}
+main .sl-markdown-content .copy-button:hover {
+  color: var(--sl-color-accent) !important;
+  border-color: color-mix(in srgb, var(--sl-color-accent) 45%, transparent) !important;
+}
+
+/* ---------- Landing (главная страница вики) ---------- */
+html:has(.rr-landing) .site-sidebar,
+html:has(.rr-landing) .page > .sidebar,
+html:has(.rr-landing) sl-sidebar-pane,
+html:has(.rr-landing) .right-sidebar-container,
+html:has(.rr-landing) .right-sidebar-panel,
+html:has(.rr-landing) .sl-content-head,
+html:has(.rr-landing) main footer:not(.land-footer) {
+  display: none !important;
+}
+/* юридическая полоса лендинга прижата к нижней границе документа */
+html:has(.rr-landing) main {
+  padding-bottom: 0 !important;
+}
+html:has(.rr-landing) .main-pane,
+html:has(.rr-landing) .main-frame {
+  max-width: none !important;
+  width: 100%;
+}
+/* galaxy резервирует колонку сайдбара паддингом каркаса */
+html:has(.rr-landing) .main-frame {
+  padding-left: 0 !important;
+}
+html:has(.rr-landing) .main-pane {
+  padding-inline: 0 !important;
+}
+html:has(.rr-landing) .content-panel {
+  max-width: none !important;
+  width: 100%;
+  padding-inline: 0 !important;
+}
+html:has(.rr-landing) .content-panel .sl-container {
+  max-width: none !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+  width: 100%;
+}
+.rr-landing {
+  padding-inline: clamp(1rem, 4vw, 2rem);
+}
+/* штатный h1 страницы дублирует заголовок лендинга */
+html:has(.rr-landing) .content-panel .sl-container > h1 {
+  display: none !important;
+}
+/* вторая линия/полоса под шапкой — собственная рамка и паддинг панели */
+html:has(.rr-landing) .content-panel {
+  border-top: none !important;
+  padding-block: 0 !important;
+}
+/* бегущая строка — на всю ширину окна */
+html:has(.rr-landing) .rr-landing .marquee {
+  margin-inline: calc(-1 * clamp(1rem, 4vw, 2rem));
 }
 
 /* ============================================================

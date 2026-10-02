@@ -1,60 +1,189 @@
 ---
 title: Node only
-description: Instructions for installing the RemnaWave node on your server.
+description: 'Installing the RemnaWave node on a separate server: what the installer asks and what it prints at the end.'
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../components/version';
 
 ## Running the script
 
-:::danger[Warning]
-Script must be run as **root**, and also on the server where the Remnawave node will be installed.
+:::danger[Important]
+The script must be run as **root**, and on the server that will host the RemnaWave node.
 :::
 
-Enter the command on your server:
+Run this command on your server:
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/install_remnawave.sh)
 ```
 
+:::danger[If GitHub is unreachable]
+Run the installer from the jsDelivr mirror:
+
+```bash
+bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@main/install_remnawave.sh)
+```
+:::
+
 ## Installing the node
+
+### What the installer does
+
+1. **Checks the server before starting**: the node is not installed yet, port 443 is free.
+2. **Asks for three things**: the node's selfsteal domain (the address from its card in the panel), the panel's IP address and the node's Secret Key, pasted as a multi-line block and confirmed.
+3. **Issues a certificate** for the node domain (DNS API, ACME or your own) and sets up renewal.
+4. **Deploys the services into `/opt/remnanode`**: the `remnanode` node container and nginx behind a Unix socket, the same scheme as the panel's: Xray owns 443 and hands traffic to nginx over the socket.
+5. **Opens port 2222 in the firewall for the panel's IP only**: the panel can reach the node, everyone else cannot.
+6. **Installs the camouflage site**: a random template of an ordinary website on the node's domain.
+7. **Starts and verifies**: checks `https://domain` up to 5 times with a 15-second pause until the node answers.
+
+### Step-by-step installation
 
 <Steps>
 
-1. Select `Install Remnawave components`
+1. Select `Install Remnawave Components`
 
-    ![Main menu RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/main_menu.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install Remnawave Components', pick: true },
+      { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
+      { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Manage IPv6' },
+      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Check for updates script' },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
 
 2. Then select `Install only the node`
 
-    ![Install node RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/install_node.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Install Remnawave Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install panel and node on one server' },
+      { kind: 'item', num: '2.', text: 'Install panel and subscription page' },
+      { kind: 'item', num: '3.', text: 'Add node to panel' },
+      { kind: 'item', num: '4.', text: 'Install only the node', pick: true },
+      { kind: 'item', num: '5.', text: 'Install only the panel' },
+      { kind: 'item', num: '6.', text: 'Install only the subscription page' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-6):' },
+    ]} />
 
-3. Select the web server for the node — **Nginx** or **Caddy**
+3. Select the web server for the node
 
-    ![Select web server](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/webserver_select.webp)
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select web server:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Nginx' },
+      { kind: 'item', num: '2.', text: 'Caddy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):' },
+    ]} />
 
-4. Log in to the control panel, go to the `Nodes` → `Management` section, select the desired node, and find the `Secret Key` (SECRET_KEY) field. Copy the certificate using the copy icon.
+4. Open the panel, go to `Nodes` → `Manage`, select the node and find the `Secret Key` (SECRET_KEY) field. Copy the key with the copy icon.
 
-    ![SSL_CERT RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/ssl_cert.webp)
+5. Answer the installer's questions: the node's selfsteal domain, the panel's IP address, then paste the copied Secret Key (press Enter twice after pasting)
 
-5. Script will ask you for the selfsteal domain that you specified during the panel installation or through the [`Add node to panel`](https://wiki.egam.es/installation/add-node/) section, the panel's IP address, and the SSL certificate from the panel.
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: "Enter the node's selfsteal domain (the address from its card in the panel): ", answer: 'node.example.com' },
+      { kind: 'plain', text: 'Enter the IP address of the panel to establish a connection between the panel and the node: ', answer: '203.0.113.10' },
+      { kind: 'plain', text: 'Enter the node Secret Key from the node edit card (paste the content and press Enter twice):' },
+      { kind: 'step', text: 'Are you sure the certificate is correct? (y/n): ', answer: 'y' },
+    ]} />
 
-    :::danger[Warning]
-    Don't forget to add a DNS record for your domain.
+    :::danger[Important]
+    Do not forget to add the DNS record for your domain.
     :::
 
-    ![Menu node end RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_node_end.webp)
+6. Select the certificate generation method for the node domain:
 
-6. Then the script will start the node and connect it to the panel.
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Select certificate generation method for all domains:' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Cloudflare DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '2.', text: 'Gcore DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'item', num: '3.', text: 'Bunny.net DNS API' },
+      { kind: 'dim', text: '    Wildcard, DNS records are created automatically via an API key' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'ACME HTTP-01' },
+      { kind: 'dim', text: '    No API key, one domain per certificate' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Install your own certificate' },
+      { kind: 'dim', text: '    Upload your own fullchain.pem and privkey.pem' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-5):' },
+    ]} />
 
-    ![Menu node end2 RU](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/menu_node_end2.webp)
+7. If you chose Let's Encrypt, enter the email for certificate notifications, or just press Enter to skip
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: "Enter your Let's Encrypt email (or press Enter to skip):" },
+    ]} />
+
+8. From here the script works on its own: it writes the services into `/opt/remnanode`, opens port 2222 for the panel's IP only, installs the camouflage site and starts the node
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Installing node' },
+      { kind: 'step', text: 'Starting node' },
+      { kind: 'step', text: 'Please wait...' },
+      { kind: 'step', text: 'Checking node connection for node.example.com...' },
+      { kind: 'step', text: 'Attempt 1 of 5...' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[ ✓ ] Node successfully launched!' },
+    ]} />
+
+    Check that the node glows green in the panel's Nodes section and that its domain opens the camouflage site in a browser.
 
 </Steps>
 
 ## Updating the script
 
-Make sure to update the script before running things in it. You can do this by selecting `Check for updates script` in the script menu or by viewing the GitHub repository for updates.
+Make sure the script is up to date before you do anything else with it.
+
+1. Open the script menu with the `remnawave_reverse` command (or the short alias `rr`) and select item `12`, `Check for updates script`. When an update is already found, the item lights up red and reads `Update script`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION} `, warn: 'script update available' },
+      { kind: 'dim', text: '…' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Update script', pick: true },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. What changed in each version is on the releases page:
 
 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton
@@ -62,6 +191,6 @@ Make sure to update the script before running things in it. You can do this by s
         icon="github"
         iconPlacement="start"
     >
-        View latest release
+        View the latest release
     </LinkButton>
 </div>

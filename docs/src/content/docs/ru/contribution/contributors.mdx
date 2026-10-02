@@ -4,20 +4,21 @@ description: Список контрибьютеров Remnawave Reverse-proxy
 ---
 
 import ContributorList from "@components/ContributorList.astro";
-import { Card, LinkButton } from '@astrojs/starlight/components';
+import { LinkButton } from '@astrojs/starlight/components';
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-    <p>Это все контрибьютеры репозитория <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy">Remnawave Reverse-proxy</a>, которым мы благодарны за их вклад, большой и малый.</p>
+Это все контрибьютеры репозитория [Remnawave Reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy), которым мы благодарны за их вклад, большой и малый.
 
-    <ContributorList githubRepo="eGamesAPI/remnawave-reverse-proxy" ignore={["autofix-ci[bot]", "github-actions[bot]", "renovate[bot]", "snyk-bot", "snyk-bot[bot]"]} />
+<ContributorList githubRepo="eGamesAPI/remnawave-reverse-proxy" ignore={["autofix-ci[bot]", "github-actions[bot]", "renovate[bot]", "snyk-bot", "snyk-bot[bot]"]} />
 
-    <Card title="Станьте одним из нас!" icon="github">
-        Хотите внести свой вклад? Мы будем рады вашей помощи! Ознакомьтесь с нашим руководством, чтобы начать.{'\n'}
-        {'\n'}
-        <div style={{ marginTop: '1rem' }}>
-            <LinkButton href="/ru/contribution/guide" icon="npm" iconPlacement="start" variant="primary">
-                {'Руководство по внесению изменений'}
-            </LinkButton>
-        </div>
-    </Card>
+<div class="not-content" style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem;margin:1.5rem 0;display:flex;flex-direction:column;gap:0.8rem;align-items:center;text-align:center">
+  <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650">
+    <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+    Станьте одним из нас
+  </div>
+  <div style="font-size:.92em;line-height:1.7;opacity:.85">Хотите внести свой вклад? Мы будем рады помощи. Ознакомьтесь с руководством, чтобы начать.</div>
+  <div style="display:flex;justify-content:center;width:100%">
+    <LinkButton href="/ru/contribution/guide" icon="github" iconPlacement="start" variant="primary">
+      {'Руководство по внесению изменений'}
+    </LinkButton>
+  </div>
 </div>
