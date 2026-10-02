@@ -8,6 +8,7 @@ import { FileTree } from '@astrojs/starlight/components';
 import { LinkCard } from '@astrojs/starlight/components';
 import { Kbd } from 'starlight-kbd/components';
 import Terminal from '../../../components/Terminal.astro';
+import SshDiagram from '../../../components/SshDiagram.astro';
 
 The SSH access module lets you service a second server (for example, the node server) right from the script menu on the panel: update packages, restart the node container, read logs, without opening a second SSH session. Another module, [server routing](/configuration/server-routing/), uses this access automatically when it installs a node on the second server.
 
@@ -16,6 +17,12 @@ The SSH access module lets you service a second server (for example, the node se
 - **One line in `authorized_keys`.** The script's key lives on its own line marked `remnawave-reverse-proxy`; your lines are untouched.
 
 The menu item lives at **4. Node extensions → SSH access to remote servers**.
+
+## How it works
+
+<SshDiagram lang="en" />
+
+The panel server keeps the list of targets (nodes known to the panel, or addresses entered manually) and the SSH keys. During setup the script installs its own key on the target once, using the password; after that the password is never needed again. Every operation runs over the key: running commands, updating a node, and configuring exit servers for [server routing](/configuration/server-routing/).
 
 ## What the module looks like
 

@@ -92,6 +92,10 @@ const commitsLabel = (n: number) => lang === 'en'
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.4);
     overflow: hidden;
   }
+  /* на светлой странице тень окна зеленее и мягче, не «дыра» */
+  :global(html[data-theme='light']) .cl-window {
+    box-shadow: 0 16px 44px -22px rgba(9, 46, 33, 0.55);
+  }
   .cl-bar {
     display: flex;
     align-items: center;
@@ -155,7 +159,9 @@ const commitsLabel = (n: number) => lang === 'en'
   .name {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--sl-color-text);
+    /* окно тёмное в обеих темах — текст статичный светлый,
+       --sl-color-text в светлой теме становился тёмным на тёмном */
+    color: #e9f4ec;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;

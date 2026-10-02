@@ -5,10 +5,17 @@ description: Instructions for installing and configuring Beszel — a lightweigh
 import { Code } from '@astrojs/starlight/components';
 import { Steps } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
+import BeszelDiagram from '../../../components/BeszelDiagram.astro';
 
 Beszel is a lightweight open-source platform for monitoring servers, including Docker statistics, historical data, and notifications.
 
 It has a friendly web interface, simple configuration, and is ready to use "out of the box". It supports automatic backup, multi-user mode, OAuth authentication, and API access.
+
+## How it works
+
+<BeszelDiagram lang="en" />
+
+The browser opens the hub web panel over https. Agents on the nodes connect to the hub themselves on port 45876: the hub hands them a key when they are added, and it is the agent that initiates the connection, so nothing extra needs to be open on the node except one port for the hub IP. The hub sends notifications via a webhook, for example to Telegram.
 
 ## Installing Beszel Hub (Main Component)
 

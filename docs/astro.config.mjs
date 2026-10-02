@@ -25,6 +25,11 @@ export default defineConfig({
 			imports: [],
 		}),
 		starlight({
+			// код-блоки всегда тёмные терминалы — в светлой теме страницы
+			// они остаются «экранами», как и окна Terminal.astro
+			expressiveCode: {
+				themes: ['github-dark-high-contrast'],
+			},
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
 				Hero: './src/components/HeroSplash.astro',

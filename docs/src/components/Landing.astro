@@ -1005,10 +1005,19 @@ const PLAY = JSON.stringify({
     font-family: var(--sl-font-mono, monospace);
   }
   .cmd-row.small { margin-top: 0.7rem; max-width: 100%; }
+  /* <code> внутри полосы — это текст терминала, а не инлайн-код:
+     галактика подкладывает ему свою плашку (в светлой теме — светлую),
+     и мятная команда на ней пропадает */
+  .cmd-row code.cmd-text {
+    background: transparent !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
   .dollar { font-weight: 700; color: #00f0b0; flex-shrink: 0; }
   .cmd-text {
-    flex: 1; min-width: 0; font-size: 0.72rem; line-height: 1.4;
-    color: #62ffd2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1; min-width: 0; font-size: 0.72rem; line-height: 1.5;
+    color: #62ffd2; white-space: normal; overflow-wrap: anywhere;
   }
   .cmd-copy {
     appearance: none; background: transparent; flex-shrink: 0;
@@ -1632,5 +1641,229 @@ const PLAY = JSON.stringify({
     .btn.primary::after { display: none; }
     .hero-copy > *, .hero-term, .stats, .rr-in { animation: none !important; }
     .rr-wait { opacity: 1; transform: none; }
+  }
+
+  /* ---------- Светлая тема: мятная бумага, белые карточки,
+     тёмные экраны. Дизайн-правило то же, что у код-блоков:
+     терминалы (.term, .cmd-row, .demo) — «экраны» и не светлеют. ---------- */
+  :global(html[data-theme='light']) .rr-landing {
+    color: #1e3c31;
+    background:
+      radial-gradient(900px 420px at 75% 120px, rgba(0, 146, 103, 0.05), transparent 62%),
+      radial-gradient(800px 500px at 15% 40%, rgba(0, 146, 103, 0.04), transparent 60%);
+  }
+  :global(html[data-theme='light']) .badge {
+    color: #00805a;
+    border-color: rgba(0, 146, 103, 0.35);
+    background: rgba(0, 146, 103, 0.06);
+  }
+  :global(html[data-theme='light']) .hero h1 { color: #0b2b22; }
+  /* только image: шорткат background сбросил бы background-clip:text
+     из базового правила, и градиент лёг бы сплошным слоем на текст */
+  :global(html[data-theme='light']) .grad {
+    background-image: linear-gradient(96deg, #009267 10%, #00b583 90%);
+  }
+  :global(html[data-theme='light']) .lead { color: #47685a; }
+  :global(html[data-theme='light']) .btn.ghost {
+    color: #0b2b22;
+    border-color: rgba(0, 146, 103, 0.35);
+  }
+  :global(html[data-theme='light']) .btn.ghost:hover { border-color: rgba(0, 146, 103, 0.65); }
+  :global(html[data-theme='light']) .gh-count {
+    color: #8a6a00;
+    border-left-color: rgba(11, 43, 34, 0.15);
+  }
+  /* командная строка — тёмная полоса-терминал и на светлой странице */
+  :global(html[data-theme='light']) .cmd-row {
+    border-color: rgba(0, 146, 103, 0.4);
+    box-shadow: 0 10px 26px -16px rgba(9, 46, 33, 0.55);
+  }
+  :global(html[data-theme='light']) .cmd-copy {
+    color: #a9c0b0;
+    border-color: rgba(0, 240, 176, 0.2);
+  }
+  :global(html[data-theme='light']) .cmd-copy:hover {
+    color: #62ffd2;
+    border-color: rgba(0, 240, 176, 0.45);
+    background: rgba(0, 240, 176, 0.08);
+  }
+  :global(html[data-theme='light']) .os-note { color: #5c7a6d; }
+  /* зеркало jsDelivr — янтарная плашка на бумаге */
+  :global(html[data-theme='light']) .mirror {
+    background: rgba(255, 216, 77, 0.1);
+    border-color: rgba(138, 106, 0, 0.28);
+    border-left-color: #e0a800;
+  }
+  :global(html[data-theme='light']) .mirror summary { color: #4d431c; }
+  :global(html[data-theme='light']) .mirror summary svg { color: #a07f00; }
+  /* статистика */
+  :global(html[data-theme='light']) .stats { border-color: #dcefe5; }
+  :global(html[data-theme='light']) .stat { border-color: #dcefe5; }
+  :global(html[data-theme='light']) .stat:hover {
+    background: linear-gradient(180deg, rgba(0, 146, 103, 0.06), transparent);
+  }
+  :global(html[data-theme='light']) .stat b.c-text { color: #0b2b22; }
+  :global(html[data-theme='light']) .stat b.c-mint { color: #00805a; }
+  :global(html[data-theme='light']) .stat b.c-cyan { color: #0e7d8a; }
+  :global(html[data-theme='light']) .stat b.c-amber { color: #8a6a00; }
+  :global(html[data-theme='light']) .stat span { color: #5c7a6d; }
+  /* бегущая строка — светлая полоса */
+  :global(html[data-theme='light']) .marquee {
+    background: #e9f6ef;
+    border-color: #dcefe5;
+  }
+  :global(html[data-theme='light']) .tag { color: #5c7a6d; }
+  :global(html[data-theme='light']) .tag i { color: #00805a; }
+  /* секции */
+  :global(html[data-theme='light']) .sec.alt {
+    background: #ecf7f1;
+    border-color: #dcefe5;
+  }
+  :global(html[data-theme='light']) .sec h2 { color: #0b2b22; }
+  :global(html[data-theme='light']) .idx { color: #00805a; }
+  :global(html[data-theme='light']) .rule {
+    background: linear-gradient(90deg, #b9ddca, transparent);
+  }
+  :global(html[data-theme='light']) .sec-sub { color: #47685a; }
+  /* карточки: белые с мятной рамкой */
+  :global(html[data-theme='light']) .path-card,
+  :global(html[data-theme='light']) .mod-card {
+    background: #ffffff;
+    border-color: #cfe9dc;
+    color: #123b2e;
+    box-shadow: 0 4px 16px -12px rgba(9, 46, 33, 0.3);
+  }
+  :global(html[data-theme='light']) .path-card:hover {
+    border-color: rgba(0, 146, 103, 0.55);
+    background: #f6fdf9;
+  }
+  :global(html[data-theme='light']) .mod-card:hover { border-color: rgba(0, 146, 103, 0.55); }
+  :global(html[data-theme='light']) .mod-card.linked:hover { background: #f6fdf9; }
+  :global(html[data-theme='light']) .mod-head b { color: #0b2b22; }
+  :global(html[data-theme='light']) .mod-card p { color: #5c7a6d; }
+  :global(html[data-theme='light']) .path-card .num { color: #8a6a00; }
+  :global(html[data-theme='light']) .path-card .go,
+  :global(html[data-theme='light']) .mod-card .go { color: #00805a; }
+  :global(html[data-theme='light']) .mod-head .num {
+    color: #00805a;
+    border-color: rgba(0, 146, 103, 0.3);
+  }
+  /* развёртывание */
+  :global(html[data-theme='light']) .deploy-card {
+    background: linear-gradient(180deg, #ffffff, #f7fdfa);
+    border-color: #cfe9dc;
+  }
+  :global(html[data-theme='light']) .deploy-card::after {
+    background: radial-gradient(420px 170px at 85% -12%, rgba(0, 146, 103, 0.06), transparent 70%);
+  }
+  :global(html[data-theme='light']) .deploy-card:hover {
+    border-color: rgba(0, 146, 103, 0.5);
+    box-shadow: 0 18px 42px -26px rgba(9, 46, 33, 0.35);
+  }
+  :global(html[data-theme='light']) .deploy-card .dep-ico {
+    color: #00805a;
+    background: rgba(0, 146, 103, 0.08);
+    border-color: rgba(0, 146, 103, 0.25);
+  }
+  :global(html[data-theme='light']) .deploy-card .dep-ico.cyan {
+    color: #0e7d8a;
+    background: rgba(14, 125, 138, 0.08);
+    border-color: rgba(14, 125, 138, 0.25);
+  }
+  :global(html[data-theme='light']) .dep-head h3 { color: #0b2b22; }
+  :global(html[data-theme='light']) .dep-badge {
+    color: #5c7a6d;
+    border-color: #cfe9dc;
+  }
+  :global(html[data-theme='light']) .deploy-card p { color: #47685a; }
+  :global(html[data-theme='light']) .dep-flow span {
+    color: #123b2e;
+    border-color: #cfe9dc;
+    background: #f0faf5;
+  }
+  :global(html[data-theme='light']) .dep-flow i,
+  :global(html[data-theme='light']) .dep-flow em { color: #5c7a6d; }
+  :global(html[data-theme='light']) .dep-table { border-color: #cfe9dc; }
+  :global(html[data-theme='light']) .deploy-card th {
+    color: #5c7a6d;
+    background: #eaf6ef;
+  }
+  :global(html[data-theme='light']) .deploy-card td {
+    color: #1e3c31;
+    border-top-color: #e3f3ea;
+  }
+  :global(html[data-theme='light']) .rec.a {
+    color: #00805a;
+    background: rgba(0, 146, 103, 0.08);
+    border-color: rgba(0, 146, 103, 0.3);
+  }
+  :global(html[data-theme='light']) .rec.cname {
+    color: #0e7d8a;
+    background: rgba(14, 125, 138, 0.08);
+    border-color: rgba(14, 125, 138, 0.3);
+  }
+  :global(html[data-theme='light']) .auto {
+    color: #8a6a00;
+    border-color: rgba(138, 106, 0, 0.45);
+  }
+  :global(html[data-theme='light']) .hint { color: #5c7a6d; }
+  :global(html[data-theme='light']) .hint.api { color: #47685a; }
+  :global(html[data-theme='light']) .hint.api svg { color: #a07f00; }
+  /* скрытая панель */
+  :global(html[data-theme='light']) .hide-left .sec-sub { color: #47685a; }
+  :global(html[data-theme='light']) .url-card {
+    background: linear-gradient(180deg, #ffffff, #f7fdfa);
+    border-color: #cfe9dc;
+    box-shadow: 0 14px 34px -26px rgba(9, 46, 33, 0.4);
+  }
+  :global(html[data-theme='light']) .flabel { color: #5c7a6d; }
+  :global(html[data-theme='light']) .flabel svg { color: #00805a; }
+  :global(html[data-theme='light']) .url-break { color: #1e3c31; }
+  :global(html[data-theme='light']) .u-dim { color: #7d968a; }
+  :global(html[data-theme='light']) .u-cyan { color: #0e7d8a; }
+  :global(html[data-theme='light']) .u-mint { color: #00805a; }
+  :global(html[data-theme='light']) .u-violet { color: #6d4fd0; }
+  :global(html[data-theme='light']) .guard {
+    background: #f0faf5;
+    border-color: #cfe9dc;
+    color: #1e3c31;
+  }
+  :global(html[data-theme='light']) .guard svg { color: #00805a; }
+  :global(html[data-theme='light']) .check { color: #47685a; }
+  :global(html[data-theme='light']) .ck {
+    color: #00805a;
+    background: rgba(0, 146, 103, 0.08);
+    border-color: rgba(0, 146, 103, 0.3);
+  }
+  /* демо-браузер — тёмный экран панели, остаётся тёмным */
+  :global(html[data-theme='light']) .demo {
+    box-shadow: 0 20px 50px -32px rgba(9, 46, 33, 0.55);
+  }
+  /* сообщество */
+  :global(html[data-theme='light']) .comm-box {
+    background: linear-gradient(180deg, #ffffff, #f2faf6);
+    border-color: #cfe9dc;
+  }
+  :global(html[data-theme='light']) .comm-card {
+    background: #ffffff;
+    border-color: #cfe9dc;
+  }
+  :global(html[data-theme='light']) .comm-card:hover {
+    border-color: rgba(0, 146, 103, 0.5);
+    box-shadow: 0 18px 40px -22px rgba(0, 146, 103, 0.35);
+  }
+  :global(html[data-theme='light']) .comm-card b { color: #0b2b22; }
+  :global(html[data-theme='light']) .comm-card > span:not(.ico):not(.comm-go) { color: #5c7a6d; }
+  :global(html[data-theme='light']) .comm-go { color: #00805a; }
+  :global(html[data-theme='light']) .usdt-addr {
+    color: #8a6a00;
+    background: rgba(255, 216, 77, 0.1);
+    border-color: rgba(138, 106, 0, 0.25);
+  }
+  /* юридическая полоса */
+  :global(html[data-theme='light']) .legal-strip {
+    color: #8a6a00;
+    background: rgba(255, 216, 77, 0.08);
+    border-top-color: rgba(138, 106, 0, 0.22);
   }
 </style>

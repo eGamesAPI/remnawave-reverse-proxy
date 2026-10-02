@@ -92,10 +92,12 @@
   --sl-scrollbar-color: #009267 !important;
 
   --fb-body-color: #1e3c31 !important;
-  --fb-code-block-bg-color: #eef9f3 !important;
-  --fb-ec-caption-bg-color: #e3f5ed !important;
-  --fb-ec-caption-bb-color: #d7ece2 !important;
-  --fb-ec-language-color: #5c7a6d !important;
+  /* код-блоки — тёмные терминальные окна и в светлой теме: как и
+     Terminal.astro, это «экраны», они не светлеют вместе со страницей */
+  --fb-code-block-bg-color: #0a0f0c !important;
+  --fb-ec-caption-bg-color: #0b1510 !important;
+  --fb-ec-caption-bb-color: #172b21 !important;
+  --fb-ec-language-color: #6d8a7c !important;
   --fb-level-2-bg: #e3f5ed !important;
   --fb-sidebar-color-current-bg: rgba(0, 146, 103, 0.1) !important;
   --fb-sidebar-color-current-hover: rgba(0, 146, 103, 0.16) !important;
@@ -403,6 +405,13 @@ header::after {
   --galaxy-aside-border: #ffd84d4d !important;
   --galaxy-aside-code-bg: #ffd84d1a !important;
 }
+/* в светлой теме жёлтый #ffd84d теряется на бумаге — заголовок и рамка
+   уходят в тёмный янтарь, фон плашки остаётся жёлтым тоном */
+:root[data-theme='light'] .starlight-aside--caution {
+  --galaxy-aside-accent: #8a6a00 !important;
+  --galaxy-aside-border: rgba(138, 106, 0, 0.4) !important;
+  --galaxy-aside-bg: rgba(255, 216, 77, 0.12) !important;
+}
 
 /* Aside "danger" cards: command blocks keep the same near-black terminal
    background as regular code blocks (#010409), not the red tint. */
@@ -431,24 +440,52 @@ main .sl-markdown-content starlight-file-tree li::before {
 }
 
 /* ---------- Code blocks: brand terminal windows ---------- */
+/* Блоки — тёмные экраны в ОБОИХ темах (светлая страница + тёмное окно
+   терминала), поэтому рамка/тень/шапка ниже не делятся по темам */
 main .sl-markdown-content figure.frame {
-  border: 1px solid var(--sl-color-gray-5) !important;
+  border: 1px solid #1d3328 !important;
   border-radius: 12px !important;
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5) !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
-html[data-theme='dark'] main .sl-markdown-content figure.frame:hover {
-  border-color: color-mix(in srgb, var(--sl-color-accent) 30%, var(--sl-color-gray-5)) !important;
+main .sl-markdown-content figure.frame:hover {
+  border-color: color-mix(in srgb, var(--sl-color-accent) 30%, #1d3328) !important;
   box-shadow:
     0 12px 32px -14px rgba(0, 0, 0, 0.5),
     0 0 20px -6px rgba(0, 240, 176, 0.22) !important;
 }
+/* на светлой странице тень мягче и зеленее — тёмное окно не «дыра» */
+html[data-theme='light'] main .sl-markdown-content figure.frame {
+  box-shadow: 0 14px 34px -18px rgba(9, 46, 33, 0.45) !important;
+}
+html[data-theme='light'] main .sl-markdown-content figure.frame:hover {
+  box-shadow:
+    0 14px 34px -16px rgba(9, 46, 33, 0.45),
+    0 0 22px -8px rgba(0, 146, 103, 0.35) !important;
+}
+
+/* текст окна — терминальный в обеих темах: галактика красит его через
+   var(--sl-color-text), что в светлой теме даёт тёмный текст на тёмном экране */
+main .sl-markdown-content figure.frame pre {
+  background: #0a0f0c !important;
+  color: #e9f4ec !important;
+}
+/* заголовок окна (figcaption) тоже сидит на тёмной шапке всегда.
+   Галактика красит файловые заголовки через var(--sl-color-text)
+   с !important и обгоняет прямые перекрытия цвета — поэтому
+   переворачиваем саму переменную локально на шапке окна */
+main .sl-markdown-content figure.frame figcaption.header {
+  --sl-color-text: #b3ccbf !important;
+}
+main .sl-markdown-content figure.frame figcaption.header .title {
+  color: #b3ccbf !important;
+}
 
 /* shell blocks: traffic lights inside the native terminal header */
-html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal figcaption.header {
+main .sl-markdown-content figure.frame.is-terminal figcaption.header {
   position: relative;
 }
-html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal figcaption.header::before {
+main .sl-markdown-content figure.frame.is-terminal figcaption.header::before {
   content: '';
   position: absolute;
   inset-block: 0;
@@ -461,21 +498,21 @@ html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal figca
   background-repeat: no-repeat;
   pointer-events: none;
 }
-html[data-theme='dark'] main .sl-markdown-content figure.frame.is-terminal pre {
+main .sl-markdown-content figure.frame.is-terminal pre {
   border-radius: 0 0 11px 11px !important;
 }
 
-/* copy button: bordered chip, mint on hover */
+/* copy button: bordered chip on the dark screen, mint on hover */
 main .sl-markdown-content .copy-button {
-  border: 1px solid var(--sl-color-gray-5) !important;
-  background: color-mix(in srgb, var(--sl-color-bg) 72%, transparent) !important;
+  border: 1px solid #2a4737 !important;
+  background: rgba(10, 15, 12, 0.72) !important;
   border-radius: 8px !important;
-  color: var(--sl-color-gray-1) !important;
+  color: #b3ccbf !important;
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease !important;
 }
 main .sl-markdown-content .copy-button:hover {
-  color: var(--sl-color-accent) !important;
-  border-color: color-mix(in srgb, var(--sl-color-accent) 45%, transparent) !important;
+  color: #00f0b0 !important;
+  border-color: rgba(0, 240, 176, 0.45) !important;
 }
 
 /* ---------- Landing (главная страница вики) ---------- */
