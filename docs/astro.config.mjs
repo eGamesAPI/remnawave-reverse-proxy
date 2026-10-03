@@ -61,9 +61,17 @@ export default defineConfig({
 				},
 				},
 				{
-				tag: 'script',
-				content:
-					'window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()',
+					tag: 'script',
+					content:
+						'window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()',
+				},
+				// collapse toggle for the left sidebar (desktop): icon-only button
+				// pinned to the bottom of the pane (after the scrolling
+				// content), the class on <html> is restored before first paint
+				{
+					tag: 'script',
+					content:
+						'(function(){var k="rr-sb-collapsed";try{if(localStorage.getItem(k)==="1")document.documentElement.classList.add(k)}catch(e){}document.addEventListener("DOMContentLoaded",function(){var pane=document.querySelector("sl-sidebar-pane.sidebar-pane");if(!pane||pane.querySelector(".rr-sb-foot"))return;var b=document.createElement("button");b.type="button";b.className="rr-sb-foot";var ru=document.documentElement.lang==="ru";var label=ru?"Свернуть меню":"Collapse sidebar";b.setAttribute("aria-label",label);b.title=label;b.innerHTML=\'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>\';b.addEventListener("click",function(){var on=document.documentElement.classList.toggle(k);try{localStorage.setItem(k,on?"1":"0")}catch(e){}});pane.appendChild(b);});})();',
 				},
 			],
 			title: 'Remnawave Reverse-Proxy',

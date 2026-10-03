@@ -1,26 +1,27 @@
 ---
 title: Docker related issues
-description: Troubleshooting common Docker issues   
+description: 'Troubleshooting Docker: registry mirrors for servers in Russia and the Docker Hub pull rate limit.'
 ---
 
 import { Steps, LinkButton } from '@astrojs/starlight/components';
 
-## Adding mirrors for Docker
+The two most common problems with pulling Docker images, and their fixes.
 
-In some cases like [#40](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/40) servers, especially which are located in Russia, can't pull the images.  
-To fix this issue, you can add mirrors:
+## The server cannot pull images
+
+On some servers, especially in Russia, Docker Hub is unreachable and images do not download (see issue [#40](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/40)). The fix is registry mirrors.
 
 <Steps>
 
-1. Create `daemon.json` file:
+1. Create or open the `daemon.json` file:
 
     ```bash
     nano /etc/docker/daemon.json
     ```
 
-2. Import mirrors
+2. Paste the mirror configuration:
 
-    ```json
+    ```json title="daemon.json"
     {
     "log-driver": "local",
     "registry-mirrors": [
@@ -30,41 +31,47 @@ To fix this issue, you can add mirrors:
     }
     ```
 
-3. Restart Docker service to apply made changes
+3. Restart the Docker service:
 
     ```bash
     systemctl restart docker
+    ```
+
+4. Check that the mirrors were picked up:
+
+    ```bash
+    docker info | grep -A 3 "Registry Mirrors"
     ```
 
 </Steps>
 
 ## You have reached your unauthenticated pull rate limit
 
-If you see this message, it means you have exceeded the rate limit for unauthenticated requests to the Docker Hub. To resolve this issue, you can try one of the following solutions:
+This message means the download limit for anonymous requests to Docker Hub is exhausted. What you can do:
 
 <Steps>
 
-1. Authenticate with Docker Hub
-
-    Log in to your Docker Hub account using the Docker CLI:
+1. Log in to Docker Hub:
 
     ```bash
     docker login
     ```
 
-2. Use a Different Network
+    Authenticated requests are counted per account, not per server address.
 
-    If possible, try switching to a different network to see if the issue persists. Or just ask your hosting provider to explain it.
+2. Change the server's external address
+
+    The limit is tied to the IP: if the address is dynamic, restarting the server helps; otherwise ask your hoster about changing the address.
 
 3. Enable IPv6
 
-    Run the script and select "7. Manage IPv6" and enable IPv6 support. This can help bypass some rate limits in some cases.
+    Run `remnawave_reverse`, select item `9` (`Manage IPv6`), and enable IPv6 support. Downloads then go from a different address, and the limit often lets go.
 
 </Steps>
 
-## Unlisted issue
+## My problem is not listed here
 
-Feel free to report any related to our project issues in the [GitHub repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) or [Telegram](https://t.me/remnawave_reverse) chat.
+Feel free to report any issues related to our project in the [GitHub repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues) or the [Telegram](https://t.me/remnawave_reverse) chat.
 
 <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', gap: '1rem', textAlign: 'center' }}>
     <LinkButton

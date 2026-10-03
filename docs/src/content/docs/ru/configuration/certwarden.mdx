@@ -6,7 +6,7 @@ description: 'Установка Cert Warden: центральный серве�
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import CertwardenDiagram from '../../../../components/CertwardenDiagram.astro';
 
-**Cert Warden** хранит SSL-сертификаты в одном месте и раздаёт их серверам: сам получает и продлевает их по ACME (Let's Encrypt), а клиенты забирают файлы по API-ключам и перезапускают свои сервисы. Это удобно, когда доменов и серверов много: вместо certbot на каждой машине один сервер отвечает за все сертификаты.
+**Cert Warden** хранит SSL-сертификаты в одном месте и раздаёт их серверам: сам получает и продлевает их по ACME (Let's Encrypt), а клиенты забирают файлы по API-ключам и перезапускают свои сервисы. Это удобно, когда доменов и серверов много: за все сертификаты отвечает один сервер, certbot на каждом не нужен.
 
 <div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
   <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">

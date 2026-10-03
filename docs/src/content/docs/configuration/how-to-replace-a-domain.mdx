@@ -5,7 +5,31 @@ description: Step-by-step guide to replacing a domain in the Remnawave panel, in
 
 import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/starlight/components';
 
-This guide will help you change the current domain of the Remnawave panel (for example, olddomain.com) to a new one (for example, newdomain.com). You will learn how to generate a new SSL certificate and update configuration files. If you are using the panel together with a node, additional steps are provided at the end.
+This guide will help you change the current domain of the Remnawave panel (for example, `olddomain.com`) to a new one (for example, `newdomain.com`): issue an SSL certificate, update the configuration files, and move the addresses inside the panel. If the panel runs together with a node, extra steps wait at the end.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      DNS and certificate
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">An A record for the new domain and an SSL certificate through the script module (menu 10).</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Configuration files
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">`.env`, `docker-compose.yml`, and `nginx.conf` in `/opt/remnawave`.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Addresses in the panel (panel + node)
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">The node address, host address, and profile serverNames change through the web interface.</div>
+  </div>
+</div>
 
 ## Variant only panel
 

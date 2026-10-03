@@ -3,7 +3,7 @@ title: Monitoring with Grafana and Victoria Metrics
 description: How to set up monitoring with Grafana and Victoria Metrics
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 import GrafanaDiagram from '../../../components/GrafanaDiagram.astro';
 
@@ -56,9 +56,14 @@ Don't forget to add this server to the NetBird network, as this is how it is don
     mkdir -p /opt/monitoring/{cadvisor,nodeexporter,nginx,vmagent/conf.d} && cd /opt/monitoring && nano docker-compose.yml
     ```
 
-    Insert the following content and replace the fields with your own:
+</Steps>
 
-    ```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
+The web server configuration is your choice; paste your variant into `docker-compose.yml`:
+
+<Tabs>
+<TabItem label="Nginx">
+
+```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
     services:
       vmsingle:
         image: victoriametrics/victoria-metrics:v1.124.0
@@ -130,15 +135,16 @@ Don't forget to add this server to the NetBird network, as this is how it is don
         driver: bridge
         external: false
     ```
-3. Create `nginx.conf`:
 
-    ```bash
-    nano /opt/monitoring/nginx/nginx.conf
-    ```
+Create `nginx.conf`:
 
-4. Insert the following content:
+```bash
+nano /opt/monitoring/nginx/nginx.conf
+```
 
-    ```nginx title="nginx.conf" "yourdomain.com"
+Insert the following content:
+
+```nginx title="nginx.conf" "yourdomain.com"
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ecdh_curve X25519:prime256v1:secp384r1;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
@@ -166,13 +172,105 @@ Don't forget to add this server to the NetBird network, as this is how it is don
     }
     ```
 
-5. Run docker-compose
+</TabItem>
+<TabItem label="Caddy">
 
-    ```bash
-    docker compose up -d && docker compose logs -f -t
-    ```
+Instead of `grafana-nginx` we use a Caddy container: it obtains the domain certificate on its own, and port 80 must be free.
 
-</Steps>
+```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
+services:
+  vmsingle:
+    image: victoriametrics/victoria-metrics:v1.124.0
+    container_name: vmsingle
+    hostname: vmsingle
+    restart: unless-stopped
+    volumes:
+      - ./victoria-metrics-data:/victoria-metrics-data
+    command:
+      - '--storageDataPath=/victoria-metrics-data'
+    networks:
+      - grafana-network
+    ports:
+      - IP:8428:8428 # Here we specify the NetBird address (in this case the Grafana server)
+
+  grafana:
+    image: grafana/grafana:12.2.0-17027759091
+    container_name: grafana
+    hostname: grafana
+    restart: unless-stopped
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SERVER_DOMAIN=yourdomain.com
+      - GF_SERVER_ROOT_URL=https://grafana.yourdomain.com/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_SERVER_PROTOCOL=http
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    networks:
+      - grafana-network
+
+  xray-checker:
+    image: kutovoys/xray-checker
+    container_name: xray-checker
+    hostname: xraychecker
+    restart: unless-stopped
+    environment:
+      - "SUBSCRIPTION_URL=https://subscription_link"
+      - "PROXY_STATUS_CHECK_URL=http://google.com/generate_204"
+      - "PROXY_CHECK_INTERVAL=60"
+    ports:
+      - 127.0.0.1:2112:2112
+    networks:
+      - grafana-network
+
+  grafana-caddy:
+    image: caddy:2.10
+    container_name: grafana-caddy
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks:
+      - grafana-network
+
+volumes:
+  grafana-data:
+  caddy_data:
+
+networks:
+  grafana-network:
+    name: grafana-network
+    driver: bridge
+    external: false
+```
+
+Create the `Caddyfile` next to the compose:
+
+```bash
+nano /opt/monitoring/Caddyfile
+```
+
+```caddyfile title="Caddyfile" "yourdomain.com"
+grafana.yourdomain.com {
+    reverse_proxy /grafana* grafana:3000
+}
+```
+
+</TabItem>
+</Tabs>
+
+Run docker-compose:
+
+```bash
+docker compose up -d && docker compose logs -f -t
+```
 
 ## Installation and configuration of the Grafana server
 

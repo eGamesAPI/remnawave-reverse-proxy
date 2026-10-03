@@ -1,56 +1,159 @@
 ---
 title: External access to API
-description: How to configure external access to the API
+description: 'How to expose the Remnawave panel API through nginx or Caddy and pass the cookie gate, TinyAuth, or Caddy MFA from external clients.'
 ---
 
-## Modifying Nginx Configuration for External API Access
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Add the following to `nginx.conf` in the server block for the panel domain `server_name panel.domen.com;`
+The Remnawave panel can serve its API to external clients: bots, management panels, statistics tools. By default the script hides everything behind the cookie gate or a login page, so only what you open yourself goes outside: one `location` in nginx.conf, and from then on every request passes the same protection as the browser, plus the panel token (`Settings → API tokens`).
 
-```
-location ^~ /api/ {
-    proxy_http_version 1.1;
-    proxy_pass http://remnawave;
-    proxy_set_header Host $host;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header X-Forwarded-Port $server_port;
-    proxy_send_timeout 60s;
-    proxy_read_timeout 60s;
-}
-```
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Step 1. Public path
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">The <code>/api/</code> route in nginx.conf or the Caddyfile: the API goes public, the panel token stays.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Step 2. Your login method
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">A cookie, the TinyAuth login page, or a Caddy key: whatever was chosen at panel installation.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Token everywhere
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85"><code>Authorization: Bearer …</code> travels in every request regardless of the login method.</div>
+  </div>
+</div>
 
-This opens access to the API from the outside, while the API will still be protected by an authorization token.
+## Opening the API to the outside
 
-:::danger
-Remnawave 3.x no longer has an `IS_DOCS_ENABLED` switch: the API docs live behind `/api/backend-tools`, which the panel gates with a cookie signed by `APP_SECRET`. Keep that path closed on your reverse proxy if you do not want it reachable from outside.
+<Tabs>
+<TabItem label="Nginx">
+
+The block is the same for every install type ("panel only" and "panel + node").
+
+<Steps>
+
+1. Open the nginx configuration:
+
+    ```bash
+    nano /opt/remnawave/nginx.conf
+    ```
+
+2. In the server block with the panel domain (`server_name panel.example.com;`) add a `location`: it takes `/api/` out from under the cookie check and hands requests straight to the panel:
+
+    ```nginx title="nginx.conf"
+    location ^~ /api/ {
+        proxy_http_version 1.1;
+        proxy_pass http://remnawave;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    ```
+
+3. Restart the web server so the configuration applies:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-nginx
+    ```
+
+4. Check that it answers from the outside (a request without a token must return an authorization error, not a timeout):
+
+    ```bash "panel.example.com"
+    curl -i https://panel.example.com/api/nodes
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Caddy">
+
+Caddy comes in two flavors, and the API works differently in each.
+
+**MFA portal (caddy-with-auth).** Nothing to add: the `route /api/*` path is already open in the stock Caddyfile. The API is protected by its own token, panel login stays behind the portal, and programmatic clients use the `X-Api-Key` (see the "MFA portal" way below).
+
+**Cookie gate.** The API is closed together with the panel: a request without the cookie runs into an `abort`. To open it, add a separate route.
+
+<Steps>
+
+1. Open the Caddyfile:
+
+    ```bash
+    nano /opt/remnawave/Caddyfile
+    ```
+
+2. Inside the `https://{$PANEL_DOMAIN}` block add a route at the top, before the `@has_token_param` and `@unauthorized` matchers:
+
+    ```caddyfile title="Caddyfile"
+    route /api/* {
+        reverse_proxy {$BACKEND_URL} {
+            header_up X-Real-IP {remote}
+            header_up Host {host}
+        }
+    }
+    ```
+
+3. Restart Caddy:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-caddy
+    ```
+
+4. Check that it answers from the outside (a request without a token must return an authorization error, not a timeout):
+
+    ```bash "panel.example.com"
+    curl -i https://panel.example.com/api/nodes
+    ```
+
+</Steps>
+
+</TabItem>
+</Tabs>
+
+:::danger[Important]
+Remnawave 3.x no longer has an `IS_DOCS_ENABLED` switch: the API docs live behind `/api/backend-tools`, which the panel gates with a cookie signed by `APP_SECRET`. If you do not want them reachable from outside, keep that path closed on your reverse proxy.
 :::
 
-## Accessing API through cookies
+## Passing the protection
 
-### Acquiring cookie
+From here everything depends on how the panel is protected, chosen at installation. The panel token (`Authorization: Bearer …`) travels in every request on top of any of the options below.
 
-Open nginx.conf and search for `map $http_cookie $auth_cookie`. We'll need the values that go after `*`, i.e. for
+<Tabs>
+<TabItem label="Cookie gate">
 
-```
+### Getting the cookie
+
+The script generates a random `NAME=VALUE` pair. Open `nginx.conf` and find the `map $http_cookie $auth_cookie` line; your data is the value after `~*`:
+
+```nginx
 map $http_cookie $auth_cookie {
-default 0;
-"~*aEmFnBcC=WbYWpixX" 1;
+    default 0;
+    "~*zIdejKtN=MWbLrRzx" 1;
 }
 ```
 
-our cookies will be `aEmFnBcC=WbYWpixX`.
+Here the cookie is `zIdejKtN=MWbLrRzx`.
 
-### Sending the cookies in header
+### Sending the cookie in a header
 
-Using the HTTP client `httpx` and the `COOKIES` entry in your project's `.env` file as an example, let's look at sending cookies in the header:
+Using the HTTP client `httpx` and the `COOKIES` entry in your project's `.env` as an example:
 
-```json
-COOKIES={"aEmFnBcC":"WbYWpixX"}
+```json title=".env"
+COOKIES={"zIdejKtN":"MWbLrRzx"}
 ```
 
 ```python
@@ -70,21 +173,26 @@ async def get_all_nodes():
     return response.json()
 ```
 
-## Accessing the API when a login page is enabled
+A quick curl check:
 
-If the panel was installed with a login page instead of the cookie gate (TinyAuth for Nginx, or the caddy-with-auth portal for Caddy), the API is gated too. Login-page credentials go in the separate `X-Api-Key` header, while `Authorization` with your panel token passes through untouched — both headers travel in the same request.
+```bash "panel.example.com"
+curl -b "zIdejKtN=MWbLrRzx" -H "Authorization: Bearer <token>" https://panel.example.com/api/nodes
+```
 
-### Login page (TinyAuth, Nginx)
+</TabItem>
+<TabItem label="Login page (TinyAuth, Nginx)">
 
-The `X-Api-Key` carries the TinyAuth credentials as `Basic base64(username:password)`. Build the pair with:
+Login-page credentials go in the separate `X-Api-Key` header, while `Authorization` with your panel token passes through to the API untouched; both headers travel in the same request.
+
+`X-Api-Key` carries the TinyAuth credentials as `Basic base64(username:password)`. Build the pair with:
 
 ```bash
 printf '%s' 'username:password' | base64
 # dXNlcm5hbWU6cGFzc3dvcmQ=
 ```
 
-:::caution
-Keep the `'%s'` format as the first argument. A bare `printf 'username:password'` treats the string as a format: any `%` in the password becomes a format specifier and the resulting base64 is garbage.
+:::caution[Common mistake]
+Write exactly `printf '%s' 'username:password'`, with the format as the first argument. Without it, `printf 'username:password'` treats the string as a format: any `%` in the password becomes a format specifier and the resulting base64 is garbage.
 :::
 
 Resulting request headers:
@@ -96,7 +204,14 @@ Resulting request headers:
 }
 ```
 
-### Caddy with MFA (caddy-with-auth)
+A quick curl check:
+
+```bash "panel.example.com"
+curl -H "X-Api-Key: Basic dXNlcm5hbWU6cGFzc3dvcmQ=" -H "Authorization: Bearer <token>" https://panel.example.com/api/nodes
+```
+
+</TabItem>
+<TabItem label="MFA portal (Caddy)">
 
 The key is issued by the portal itself at `https://<panel domain>/r/settings/apikeys` (the "API Keys" link). Send it as is, without the Basic wrapper:
 
@@ -107,9 +222,18 @@ The key is issued by the portal itself at `https://<panel domain>/r/settings/api
 }
 ```
 
-### Standalone subscription page
+A quick curl check:
 
-The "subscription page only" install asks how the panel is protected and fills everything in for you: with TinyAuth you just enter the login page username and password — the installer assembles the base64 pair itself.
+```bash "panel.example.com"
+curl -H "X-Api-Key: <portal-issued key>" -H "Authorization: Bearer <token>" https://panel.example.com/api/nodes
+```
+
+</TabItem>
+</Tabs>
+
+## Standalone subscription page
+
+The "subscription page only" install asks how the panel is protected and fills everything in for you: with TinyAuth you just enter the login page username and password, the installer assembles the base64 pair itself.
 
 | Panel protection | What the installer asks | Variable in the sub page compose |
 |---|---|---|
@@ -117,6 +241,6 @@ The "subscription page only" install asks how the panel is protected and fills e
 | Login page (TinyAuth) | username and password | `CADDY_AUTH_API_TOKEN=Basic base64(...)` |
 | Caddy with MFA | the login page API key | `CADDY_AUTH_API_TOKEN=<key>` |
 
-:::note
-Whatever goes into `X-Api-Key` is panel access: when the portal password changes or the panel is reinstalled, remember to update it everywhere it is used — including the subscription page compose.
+:::note[Important]
+Whatever goes into `X-Api-Key` is panel access: when the portal password changes or the panel is reinstalled, remember to update it everywhere it is used, including the subscription page compose.
 :::

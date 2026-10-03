@@ -1,7 +1,7 @@
 {
   "name": "docs",
   "type": "module",
-  "version": "v3.7.0",
+  "version": "v3.7.1",
   "scripts": {
     "sync-version": "node sync-version.mjs",
     "predev": "node sync-version.mjs",

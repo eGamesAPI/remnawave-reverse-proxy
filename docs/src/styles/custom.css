@@ -172,10 +172,18 @@ html[data-theme='dark'] .sl-markdown-content a:hover {
   text-decoration-color: var(--sl-color-accent);
 }
 
-/* Sidebar: the open page gets a mint wash + left marker bar */
+/* Sidebar: the open page gets ONE highlight — mint wash + mint text.
+   Galaxy adds a solid ::before bar and tints the parent li's indent line
+   with the accent color on top of the wash — remove both markers */
 .sidebar-content a[aria-current='page'] {
   background: color-mix(in srgb, var(--sl-color-accent) 9%, transparent) !important;
-  box-shadow: inset 2px 0 0 var(--sl-color-accent) !important;
+  box-shadow: none !important;
+}
+.sidebar-content a[aria-current='page']::before {
+  display: none !important;
+}
+.sidebar-content ul ul li:has(> a[aria-current='page']) {
+  border-inline-start-color: var(--sl-color-hairline) !important;
 }
 
 /* Sidebar: terminal-style section groups (`// УСТАНОВКА`) */
@@ -414,12 +422,12 @@ header::after {
 }
 
 /* Aside "danger" cards: command blocks keep the same near-black terminal
-   background as regular code blocks (#010409), not the red tint. */
+   background as regular code blocks (#0a0f0c), not the red tint. */
 .starlight-aside--danger {
-  --galaxy-aside-code-bg: #010409 !important;
+  --galaxy-aside-code-bg: #0a0f0c !important;
 }
 .starlight-aside--danger pre {
-  background: #010409 !important;
+  background: #0a0f0c !important;
   border: none !important;
 }
 
@@ -441,10 +449,13 @@ main .sl-markdown-content starlight-file-tree li::before {
 
 /* ---------- Code blocks: brand terminal windows ---------- */
 /* Блоки — тёмные экраны в ОБОИХ темах (светлая страница + тёмное окно
-   терминала), поэтому рамка/тень/шапка ниже не делятся по темам */
+   терминала), поэтому рамка/тень/шапка ниже не делятся по темам.
+   overflow: hidden клиппит шапку и экран в кривую рамки — без него
+   шапка со своим радиусом 7.4px перекрывала угол рамки 12px */
 main .sl-markdown-content figure.frame {
   border: 1px solid #1d3328 !important;
   border-radius: 12px !important;
+  overflow: hidden !important;
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5) !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -481,21 +492,70 @@ main .sl-markdown-content figure.frame figcaption.header .title {
   color: #b3ccbf !important;
 }
 
-/* shell blocks: traffic lights inside the native terminal header */
+/* shell blocks: хром окна повторяет .term из Terminal.astro — шапка тем же
+   цветом, что экран (без шва), без своих бордеров и радиуса (углы клиппит
+   рамка), заголовок слева сразу после светофора */
 main .sl-markdown-content figure.frame.is-terminal figcaption.header {
   position: relative;
+  justify-content: flex-start !important;
+  padding-block: 10px !important;
+  padding-inline: 0 !important;
+  padding-inline-start: 69px !important;
+  background: #0b1510 !important;
+  border: none !important;
+  border-bottom: 1px solid #1d3328 !important;
+  border-radius: 0 !important;
+  /* галактика красит шапку своей !important-переменной (layer-инверсия
+     перебивает прямое background) — переворачиваем саму переменную */
+  --fb-ec-caption-bg-color: #0b1510 !important;
+  --fb-ec-caption-bb-color: #1d3328 !important;
+  --ec-frm-trmTtbBrdBtmCol: transparent !important;
 }
+/* EC рисует под шапкой свою серую линию (::after с бордером) — её работу
+   делает border-bottom шапки выше, цветом как в .term .bar */
+main .sl-markdown-content figure.frame.is-terminal figcaption.header::after {
+  border: none !important;
+}
+main .sl-markdown-content figure.frame.is-terminal figcaption.header .title {
+  display: none !important;
+}
+/* видимый заголовок окна: EC держит «Terminal window» в .sr-only
+   (1×1px + clip) — раскрываем его в подпись слева после светофора,
+   как .ttl в .term */
+main .sl-markdown-content figure.frame.is-terminal figcaption.header .sr-only {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  clip: auto !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  color: #5e7d6f !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+/* светофор: настоящие круги, как .dot в .term — один 11px-круг
+   + два box-shadow на +18px и +36px (шаг = точка 11px + зазор 7px).
+   Градиентные круги дают ломаный край на антиалиасинге, box-shadow
+   рендерится тем же путём, что border-radius у .dot.
+   Наследие EC сбрасывается явно: маска 60×16 с opacity 0.15 и светлый
+   background-color иначе режут точки */
 main .sl-markdown-content figure.frame.is-terminal figcaption.header::before {
   content: '';
   position: absolute;
-  inset-block: 0;
-  left: 0;
-  width: 84px;
-  background-image:
-    radial-gradient(circle at 18px 50%, #ff5f56 5px, transparent 5.5px),
-    radial-gradient(circle at 40px 50%, #ffbd2e 5px, transparent 5.5px),
-    radial-gradient(circle at 62px 50%, #27c93f 5px, transparent 5.5px);
-  background-repeat: no-repeat;
+  top: 50%;
+  left: 14px;
+  width: 11px;
+  height: 11px;
+  transform: translateY(-50%);
+  border-radius: 50% !important;
+  background-color: #ff5f56 !important;
+  background-image: none !important;
+  box-shadow: 18px 0 0 0 #ffbd2e, 36px 0 0 0 #27c93f;
+  opacity: 1 !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+  line-height: normal !important;
   pointer-events: none;
 }
 main .sl-markdown-content figure.frame.is-terminal pre {
@@ -654,5 +714,82 @@ html[data-has-hero] main footer {
     font-size: 11px;
     line-height: 1.55;
     padding: 12px 14px;
+  }
+}
+
+/* ---------- Collapsible left sidebar (desktop, docs.rw pattern) ---------- */
+/* Icon-only toggle pinned to the BOTTOM of the sidebar (pane flow, after
+   the scrolling content): expanded — icon centered in the full-width
+   strip, collapsed — the same centered icon in the 30px rail. The text
+   lives in aria-label only */
+.rr-sb-foot {
+  display: none;
+}
+@media (min-width: 50rem) {
+  sl-sidebar-pane.sidebar-pane {
+    display: flex !important;
+    flex-direction: column;
+    /* the pane no longer scrolls itself (.sidebar-content does), so its
+       stable scrollbar gutter must not steal width from the button strip */
+    overflow: hidden;
+    scrollbar-gutter: auto;
+    transition: width 0.25s ease;
+  }
+  sl-sidebar-pane.sidebar-pane .sidebar-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  .rr-sb-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-top: 1px solid var(--sl-color-hairline-shade);
+    background: var(--sl-color-bg-sidebar);
+    color: var(--sl-color-gray-3);
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  .rr-sb-foot:hover,
+  .rr-sb-foot:focus-visible {
+    color: var(--sl-color-accent);
+  }
+  .main-frame {
+    transition: padding-inline-start 0.25s ease;
+  }
+  html.rr-sb-collapsed sl-sidebar-pane.sidebar-pane {
+    width: 30px !important;
+  }
+  html.rr-sb-collapsed sl-sidebar-pane.sidebar-pane .sidebar-content {
+    visibility: hidden;
+  }
+  html.rr-sb-collapsed .main-frame {
+    padding-inline-start: 30px !important;
+  }
+  html.rr-sb-collapsed .rr-sb-foot {
+    /* docs.rw: в свёрнутом рельсе кнопка растянута на весь рельс —
+     * клик в любое место полосы разворачивает меню; иконка в центре */
+    position: absolute;
+    inset-block: 0;
+    inset-inline: 0;
+    /* height/width из базового правила перебивают inset-растяжение */
+    height: auto;
+    width: auto;
+    border-top: none;
+  }
+  html.rr-sb-collapsed .rr-sb-foot svg {
+    transform: rotate(180deg);
+  }
+}
+@media print {
+  .rr-sb-foot {
+    display: none !important;
   }
 }

@@ -1,37 +1,127 @@
 ---
 title: Access to Prometheus metrics
+description: 'Remnawave panel metrics: where the connection data lives, how to check the endpoint, and how to set up scraping with vmagent or Prometheus.'
 ---
 
-## In the original installation
+import { FileTree, LinkCard } from '@astrojs/starlight/components';
 
-Prometheus metrics are available on port 3001 with basic HTTP authentication:
+The Remnawave panel exposes metrics in Prometheus format on a dedicated port `3001`. During installation the script generates a random login and password for them and binds the port to localhost: the address is not reachable from outside the server, which keeps the metrics away from strangers.
 
-```yaml
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Login data
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">The <code>### PROMETHEUS ###</code> section in <code>/opt/remnawave/.env</code>, generated at installation.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Metrics address
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85"><code>http://127.0.0.1:3001/metrics</code> with basic HTTP authentication.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Access
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Localhost only: the port in <code>docker-compose.yml</code> is bound to <code>127.0.0.1</code>.</div>
+  </div>
+</div>
+
+## Connection data
+
+The script generates a random login and password and writes them into the panel's `.env`:
+
+```bash title=".env" "gjlToiPH" "VsCNutHF"
+### PROMETHEUS ###
+### Metrics are available at http://127.0.0.1:METRICS_PORT/metrics
+METRICS_USER=gjlToiPH
+METRICS_PASS=VsCNutHF
+```
+
+The file lives at `/opt/remnawave/.env`; the panel container picks the values up automatically.
+
+| Variable | Purpose | Script value |
+| :-- | :-- | :-- |
+| `APP_PORT` | Panel port | `3000` (inside Docker only) |
+| `METRICS_PORT` | Metrics port | `3001`, bound to `127.0.0.1` |
+| `METRICS_USER` | Metrics login | random |
+| `METRICS_PASS` | Metrics password | random |
+| `APP_SECRET` | Signing key for sessions and API tokens | random |
+
+:::note[If the panel was installed without the script]
+In the original Remnawave installation the default values are `admin` and `change_me`. Change them before using the metrics.
+:::
+
+## Quick check
+
+On the server itself the metrics are one command away (the response is in Prometheus text format):
+
+```bash "gjlToiPH" "VsCNutHF"
+curl -u gjlToiPH:VsCNutHF http://127.0.0.1:3001/metrics | head
+```
+
+From your own computer the endpoint can be reached through an SSH tunnel, without opening the port to the world:
+
+```bash
+ssh -L 3001:127.0.0.1:3001 root@your_server_ip
+```
+
+After that `http://127.0.0.1:3001/metrics` also opens in the local browser.
+
+## Scraper configuration
+
+The metrics must be pulled from the server itself, straight from `127.0.0.1`. A config for vmagent (the one the monitoring guide uses):
+
+```yaml title="vmagent/conf.d/remnawave.yml" "your_instance_name"
+- job_name: remnawave
+  scrape_interval: 15s
+  static_configs:
+    - targets: ['127.0.0.1:3001']
+      labels:
+        instance: "your_instance_name"
+  basic_auth:
+    username: "gjlToiPH"
+    password: "VsCNutHF"
+```
+
+For classic Prometheus the section looks the same:
+
+```yaml title="prometheus.yml"
 scrape_configs:
   - job_name: 'remnawave'
     scheme: http
     metrics_path: /metrics
+    scrape_interval: 15s
     static_configs:
-      - targets: ['remnawave:3001']
+      - targets: ['127.0.0.1:3001']
     basic_auth:
-      username: admin
-      password: change_me
+      username: gjlToiPH
+      password: VsCNutHF
 ```
 
-## In the eGames's script
+:::tip
+Full monitoring guide: Victoria Metrics for storage, Grafana for dashboards, node_exporter and cAdvisor for servers.
+:::
 
-Access to Prometheus metrics is also protected by a cookie system, which means:
+## Why the metrics are not visible from outside
 
-- **Local access**: Possible directly via `http://127.0.0.1:3001/metrics`
-- **External access**: Blocked without the correct cookie set
+The script publishes the metrics port on localhost only:
 
+```yaml title="docker-compose.yml"
+ports:
+  - '127.0.0.1:3001:3001'
+```
 
-### Environment Variables Configuration
+Direct access from outside is therefore impossible, and, unlike the panel login page, it cannot be bypassed with a cookie: the metrics have their own protection (port binding plus basic auth). There are two ways to pull them from the outside: an agent running on the server itself (vmagent or Prometheus with `remote_write`), or the SSH tunnel shown above.
 
-| Variable | Purpose | Default Value |
-| :-- | :-- | :-- |
-| `APP_PORT` | Panel port | 3000 |
-| `METRICS_PORT` | Metrics port | 3001 |
-| `METRICS_USER` | Metrics user | admin |
-| `METRICS_PASS` | Metrics password | change_me |
-| `APP_SECRET` | Signing key for sessions and API tokens | change_me |
+:::note[Xray Checker metrics]
+If the Xray Checker module is installed, its metrics live separately at `http://127.0.0.1:2112/metrics` (reachable from the server or over an SSH tunnel) and are scraped the same way.
+:::
+
+---
+
+<LinkCard title="Monitoring with Grafana and Victoria Metrics" href="/configuration/grafana-monitoring-setup/" description="A complete monitoring set: metrics from the panel, nodes and containers, plus Grafana dashboards." />

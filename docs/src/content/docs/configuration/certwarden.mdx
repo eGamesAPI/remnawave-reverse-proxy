@@ -3,7 +3,7 @@ title: Guide to install and configure Cert Warden
 description: Instructions for installing and configuring Cert Warden — a centralized server for managing SSL/TLS certificates.
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 import CertwardenDiagram from '../../../components/CertwardenDiagram.astro';
 
@@ -80,7 +80,10 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
     cd /opt/certwarden && docker compose up -d && docker compose logs -f
     ```
 
-3. Add Cert Warden to `nginx.conf` panel Remnawave
+3. Add Cert Warden to the panel web server so its interface is available on its own domain:
+
+    <Tabs>
+    <TabItem label="Nginx">
 
     ```bash
     cd /opt/remnawave && nano nginx.conf
@@ -116,13 +119,39 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
     }
     ```
 
-4. Restart nginx:
+    Restart nginx:
 
     ```bash
     cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
     ```
 
-5. Open your browser and go to the link
+    </TabItem>
+    <TabItem label="Caddy">
+
+    ```bash
+    cd /opt/remnawave && nano Caddyfile
+    ```
+
+    Add the Cert Warden site at the end of the file:
+
+    ```caddyfile title="Caddyfile" "yourdomain.com"
+    certwarden.yourdomain.com {
+        reverse_proxy 127.0.0.1:4050
+    }
+    ```
+
+    Caddy obtains the certificate for this domain on its own, just like for the panel.
+
+    Restart Caddy:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-caddy
+    ```
+
+    </TabItem>
+    </Tabs>
+
+4. Open your browser and go to the link
     
     ::::danger[Important]
     Don't forget to add a DNS record for your domain in Cloudflare
@@ -132,7 +161,7 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
     https://certwarden.yourdomain.com
     ```
 
-6. Login to the system using the login admin and password password
+5. Login to the system using the login admin and password password
 
     <div style={{ display: 'flex', justifyContent: 'center' }}>
       <img 
@@ -142,11 +171,11 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
       />
     </div>
 
-7. We will be redirected to the main page
+6. We will be redirected to the main page
 
     ![Cert Warden dashboard](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_dashboard.png)
 
-8. Go to the `Settings` section and change our current password
+7. Go to the `Settings` section and change our current password
 
 </Steps>
 

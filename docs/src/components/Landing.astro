@@ -1180,7 +1180,8 @@ const PLAY = JSON.stringify({
     font-size: clamp(1.45rem, 3vw, 2.05rem);
     color: #eef7f0; margin: 0 0 1.1rem;
   }
-  .idx { color: #00e5a0; font-size: 0.85em; letter-spacing: 0.02em; }
+  /* nowrap: на узких экранах «]» у [ 04 ] не должен переноситься отдельно */
+  .idx { color: #00e5a0; font-size: 0.85em; letter-spacing: 0.02em; white-space: nowrap; }
   .rule { flex: 1; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #2a4737, transparent); }
   .sec-sub { color: #a9c0b0; line-height: 1.7; max-width: 46em; margin: 0 0 2.1rem; }
   .dns-hint { font-size: 0.8rem; color: #7f9d8e; margin-top: 0.9rem; }

@@ -1,6 +1,6 @@
 ---
 title: Мониторинг через Grafana и Victoria Metrics
-description: Как настроить мониторинг через интеллектуальный стек
+description: Как настроить мониторинг через Grafana и Victoria Metrics
 ---
 
 import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -8,7 +8,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 
 Автор: **[pluralplay](../../contribution/resources#pluralplay)**, **[kutovoys](../../contribution/resources#kutovoys)**  
-Развертывание стека мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами.
+Состав мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами.
 
 <div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
   <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
@@ -40,7 +40,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 
 - Grafana - это инструмент, который преобразует различные формы метрик, полученных от Victoria Metrics, в визуальные формы для аналитического и системного мониторинга.
 
-- Victoria Metrics (VMetrics) - это непосредственно система сбора и хранения метрик со всех машин, полученных от агента, а vmagent - доставщик этих метрик в vmetrics.
+- Victoria Metrics (VMetrics) сама собирает и хранит метрики со всех серверов, а vmagent доставляет их в VMetrics.
 
 - Node Exporter - инструмент сбора метрик. Он собирает информацию о различных ресурсах узла, таких как загрузка процессора, использование памяти, дисковый ввод-вывод, сетевая статистика и другие.
 
@@ -74,7 +74,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
     curl -fsSL https://get.docker.com | sh
     ```
 
-2. Создаем директории для стека:
+2. Создаем директории для мониторинга:
 
     ```bash
     mkdir -p /opt/monitoring/{cadvisor,nodeexporter,nginx,vmagent/conf.d} && cd /opt/monitoring && nano docker-compose.yml

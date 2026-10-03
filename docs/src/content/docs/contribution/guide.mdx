@@ -5,63 +5,70 @@ description: How to contribute to the Remnawave Reverse-proxy project
 
 import { Steps, LinkButton, FileTree } from '@astrojs/starlight/components';
 
-## Installing Node.js and npm
+The wiki lives in the repository's `docs` folder and is built with Astro Starlight. Below is the whole path from a fresh server to a submitted pull request.
 
-To contribute to the Remnawave Reverse-proxy project, you need to have Node.js and npm installed on your system. You can download and install them from the [Node.js official website](https://nodejs.org/en/download/).
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Step 1. Environment
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Node.js with npm and git. Everything installs from the official sites.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Step 2. Local run
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Clone, install, and a dev server on `localhost:4321` with hot reload.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Step 3. Edits and PR
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Branch, commit, push, and a pull request. Russian pages sit next to the English ones.</div>
+  </div>
+</div>
 
-## Installing git
+## Installing Node.js and git
 
-If you haven't already, install git on your system. You can find installation instructions on the [git official website](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) and downloads page on [git-scm.com](https://git-scm.com/downloads).
+Node.js with npm are needed to build the documentation: download them from the [official Node.js website](https://nodejs.org/en/download/). Git installation instructions live on [git-scm.com](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git).
 
-## Cloning the Repository
+## Cloning and running
 
 <Steps>
 
-1. To get started, clone the Remnawave Reverse-proxy repository to your local machine.
+1. Clone the repository:
 
     ```bash
     git clone https://github.com/eGamesAPI/remnawave-reverse-proxy
     ```
 
-2. Navigate to the project directory
+2. Go to the documentation directory and install the dependencies:
 
     ```bash
     cd remnawave-reverse-proxy/docs
-    ```
-
-</Steps>
-
-## Installing Dependencies
-
-<Steps>
-
-1. Before you can build the documentation, you need to install the necessary dependencies. Run the following command in the `docs` directory.
-
-    ```bash
     npm install
     ```
 
-2. To build the documentation locally, run:
+3. Start the dev server:
 
     ```bash
     npm run dev
     ```
 
+    The documentation opens at `http://localhost:4321`; changes are picked up on the fly.
+
 </Steps>
 
-This will start a local development server, and you can view the documentation at `http://localhost:4321`.
+## Where everything lives
 
-## ✨ Starlight included Documentation
-
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
-
-### 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
+English pages live in `src/content/docs/`, Russian ones in `src/content/docs/ru/` under the same paths. When editing a page, check its counterpart in the other language.
 
 <FileTree>
 
-- **docs** documentation source files
+- **docs** documentation root directory
     - public/
     - src
         - assets/
@@ -70,7 +77,7 @@ Inside of your Astro + Starlight project, you'll see the following folders and f
         - components/
         - **content/docs** root (en) documentation files
             - index.mdx
-            - **ru/** i18n files
+            - **ru/** Russian pages, same paths
                 - index.mdx
         - styles/
         - content.config.ts
@@ -80,35 +87,53 @@ Inside of your Astro + Starlight project, you'll see the following folders and f
 
 </FileTree>
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+Starlight looks for `.md` and `.mdx` files in `src/content/docs/`: every file becomes a page at its own path. Images go into `src/assets/` and are embedded with a relative link; static files like favicons live in `public/`.
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+## Commands
 
-Static assets, like favicons, can be placed in the `public/` directory.
-
-### 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
+All commands run from the `docs` directory:
 
 | Command                   | Action                                           |
 | :------------------------ | :----------------------------------------------- |
 | `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+| `npm run dev`             | Starts a local server at `localhost:4321`        |
+| `npm run build`           | Builds the site into `./dist/`                   |
+| `npm run preview`         | Shows the build locally before deploying         |
+| `npm run astro ...`       | Runs CLI commands, for example `astro check`     |
 
-### 👀 Want to learn more?
+## Sending changes
 
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+<Steps>
 
-<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', textAlign: 'center' }}>
-    <LinkButton
-        href="https://starlight.astro.build"
-        icon="open-book"
-        iconPlacement="start"
-    >
-        Go to Documentation
-    </LinkButton>
+1. Create a branch for your change:
+
+    ```bash
+    git checkout -b my-change
+    ```
+
+2. Make the changes and commit them:
+
+    ```bash
+    git add . && git commit -m "docs: my change"
+    ```
+
+3. Push the branch and open a pull request in the [repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/pulls):
+
+    ```bash
+    git push -u origin my-change
+    ```
+
+</Steps>
+
+After review we will merge the change, and it will appear on [wiki.egam.es](https://wiki.egam.es). Questions are welcome in the [Telegram chat](https://t.me/remnawave_reverse).
+
+[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+
+<div class="not-content" style="display:flex;flex-wrap:wrap;justify-content:center;gap:0.6rem;margin:1rem 0">
+  <LinkButton href="https://starlight.astro.build" icon="open-book" iconPlacement="start">
+    Starlight documentation
+  </LinkButton>
+  <LinkButton href="https://t.me/remnawave_reverse" icon="telegram" iconPlacement="start">
+    Telegram chat
+  </LinkButton>
 </div>

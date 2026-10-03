@@ -1,15 +1,36 @@
 ---
 title: Beszel Installation
-description: Instructions for installing and configuring Beszel — a lightweight open-source platform for monitoring servers, including Docker statistics, historical data, and notifications.
+description: 'Installing Beszel: lightweight server monitoring with Docker metrics, history, and notifications. Works without the Remnawave panel too.'
 ---
-import { Code } from '@astrojs/starlight/components';
-import { Steps } from '@astrojs/starlight/components';
-import { LinkButton } from '@astrojs/starlight/components';
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import BeszelDiagram from '../../../components/BeszelDiagram.astro';
 
-Beszel is a lightweight open-source platform for monitoring servers, including Docker statistics, historical data, and notifications.
+Beszel is lightweight server monitoring: agents on the nodes collect system and Docker metrics, while the hub draws graphs, keeps history, and sends notifications. The web interface works out of the box, with a multi-user mode and an API.
 
-It has a friendly web interface, simple configuration, and is ready to use "out of the box". It supports automatic backup, multi-user mode, OAuth authentication, and API access.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Hub
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">The web panel and history storage. Runs on the panel server or any server of yours.</div>
+  </div>
+  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
+      Agents
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">One per node. They connect to the hub themselves on port 45876 with an issued key.</div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Access
+    </div>
+    <div style="font-size:.9em;line-height:1.7;opacity:.85">Port 45876 in the firewall opens for the hub IP only; https covers the panel.</div>
+  </div>
+</div>
 
 ## How it works
 
@@ -17,22 +38,31 @@ It has a friendly web interface, simple configuration, and is ready to use "out 
 
 The browser opens the hub web panel over https. Agents on the nodes connect to the hub themselves on port 45876: the hub hands them a key when they are added, and it is the agent that initiates the connection, so nothing extra needs to be open on the node except one port for the hub IP. The hub sends notifications via a webhook, for example to Telegram.
 
-## Installing Beszel Hub (Main Component)
-
-:::note
-It is recommended to have `Remnawave panel` to make it easier with `your domain certificates`.
-Also, do not forget to create a DNS record for your Beszel `beszel.example.com` (example)
+:::note[Beszel does not depend on Remnawave]
+The Remnawave panel is not required. It is simply more convenient with it: the wildcard certificate and reverse proxy already exist, and you only add one configuration block.
 :::
+
+:::note[If you install without the panel]
+The hub listens on `127.0.0.1:8090`, and there are two ways in. With a domain: issue a certificate yourself, for example `certbot certonly -d beszel.example.com`, and put any reverse proxy (nginx or Caddy) in front: it takes the https and passes requests to `127.0.0.1:8090`. Without a domain: open the panel through an SSH tunnel, publishing nothing to the outside:
+
+```bash
+ssh -L 8090:127.0.0.1:8090 root@your_server_ip
+```
+
+After that the panel is available at `http://127.0.0.1:8090`.
+:::
+
+## Installing the Beszel Hub
 
 <Steps>
 
-1. Create directory for Beszel and edit docker-compose.yml
+1. Create a directory for Beszel and open `docker-compose.yml`:
 
     ```bash
     mkdir /opt/beszel && cd /opt/beszel && nano docker-compose.yml
     ```
 
-2. Add Beszel Hub to your docker-compose.yml
+2. Add the hub service:
 
     ```yaml title="docker-compose.yml"
     services:
@@ -51,23 +81,24 @@ Also, do not forget to create a DNS record for your Beszel `beszel.example.com` 
             max-file: '5'
     ```
 
-3. Run Beszel Hub
+3. Start the hub:
 
     ```bash
     cd /opt/beszel && docker compose up -d && docker compose logs -f
     ```
 
-4. Edit your nginx.conf
+4. Add Beszel to the web server so the panel opens on its own domain:
+
+    <Tabs>
+    <TabItem label="Nginx">
 
     ```bash
     cd /opt/remnawave && nano nginx.conf
     ```
 
-5. Add `server` and `upstream` blocks for Beszel to your `nginx.conf`
-
     :::danger[Important]
-    In this config, a wildcard certificate is used. If you have an `ACME` certificate, do not forget to generate it for the new domain `beszel.example.com` (example) and specify its path in `nginx.conf` and `docker-compose.yml` in `/opt/remnawave`
-    ::: 
+    The example uses a wildcard certificate. If you have an ACME certificate, issue it for the new domain `beszel.example.com` and write its path into `nginx.conf` and `docker-compose.yml` in `/opt/remnawave`.
+    :::
 
     ```nginx title="nginx.conf" "yourdomain.com"
     upstream beszel {
@@ -100,115 +131,136 @@ Also, do not forget to create a DNS record for your Beszel `beszel.example.com` 
     }
     ```
 
-6. Restart your nginx
+    Restart nginx:
 
     ```bash
     cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx && docker compose logs -f remnawave-nginx
     ```
 
+    </TabItem>
+    <TabItem label="Caddy">
+
+    ```bash
+    cd /opt/remnawave && nano Caddyfile
+    ```
+
+    Add the Beszel site at the end of the file:
+
+    ```caddyfile title="Caddyfile" "yourdomain.com"
+    beszel.yourdomain.com {
+        reverse_proxy 127.0.0.1:8090
+    }
+    ```
+
+    Caddy obtains the certificate for this domain on its own.
+
+    Restart Caddy:
+
+    ```bash
+    cd /opt/remnawave && docker compose restart remnawave-caddy
+    ```
+
+    </TabItem>
+    </Tabs>
+
 </Steps>
 
+Do not forget to create the DNS record `beszel.example.com` pointing at the hub server.
 
 ### Account creation
 
 <Steps>
 
-1. Open your browser and go to your address
-    ```
+1. Open your browser and go to your address:
+
+    ```bash
     https://beszel.example.com
     ```
 
-2. The Beszel authorization page opens
+2. The admin creation page opens:
 
     ![Admin creation](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/admin_creation_beszel.png)
 
-3. Enter your email address and a complex password to create an account
+3. Enter an email address and a strong password.
 
-4. We enter the panel of Beszel
+4. You land in the Beszel control panel:
 
     ![Add System](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/add_system_beszel.png)
 
 </Steps>
 
-## Adding an agent to the Beszel control panel
+## Adding an agent
 
 <Steps>
 
-1. Click on `Add System`
+1. Press `Add System`.
 
-2. Add your agent to the system
+2. Choose the `Binary` connection method.
 
-    ![Add System Host](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/add_system_host_beszel.png)
+3. Fill in the agent name and the IP address of the Remnawave node server. The default port (45876) is fine.
 
-3. Select Binary connection method
+4. Press `Copy Linux command` to get the agent installation command.
 
-4. Fill in the agent name and specify the IP address of your Remnawave node server. We can leave the port as default (45876)
-
-5. Click on `Copy Linux command` and get the command to install the agent.
-
-6. Go to the Remnawave node server and run the copied command.
+5. Switch to the node server and run the copied command:
 
     ```bash
     curl -sL https://get.beszel.dev -o /tmp/install-agent.sh && chmod +x /tmp/install-agent.sh && /tmp/install-agent.sh -p 45876 -k "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPW2NUPqCB4pq8oOgEFB9Luqe6oWjEy4bkQV3qcXo3qt" -t "8c9e7262-ced0-4162-bc49-4c985162c22f" -url "https://beszel.example.com"
     ```
 
-7. We see that your agent is successfully installed
+6. The agent is installed:
 
     ![Install Agent](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/install_agent_beszel.png)
 
 </Steps>
 
-## Setting up the firewall (UFW) on the Remnawave node server
+## Firewall on the node server
+
+The agent initiates the connection to the hub itself, but the listening port 45876 on the node must be reachable by the hub, and by the hub only.
 
 <Steps>
 
-1. Run the command to open port 45876 (TCP) for the IP address of the Remnawave panel server (replace `100.88.38.121` with the actual IP address of your server):
+1. Open port 45876 (TCP) for the hub server IP only (replace `100.88.38.121` with the actual address, for example an address in the NetBird network):
 
     ```bash
     ufw allow from 100.88.38.121 to any port 45876 proto tcp
     ```
 
-2. Restart the firewall:
+2. Reload the firewall:
 
     ```bash
     ufw reload
     ```
 
-3. Wait a few minutes for the agent to connect to the Beszel panel. Port 45876 is used for agent communication with the Beszel Hub, so it should only be open for the Hub server IP address.
+3. Wait a couple of minutes for the agent to connect to the hub:
 
     ![Host System](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/ru/beszel/host_system_beszel.png)
 
 </Steps>
 
-## Setting up notifications in Telegram
+## Telegram notifications
 
 <Steps>
 
-1. Open your browser and go to your address 
+1. Open `https://beszel.example.com` and log in with the admin credentials.
 
-    ```bash
-    https://beszel.example.com
-    ```
-
-2. Log in to the Beszel control panel, enter the login and password you specified when creating the account
-
-3. Go to the `Settings` section 
+2. Go to `Settings`:
 
     ![Beszel Settings](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/beszel/beszel_settings.png)
 
-4. Click on `Notification`
+3. Click `Notification`:
 
     ![Beszel Notifications](https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/beszel/beszel_notifications.png)
 
-5. In the `Webhook / Push notifications` field, paste the link in the format
+4. Into the Webhook / Push notifications field paste a link like:
 
     ```bash title="Webhook / Push notifications" "8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY" "1465650656"
     telegram://8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY@telegram?chats=1465650656
     ```
-    `8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY` - bot token
-    
-    `1465650656` - ID chat, where notifications will be sent
 
-6. Click on `Save Settings`
+    `8266662524:AAHruriu0cLDEOlMgfgyrtbn7mJb6Cp4aY` is your bot token.
+
+    `1465650656` is the chat ID where notifications arrive.
+
+5. Click `Save Settings`.
 
 </Steps>
