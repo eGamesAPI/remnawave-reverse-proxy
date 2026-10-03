@@ -7,7 +7,25 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 
-Автор: **[pluralplay](../../contribution/resources#pluralplay)**, **[kutovoys](../../contribution/resources#kutovoys)**  
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin:1.2rem 0">
+  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
+    <img src="https://github.com/pluralplay.png" alt="pluralplay" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(88,166,255,.45);flex:none;background:#0e1a14" />
+    <div style="min-width:0">
+      <div style="font-weight:650"><a href="https://github.com/pluralplay" style="color:inherit">pluralplay</a></div>
+      <div style="font-size:.85em;opacity:.85;line-height:1.6">гайд по мониторингу и хранилище дашбордов awesome-docs</div>
+      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/pluralplay/awesome-docs/tree/main/grafana" style="color:inherit">github.com/pluralplay/awesome-docs</a></div>
+    </div>
+  </div>
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
+    <img src="https://github.com/kutovoys.png" alt="kutovoys" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(0,229,160,.45);flex:none;background:#0e1a14" />
+    <div style="min-width:0">
+      <div style="font-weight:650"><a href="https://github.com/kutovoys" style="color:inherit">kutovoys</a></div>
+      <div style="font-size:.85em;opacity:.85;line-height:1.6">соавтор гайда и пять системных дашбордов: Node, Network, Memory, Filesystem, CPU</div>
+      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/kutovoys" style="color:inherit">github.com/kutovoys</a></div>
+    </div>
+  </div>
+</div>
+
 Состав мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами.
 
 <div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">

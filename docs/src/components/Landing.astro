@@ -129,16 +129,16 @@ const T = en
       ],
       paths: ['Panel + node', 'Panel + subscription page', 'Add node to panel', 'Node only', 'Panel only', 'Subscription page only'],
       mods: [
-        ['5', 'Xray Checker', 'host health monitoring with metrics', ''],
+        ['5', 'Xray Checker', 'host health monitoring with metrics', 'xray-checker', true],
         ['6', 'legiz templates', 'custom camouflage site templates', ''],
         ['7', 'WARP Native', 'WireGuard interface via wgcf for chosen domains', 'warp-native'],
         ['8', 'Backup and Restore', 'copies of configs and data', ''],
         ['9', 'IPv6', 'address management and connectivity checks', ''],
         ['10', 'Certificates', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, own certs', ''],
-        ['11', 'NetBird', 'private network for the panel and nodes', 'netbird'],
-        ['12', 'Updates', 'script updates from the menu', ''],
-        ['', 'Server routing', 'Shadowsocks and VLESS bridges for Russian traffic', 'server-routing'],
-        ['', 'SSH access', 'run commands on remote servers from the menu', 'ssh-remote-access'],
+        ['11', 'NetBird', 'private network for the panel and nodes', 'netbird', true],
+        ['', 'Server routing', 'Shadowsocks and VLESS bridges for Russian traffic', 'server-routing', true],
+        ['', 'SSH access', 'run commands on remote servers from the menu', 'ssh-remote-access', true],
+        ['', 'Node plugins', 'Torrent Blocker and inbound/outbound traffic filters', 'node-plugins', true],
       ],
     }
     : {
@@ -246,18 +246,34 @@ const T = en
       ],
       paths: ['Панель + нода', 'Панель + подписка', 'Добавить ноду в панель', 'Только нода', 'Только панель', 'Только подписка'],
       mods: [
-        ['5', 'Xray Checker', 'проверка хостов с метриками', ''],
+        ['5', 'Xray Checker', 'проверка хостов с метриками', 'xray-checker', true],
         ['6', 'Шаблоны legiz', 'кастомные шаблоны сайта-маски', ''],
         ['7', 'WARP Native', 'интерфейс WireGuard через wgcf для выбранных доменов', 'warp-native'],
         ['8', 'Backup and Restore', 'резервные копии конфигураций и данных', ''],
         ['9', 'IPv6', 'управление адресами и проверка связи', ''],
         ['10', 'Сертификаты', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, свои', ''],
-        ['11', 'NetBird', 'приватная сеть для панели и нод', 'netbird'],
-        ['12', 'Обновления', 'обновление скрипта из меню', ''],
-        ['', 'Серверный роутинг', 'мосты Shadowsocks и VLESS для российского трафика', 'server-routing'],
-        ['', 'SSH-доступ', 'команды на удалённых серверах из меню', 'ssh-remote-access'],
+        ['11', 'NetBird', 'приватная сеть для панели и нод', 'netbird', true],
+        ['', 'Серверный роутинг', 'мосты Shadowsocks и VLESS для российского трафика', 'server-routing', true],
+        ['', 'SSH-доступ', 'команды на удалённых серверах из меню', 'ssh-remote-access', true],
+        ['', 'Плагины ноды', 'Torrent Blocker и фильтры входящего и исходящего трафика', 'node-plugins', true],
       ],
     };
+
+// Иконки карточек модулей: тонкие stroke-SVG, красятся через currentColor.
+const MOD_ICONS: Record<string, string> = {
+  '5': '<path d="M3 12h4l2.5-6 4 12 2.5-6h5"/>',
+  '6': '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 9v12"/>',
+  '7': '<path d="M7 18a4.5 4.5 0 1 1 .7-8.95A6 6 0 0 1 19 10.5 3.75 3.75 0 0 1 18 18Z"/>',
+  '8': '<path d="M4 8l8-4 8 4v8l-8 4-8-4V8Z"/><path d="M4 8l8 4 8-4M12 12v8"/>',
+  '9': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  '10': '<path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3Z"/><path d="M9.5 12l2 2 3.5-4"/>',
+  '11': '<circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M6.8 10.9 17.2 6.1M6.8 13.1l10.4 4.8"/>',
+  '12': '<path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 3v4h-4"/>',
+  'server-routing': '<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  'ssh-remote-access': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>',
+  'node-plugins': '<path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5"/>',
+};
+const newLbl = en ? 'new' : 'новое';
 
 const tags = ['XRAY-CORE', 'NGINX', 'CADDY', 'SELFSTEAL', 'BBR', 'UFW', 'ACME', 'CLOUDFLARE DNS-API', 'GCORE', 'BUNNY.NET', 'NETBIRD', 'WARP', 'SSH', 'BACKUP', 'IPV6'];
 
@@ -363,9 +379,13 @@ const PLAY = JSON.stringify({
       <h2><span class="idx">[ 02 ]</span>{T.s2}<span class="rule"></span></h2>
       <p class="sec-sub">{T.s2sub}</p>
       <div class="mod-grid">
-        {T.mods.map(([num, name, desc, slug]) => {
+        {T.mods.map(([num, name, desc, slug, isNew]) => {
           const card = (
             <>
+              <div class="mod-top">
+                <span class="mod-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><Fragment set:html={MOD_ICONS[num || slug] ?? MOD_ICONS['12']} /></svg></span>
+                {isNew && <span class="mod-new"><i></i>{newLbl}</span>}
+              </div>
               <div class="mod-head">{num && <span class="num">menu {num}</span>}<b>{name}</b>{slug && <span class="go">→</span>}</div>
               <p>{desc}</p>
             </>
@@ -1207,13 +1227,44 @@ const PLAY = JSON.stringify({
 
   .mod-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
   .mod-card {
+    position: relative; overflow: hidden;
     display: block; color: inherit; text-decoration: none;
-    border: 1px solid #24402f; border-radius: 12px; background: #0f2119;
+    border: 1px solid #24402f; border-radius: 14px;
+    background: linear-gradient(180deg, #10241b, #0f2119);
     padding: 1.15rem 1.25rem;
-    transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
+    transition: border-color 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.25s ease, box-shadow 0.25s ease;
   }
-  .mod-card:hover { border-color: rgba(0, 229, 160, 0.45); transform: translateY(-2px); }
-  .mod-card.linked:hover { background: #10261c; }
+  .mod-card::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(300px 130px at 88% -22%, rgba(0, 240, 176, 0.07), transparent 70%);
+  }
+  .mod-card:hover {
+    border-color: rgba(0, 229, 160, 0.45); transform: translateY(-3px);
+    box-shadow: 0 16px 36px -20px rgba(0, 240, 176, 0.3);
+  }
+  .mod-card.linked:hover { background: linear-gradient(180deg, #122a1f, #10241b); }
+  .mod-top { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; }
+  .mod-ico {
+    width: 36px; height: 36px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #00e5a0; background: rgba(0, 229, 160, 0.08);
+    border: 1px solid rgba(0, 229, 160, 0.22); border-radius: 10px;
+  }
+  .mod-ico svg { width: 19px; height: 19px; display: block; }
+  .mod-new {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem;
+    font-family: var(--sl-font-mono, monospace); font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap;
+    color: #ffd84d; background: rgba(255, 216, 77, 0.1);
+    border: 1px solid rgba(255, 216, 77, 0.38); border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+  }
+  .mod-new i {
+    width: 5px; height: 5px; border-radius: 50%; background: #ffd84d;
+    box-shadow: 0 0 6px rgba(255, 216, 77, 0.8);
+    animation: mod-new-pulse 2s ease-in-out infinite;
+  }
+  @keyframes mod-new-pulse { 50% { opacity: 0.35; } }
   .mod-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
   .mod-head b { color: #eef7f0; font-size: 0.95rem; }
   .mod-head .num {
@@ -1638,7 +1689,7 @@ const PLAY = JSON.stringify({
   @media (prefers-reduced-motion: reduce) {
     .marquee-track { animation: none; }
     .ping, .specks i, .ov-chart i, .ov-live, .demo-view,
-    .comm-glow, .comm-dots i, .hero-term :global(.term) { animation: none; }
+    .comm-glow, .comm-dots i, .hero-term :global(.term), .mod-new i { animation: none; }
     .btn.primary::after { display: none; }
     .hero-copy > *, .hero-term, .stats, .rr-in { animation: none !important; }
     .rr-wait { opacity: 1; transform: none; }
@@ -1738,8 +1789,22 @@ const PLAY = JSON.stringify({
     border-color: rgba(0, 146, 103, 0.55);
     background: #f6fdf9;
   }
-  :global(html[data-theme='light']) .mod-card:hover { border-color: rgba(0, 146, 103, 0.55); }
-  :global(html[data-theme='light']) .mod-card.linked:hover { background: #f6fdf9; }
+  :global(html[data-theme='light']) .mod-card:hover { border-color: rgba(0, 146, 103, 0.55); box-shadow: 0 16px 36px -22px rgba(9, 46, 33, 0.4); }
+  :global(html[data-theme='light']) .mod-card.linked:hover { background: linear-gradient(180deg, #ffffff, #f6fdf9); }
+  :global(html[data-theme='light']) .mod-card {
+    background: linear-gradient(180deg, #ffffff, #f7fdfa);
+  }
+  :global(html[data-theme='light']) .mod-card::after {
+    background: radial-gradient(300px 130px at 88% -22%, rgba(0, 146, 103, 0.06), transparent 70%);
+  }
+  :global(html[data-theme='light']) .mod-ico {
+    color: #00805a; background: rgba(0, 146, 103, 0.08);
+    border-color: rgba(0, 146, 103, 0.25);
+  }
+  :global(html[data-theme='light']) .mod-new {
+    color: #8a6a00; background: #fff6d8; border-color: #ecd28a;
+  }
+  :global(html[data-theme='light']) .mod-new i { background: #b98a00; box-shadow: 0 0 6px rgba(185, 138, 0, 0.6); }
   :global(html[data-theme='light']) .mod-head b { color: #0b2b22; }
   :global(html[data-theme='light']) .mod-card p { color: #5c7a6d; }
   :global(html[data-theme='light']) .path-card .num { color: #8a6a00; }

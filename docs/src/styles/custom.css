@@ -421,6 +421,26 @@ header::after {
   --galaxy-aside-bg: rgba(255, 216, 77, 0.12) !important;
 }
 
+/* Бейджи «Новое» в сайдбаре: тот же фирменный жёлтый, что и caution-плашки,
+   вместо оранжевого по умолчанию. Тема красит бейджи напрямую мимо
+   --sl-badge-переменных, поэтому свойства продублированы с !important. */
+.sidebar-content .sl-badge.caution {
+  --sl-badge-caution-border: rgba(255, 216, 77, 0.55) !important;
+  --sl-badge-caution-bg: rgba(255, 216, 77, 0.12) !important;
+  --sl-badge-caution-text: #ffd84d !important;
+  color: #ffd84d !important;
+  border-color: rgba(255, 216, 77, 0.55) !important;
+  background-color: rgba(255, 216, 77, 0.12) !important;
+}
+:root[data-theme='light'] .sidebar-content .sl-badge.caution {
+  --sl-badge-caution-border: #d9b23f !important;
+  --sl-badge-caution-bg: #fff3c2 !important;
+  --sl-badge-caution-text: #8a6a00 !important;
+  color: #8a6a00 !important;
+  border-color: #d9b23f !important;
+  background-color: #fff3c2 !important;
+}
+
 /* Aside "danger" cards: command blocks keep the same near-black terminal
    background as regular code blocks (#0a0f0c), not the red tint. */
 .starlight-aside--danger {
@@ -429,6 +449,38 @@ header::after {
 .starlight-aside--danger pre {
   background: #0a0f0c !important;
   border: none !important;
+}
+
+/* Блоки кода в ЛЮБЫХ карточках (danger/note/tip/caution) — БЕЗ собственной
+   рамки и тени, карточка сама рамка. Причина: 1px-дуга на скруглении окна
+   внутри карточки — лотерея растеризатора Chrome (проверено на border,
+   outline, кольцевой тени, заливке с клипом и даже 2px): на части позиций
+   дуга гаснет до 0-15% и угол выглядит срезанным. Вне карточек рамка
+   рендерится чисто и остаётся. Окно в карточке = тёмный скруглённый
+   экран радиусом 11px без хайрлайна.
+   Плюс без бордера у pre — галактика рисовала поверх окна вторую
+   цветную рамку (синюю в note, жёлтую в caution). */
+main .sl-markdown-content aside[class*='starlight-aside'] figure.frame {
+  border: none !important;
+  border-radius: 11px !important;
+}
+main .sl-markdown-content aside[class*='starlight-aside'] figure.frame,
+main .sl-markdown-content aside[class*='starlight-aside'] figure.frame:hover,
+html[data-theme='light'] main .sl-markdown-content aside[class*='starlight-aside'] figure.frame,
+html[data-theme='light'] main .sl-markdown-content aside[class*='starlight-aside'] figure.frame:hover {
+  box-shadow: none !important;
+}
+main .sl-markdown-content aside[class*='starlight-aside'] figure.frame pre {
+  border: none !important;
+}
+
+/* Без «стекла»: внутри backdrop-filter-карточки Chrome рисует скруглённые
+   дуги дочерних окон с цветным фрингом — рамка терминала на углу уходила
+   в красный диагональной полосой наружу («за край вылез»). Фон страницы
+   сплошной, blur размывал пустоту — визуально эффект ничего не давал. */
+aside[class*='starlight-aside'] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* list bullets: mint terminal arrows instead of galaxy's ■ squares */
@@ -453,9 +505,17 @@ main .sl-markdown-content starlight-file-tree li::before {
    overflow: hidden клиппит шапку и экран в кривую рамки — без него
    шапка со своим радиусом 7.4px перекрывала угол рамки 12px */
 main .sl-markdown-content figure.frame {
+  /* Конструкция как у .term и у самих карточек: настоящий border 1px.
+     Border на полупиксельной позиции рендерится надёжно — разваливались
+     именно варианты с overflow:hidden (округлый клип фигуры воюет с
+     растеризатором: рамка-заливка/outline/кольцо-тень гасли на углах).
+     Клип больше не нужен: шапка и экран несут свой радиус 11px сами. */
   border: 1px solid #1d3328 !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0 !important;
   border-radius: 12px !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   box-shadow: 0 12px 32px -16px rgba(0, 0, 0, 0.5) !important;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -473,6 +533,14 @@ html[data-theme='light'] main .sl-markdown-content figure.frame:hover {
   box-shadow:
     0 14px 34px -16px rgba(9, 46, 33, 0.45),
     0 0 22px -8px rgba(0, 146, 103, 0.35) !important;
+}
+/* дети повторяют дугу рамки своим радиусом (12 - 1px бордера = 11px):
+   верх у шапки, низ у экрана — вместо клипа у фигуры */
+main .sl-markdown-content figure.frame figcaption.header {
+  border-radius: 11px 11px 0 0 !important;
+}
+main .sl-markdown-content figure.frame pre {
+  border-radius: 0 0 11px 11px !important;
 }
 
 /* текст окна — терминальный в обеих темах: галактика красит его через
@@ -493,8 +561,8 @@ main .sl-markdown-content figure.frame figcaption.header .title {
 }
 
 /* shell blocks: хром окна повторяет .term из Terminal.astro — шапка тем же
-   цветом, что экран (без шва), без своих бордеров и радиуса (углы клиппит
-   рамка), заголовок слева сразу после светофора */
+   цветом, что экран (без шва), своих бордеров нет, верхние углы повторяют
+   дугу рамки (11px), заголовок слева сразу после светофора */
 main .sl-markdown-content figure.frame.is-terminal figcaption.header {
   position: relative;
   justify-content: flex-start !important;
@@ -504,7 +572,6 @@ main .sl-markdown-content figure.frame.is-terminal figcaption.header {
   background: #0b1510 !important;
   border: none !important;
   border-bottom: 1px solid #1d3328 !important;
-  border-radius: 0 !important;
   /* галактика красит шапку своей !important-переменной (layer-инверсия
      перебивает прямое background) — переворачиваем саму переменную */
   --fb-ec-caption-bg-color: #0b1510 !important;

@@ -1,0 +1,144 @@
+---
+/**
+ * Анимированная схема модуля плагинов ноды: сервер панели сверху пишет
+ * конфиг в одну запись плагина «Reverse Node Plugins» с тремя секциями
+ * (torrentBlocker / ingressFilter / egressFilter), активация бежит
+ * пунктиром на ноды с их nftables; справа вверх идёт приглушённый
+ * обратный путь отчётов Torrent Blocker.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="npd">
+  <svg viewBox="0 0 640 400" role="img" aria-label={en
+    ? 'Node plugins scheme: the panel server writes the config into one shared plugin record with three sections; activation flows to every node and its nftables; Torrent Blocker reports flow back'
+    : 'Схема плагинов ноды: сервер панели пишет конфиг в одну общую запись плагина с тремя секциями; активация расходится по нодам и их nftables; отчёты Torrent Blocker возвращаются наверх'}>
+    <!-- сервер панели -->
+    <g class="node n-mgmt">
+      <rect x="223" y="14" width="194" height="46" rx="11" />
+      <text x="320" y="33" class="t">{en ? 'panel server' : 'сервер панели'}</text>
+      <text x="320" y="50" class="s">remnawave_reverse · API</text>
+    </g>
+
+    <!-- запись плагина: одна, с тремя секциями -->
+    <path class="wire w-mgmt" d="M320 60 V106" />
+    <path class="flow f-mint" d="M320 60 V106" />
+    <g class="pill">
+      <rect x="212" y="71" width="216" height="22" rx="11" />
+      <text x="320" y="86">{en ? 'config save · sync' : 'сохранение · синхронизация'}</text>
+    </g>
+
+    <g class="plugin">
+      <rect x="150" y="106" width="340" height="158" rx="14" />
+      <text x="320" y="130" class="pt">{en ? 'plugin · Reverse Node Plugins' : 'плагин · Reverse Node Plugins'}</text>
+      <text x="320" y="148" class="ps">{en ? 'one record · activePluginUuid' : 'одна запись · activePluginUuid'}</text>
+    </g>
+    <g class="chip c-tb">
+      <rect x="170" y="160" width="300" height="26" rx="8" />
+      <circle cx="184" cy="173" r="3.5" />
+      <text x="196" y="178" class="ct">Torrent Blocker</text>
+      <text x="458" y="178" class="cs">torrentBlocker</text>
+    </g>
+    <g class="chip c-ig">
+      <rect x="170" y="192" width="300" height="26" rx="8" />
+      <circle cx="184" cy="205" r="3.5" />
+      <text x="196" y="210" class="ct">Ingress Filter</text>
+      <text x="458" y="210" class="cs">ingressFilter</text>
+    </g>
+    <g class="chip c-eg">
+      <rect x="170" y="224" width="300" height="26" rx="8" />
+      <circle cx="184" cy="237" r="3.5" />
+      <text x="196" y="242" class="ct">Egress Filter</text>
+      <text x="458" y="242" class="cs">egressFilter</text>
+    </g>
+
+    <!-- активация на нодах: базовая линия + бегущий пунктир -->
+    <path class="wire w-teal" d="M200 264 C 158 292, 140 294, 125 296" />
+    <path class="flow f-teal" d="M200 264 C 158 292, 140 294, 125 296" />
+    <path class="wire w-teal" d="M440 264 C 482 292, 500 294, 515 296" />
+    <path class="flow f-teal" d="M440 264 C 482 292, 500 294, 515 296" />
+    <text x="320" y="284" class="lbl2 mid">{en ? 'plugin activation' : 'активация плагина на нодах'}</text>
+
+    <!-- ноды -->
+    <g class="node n-vio">
+      <rect x="40" y="296" width="170" height="48" rx="11" />
+      <text x="125" y="316" class="t">{en ? 'node · de-fra-01' : 'нода · de-fra-01'}</text>
+      <text x="125" y="333" class="s">nftables</text>
+    </g>
+    <g class="node n-vio">
+      <rect x="430" y="296" width="170" height="48" rx="11" />
+      <text x="515" y="316" class="t">{en ? 'node · nl-ams-02' : 'нода · nl-ams-02'}</text>
+      <text x="515" y="333" class="s">nftables</text>
+    </g>
+
+    <!-- обратный путь отчётов: статичный приглушённый -->
+    <path class="backup" d="M600 296 C 634 296, 634 37, 410 37" />
+    <text x="624" y="62" class="backup-lbl">{en ? 'Torrent Blocker reports' : 'отчёты Torrent Blocker'}</text>
+    <text x="624" y="78" class="backup-lbl">{en ? 'stats' : 'статистика'}</text>
+
+    <text x="320" y="378" class="cap mid">{en ? 'one record for all three features · every change applies on all nodes at once' : 'одна запись на все три функции · каждое изменение применяется сразу на всех нодах'}</text>
+  </svg>
+</div>
+
+<style>
+  .npd{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .npd svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mgmt{stroke:#2a4737}
+  .w-teal{stroke:#1d4a4d}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:npd-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0}
+  .f-teal{stroke:#39c5cf}
+  @keyframes npd-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-mgmt rect{stroke:#2a4737;stroke-dasharray:5 4}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .node .t{fill:#e9f4ec;font-size:16px;font-weight:600;text-anchor:middle}
+  .n-vio .t{fill:#cdaaff}
+  .n-mgmt .t{fill:#8ca08f}
+  .node .s{fill:#a9c0b0;font-size:13px;text-anchor:middle}
+
+  .plugin rect{fill:rgba(0,229,160,.02);stroke:rgba(0,229,160,.35);
+    stroke-width:1.5;stroke-dasharray:7 7}
+  .plugin .pt{fill:#00e5a0;font-size:15px;font-weight:600;text-anchor:middle}
+  .plugin .ps{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+
+  .chip rect{fill:#0e1a14;stroke-width:1.5}
+  .c-tb rect{stroke:rgba(0,229,160,.55)}
+  .c-ig rect{stroke:rgba(88,166,255,.5)}
+  .c-eg rect{stroke:rgba(188,140,255,.55)}
+  .chip circle{fill:#00e5a0}
+  .c-ig circle{fill:#58a6ff}
+  .c-eg circle{fill:#bc8cff}
+  .chip .ct{fill:#e9f4ec;font-size:13px;font-weight:600}
+  .c-tb .ct{fill:#7defc4}
+  .c-ig .ct{fill:#9cc7ff}
+  .c-eg .ct{fill:#cdaaff}
+  .chip .cs{fill:#8ca08f;font-size:12px;text-anchor:end}
+
+  .lbl2{fill:#a9c0b0;font-size:13px}
+  .lbl2.mid{text-anchor:middle}
+  .pill rect{fill:#0a0f0c;stroke:rgba(0,229,160,.35);stroke-width:1.5}
+  .pill text{fill:#a9c0b0;font-size:12px;text-anchor:middle}
+  .cap{fill:#8ca08f;font-size:12.5px}
+  .cap.mid{text-anchor:middle}
+
+  .backup{fill:none;stroke:#5c6a7d;stroke-width:1.5;stroke-dasharray:3 7;opacity:.75}
+  .backup-lbl{fill:#8ca08f;font-size:12.5px;text-anchor:end}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

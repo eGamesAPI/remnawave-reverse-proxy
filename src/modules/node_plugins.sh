@@ -2174,6 +2174,7 @@ show_node_plugins_menu() {
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[NP_MENU_TITLE]}${COLOR_RESET}"
+    echo -e " ${COLOR_GRAY}${LANG[NP_DOC_LINK]}${COLOR_RESET}"
     echo -e ""
     # One line of truth about binding: a plugin nothing points at is dead
     # weight no matter what the per-feature statuses say.

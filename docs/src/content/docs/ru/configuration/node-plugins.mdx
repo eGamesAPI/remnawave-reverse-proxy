@@ -1,0 +1,605 @@
+---
+title: "Плагины ноды"
+description: "Модуль плагинов ноды: Torrent Blocker, Ingress Filter и Egress Filter. Блокировка торрент-трафика, входящих сканеров и нежелательного исходящего трафика через панель Remnawave"
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../../components/version';
+import NodePluginsDiagram from '../../../../components/NodePluginsDiagram.astro';
+
+Модуль `Плагины ноды` настраивает три встроенных плагина Remnawave Node сразу для всех нод панели:
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:1.2rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Torrent Blocker
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Ловит торрент-трафик пользователей и блокирует их IP на уровне nftables: одного пойманного пакета достаточно.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Бан</span><span>временный, длительность настраивается</span>
+      <span style="opacity:.6;white-space:nowrap">Отчёты</span><span>статистика и Telegram</span>
+      <span style="opacity:.6;white-space:nowrap">Исключения</span><span>белый список IP</span>
+    </div>
+  </div>
+  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
+      Ingress Filter
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Режет входящие соединения целыми подсетями: сканеры стучатся в порт ноды и не получают ответа.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>RU-сканеры, классические, FOFA</span>
+      <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4 и подсети /8…/32</span>
+      <span style="opacity:.6;white-space:nowrap">Трафик</span><span>входящий, весь сервер ноды</span>
+    </div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Egress Filter
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Блокирует исходящий трафик по адресам и портам назначения: взломанная учётная запись не уйдёт в частные сети и не начнёт рассылать спам.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>частные диапазоны, почтовые порты</span>
+      <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4/IPv6 и порты 1-65535</span>
+      <span style="opacity:.6;white-space:nowrap">Трафик</span><span>исходящий, весь сервер ноды</span>
+    </div>
+  </div>
+</div>
+
+Все три функции живут в одной записи плагина `Reverse Node Plugins`, настраиваются через API панели с сервера, где панель установлена, и применяются на нодах без перезапусков.
+
+## Как это устроено
+
+<NodePluginsDiagram lang="ru" />
+
+У каждой ноды Remnawave есть ровно один активный плагин (`activePluginUuid`), поэтому три функции не могут быть тремя отдельными записями: активной всегда была бы только одна. Скрипт держит одну общую запись с тремя секциями конфига: `torrentBlocker`, `ingressFilter` и `egressFilter`.
+
+Каждое изменение настроек проходит один и тот же путь:
+
+<div class="not-content" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.45rem;margin:1rem 0;font-family:var(--sl-font-mono,monospace);font-size:.8rem">
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">PATCH конфига</span>
+  <span style="opacity:.55">→</span>
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">синхронизация</span>
+  <span style="opacity:.55">→</span>
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">привязка ко всем нодам</span>
+</div>
+
+Оффлайн-ноды получают привязку в базе панели и подхватят конфиг при подключении.
+
+В верхней части меню модуля всегда видна строка правды: `Нод под плагином: 2 из 2`. Плагин, на который не указывает ни одна нода, не работает, что бы ни показывали статусы функций.
+
+:::note[Кэш панели]
+API панели кэширует состояние плагинов на несколько секунд. Если сразу после включения меню показывает прежний статус, а в интерфейсе панели всё уже включено, значит работает, статус подтянется сам.
+:::
+
+## Что понадобится
+
+:::danger[Важно]
+Плагины настраиваются через API панели, поэтому запускать модуль нужно на сервере, где установлена панель Remnawave. На сервере только с нодой пункт меню не появится.
+:::
+
+Для Torrent Blocker требуется Node версии 2.7.0 и новее с ядром Xray 26.3.27+.
+
+## Открытие модуля
+
+Выполните на сервере панели:
+
+```bash
+remnawave_reverse
+```
+
+<Steps>
+
+1. В главном меню выберите пункт `4`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Версия: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установка компонентов Remnawave' },
+      { kind: 'item', num: '2.', text: 'Переустановить панель и компоненты' },
+      { kind: 'item', num: '3.', text: 'Управление панелью и компонентами' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Управление IPv6' },
+      { kind: 'item', num: '10.', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '12.', text: 'Проверить обновления скрипта' },
+      { kind: 'item', num: '13.', text: 'Удалить скрипт' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. В меню расширений выберите `Плагины ноды`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Расширения ноды' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Установить шаблон для selfsteal ноды' },
+      { kind: 'item', num: '2.', text: 'Плагины ноды', pick: true },
+      { kind: 'item', num: '3.', text: 'Ядро Xray' },
+      { kind: 'item', num: '4.', text: 'SSH-доступ к удалённому серверу' },
+      { kind: 'item', num: '5.', text: 'Серверный роутинг' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-5):' },
+    ]} />
+
+3. Откроется меню модуля со статусами всех трёх функций и счётчиком привязки:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Плагины ноды' },
+      { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/node-plugins' },
+      { kind: 'plain' },
+      { kind: 'dim', text: 'Нод под плагином: 2 из 2' },
+      { kind: 'item', num: '1.', text: 'Torrent Blocker: ', answer: 'ВКЛЮЧЁН' },
+      { kind: 'item', num: '2.', text: 'Ingress Filter: выключен' },
+      { kind: 'item', num: '3.', text: 'Egress Filter: не настроен' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите плагин (0-3):' },
+    ]} />
+
+</Steps>
+
+Статус каждой функции бывает четырёх видов:
+
+<div class="not-content" style="display:grid;gap:0.45rem;margin:1rem 0;font-size:.92em">
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+    <span><b>ВКЛЮЧЁН</b>: функция работает на нодах</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#ffd84d;box-shadow:0 0 6px rgba(255,216,77,.6);flex:none"></span>
+    <span><b>выключен</b>: секция в конфиге есть, но отключена</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#8b968f;flex:none"></span>
+    <span><b>не настроен</b>: секции ещё нет в конфиге плагина</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#ff5d5d;box-shadow:0 0 6px rgba(255,93,93,.6);flex:none"></span>
+    <span><b>неизвестно</b>: API панели не ответил</span>
+  </div>
+</div>
+
+Если плагин не привязан ни к одной ноде, счётчик заменяется предупреждением `Плагин не привязан к нодам, функции не работают на нодах. Любое изменение настроек привяжет его.`
+
+При первом входе модуль проверяет, нет ли на аккаунте старых записей плагинов от прошлых версий скрипта (они назывались `Torrent Blocker`, `Ingress Filter`, `Egress Filter` по отдельности). Такие записи предлагается объединить в одну: настройки сольются, лишние записи удалятся, плагин привяжется ко всем нодам. Отказ ничего не меняет, вопрос повторится при следующем входе.
+
+## Torrent Blocker
+
+Плагин ловит торрент-трафик на стороне Xray и блокирует IP нарушителя на самой ноде через nftables. Бан истекает сам через заданное время, уведомления о блокировках панель отправляет в Telegram, если там настроен бот.
+
+Меню функции:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Torrent Blocker' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Torrent Blocker: ', answer: 'ВКЛЮЧЁН' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Отключить Torrent Blocker' },
+  { kind: 'item', num: '2.', text: 'Настройки (длительность бана, белый список IP)' },
+  { kind: 'item', num: '3.', text: 'Статистика и последние отчёты' },
+  { kind: 'item', num: '4.', text: 'Разблокировать IP' },
+  { kind: 'item', num: '5.', text: 'Пересоздать таблицы nftables' },
+  { kind: 'item', num: '6.', text: 'Настроить Telegram-уведомления (панель)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '7.', text: 'Удалить общий плагин (все три функции)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-7):' },
+]} />
+
+### Включение и выключение
+
+<Steps>
+
+1. Выберите пункт `Включить Torrent Blocker` (или `Отключить`, когда он включён):
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Torrent Blocker' },
+      { kind: 'plain' },
+      { kind: 'plain', text: ' Torrent Blocker: выключен' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Включить Torrent Blocker', pick: true },
+      { kind: 'item', num: '2.', text: 'Настройки (длительность бана, белый список IP)' },
+      { kind: 'item', num: '3.', text: 'Статистика и последние отчёты' },
+      { kind: 'item', num: '4.', text: 'Разблокировать IP' },
+      { kind: 'item', num: '5.', text: 'Пересоздать таблицы nftables' },
+      { kind: 'item', num: '6.', text: 'Настроить Telegram-уведомления (панель)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '7.', text: 'Удалить общий плагин (все три функции)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-7): ', answer: '1' },
+      { kind: 'plain' },
+      { kind: 'step', text: '[ * ] Включаю Torrent Blocker...' },
+      { kind: 'ok', text: '[ ✓ ] Torrent Blocker включён, плагин привязан ко всем включённым нодам. Уведомления о блокировках приходят в Telegram, только если в панели настроены уведомления (Telegram-бот).' },
+      { kind: 'step', text: 'Требуется Node v2.7.0+ с Xray 26.3.27+. Xray видит лишь часть торрент-трафика: одного пойманного пакета достаточно для бана IP.' },
+    ]} />
+
+</Steps>
+
+Выключение проходит так же, но блокировки с нод при этом не сбрасываются: активные баны доживают свой срок.
+
+### Настройки (длительность бана, белый список IP)
+
+Пункт `Настройки` показывает текущие значения: Enter оставляет их как есть, `-` у белого списка очищает его.
+
+<Steps>
+
+1. Выберите пункт `2` и введите новые значения:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Настройки Torrent Blocker' },
+      { kind: 'plain', text: 'Длительность бана в секундах [текущая: 3600]: ', answer: '7200' },
+      { kind: 'plain', text: "Белый список IP через запятую [текущий: нет] (Enter - оставить, '-' = очистить): ", answer: '203.0.113.7, 198.51.100.4' },
+      { kind: 'ok', text: '[ ✓ ] Настройки сохранены и синхронизированы на ноды.' },
+    ]} />
+
+</Steps>
+
+Белый список пригодится, если у честного пользователя статический адрес и он жалуется на блокировки: добавьте его IP, и Torrent Blocker перестанет на него реагировать.
+
+### Статистика и последние отчёты
+
+Пункт `Статистика и последние отчёты` показывает счётчики, топ нарушителей и свежие блокировки по всем нодам:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[ * ] Статистика Torrent Blocker' },
+  { kind: 'plain', text: ' Всего: 1284   За 24ч: 17   Пользователей: 96   Нод: 2' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Топ пользователей:' },
+  { kind: 'step', text: '   megauser - 204' },
+  { kind: 'step', text: '   ivanpro - 118' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Топ нод:' },
+  { kind: 'step', text: '   de-fra-01 - 731' },
+  { kind: 'step', text: '   nl-ams-02 - 553' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Последние отчёты (до 15):' },
+  { kind: 'dim', text: '       Дата              Пользователь     IP                                        Нода' },
+  { kind: 'plain', text: '    2026-10-03T11:52  megauser         45.151.100.214                            de-fra-01' },
+  { kind: 'plain', text: '    2026-10-03T09:14  ivanpro          178.62.95.10                              nl-ams-02' },
+  { kind: 'plain', text: '    2026-10-02T23:41  megauser         185.220.101.5                             de-fra-01' },
+]} />
+
+### Разблокировать IP
+
+Если бан пришёлся на адрес, который трогать не хотели (например, пользователь за CGNAT, и под бан ушла вся подсеть провайдера), IP можно разблокировать сразу на всех нодах:
+
+<Steps>
+
+1. Выберите пункт `Разблокировать IP` и укажите адрес:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'IP для разблокировки на всех нодах: ', answer: '185.220.101.5' },
+      { kind: 'step', text: '[ * ] Разблокирую 185.220.101.5...' },
+      { kind: 'ok', text: '[ ✓ ] Запрос на разблокировку 185.220.101.5 принят нодами.' },
+    ]} />
+
+</Steps>
+
+Адрес под баном снова попадёт в блок-лист при следующем срабатывании. Чтобы вообще не блокировать его, добавьте IP в белый список в настройках.
+
+### Пересоздать таблицы nftables
+
+Пункт пересоздаёт nftables-таблицу плагина на всех нодах: сбрасывает активные баны и очищает таблицу от остатков после сбоев. Списки Ingress Filter и Egress Filter живут в той же таблице, поэтому если они включены, скрипт предупредит: после сброса ноды могут держать их пустыми до следующего изменения конфига плагина или перезапуска ноды.
+
+<Steps>
+
+1. Подтвердите сброс:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Пересоздать таблицы nftables на всех подключённых нодах? Текущие баны будут сброшены (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Пересоздаю таблицы nftables...' },
+      { kind: 'ok', text: '[ ✓ ] Запрос на пересоздание принят нодами.' },
+    ]} />
+
+</Steps>
+
+### Telegram-уведомления о блокировках
+
+Пункт `Настроить Telegram-уведомления (панель)` пишет настройки в `/opt/remnawave/.env` панели: бот из раздела уведомлений панели начинает дублировать отчёты Torrent Blocker в указанный чат.
+
+<Steps>
+
+1. Введите токен бота (получается у @BotFather) и чат для отчётов. Для темы в супергруппе укажите `chat_id:thread_id`. Перед сохранением модуль отправляет тестовое сообщение:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Telegram-уведомления панели: выключены, чат Torrent Blocker: —' },
+      { kind: 'plain', text: 'Токен Telegram-бота [текущий: —]: ', answer: '7481203945:AAH3k2QvLpR9tXmZwYb5C1dE' },
+      { kind: 'plain', text: 'Чат для отчётов Torrent Blocker (chat_id или chat_id:thread_id) [текущий: —]: ', answer: '-1002345678901' },
+      { kind: 'step', text: 'Отправляю тестовое сообщение...' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Записать в .env и перезапустить панель с компонентами? Будет короткий простой, ~30 секунд (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Сохраняю настройки в /opt/remnawave/.env...' },
+      { kind: 'step', text: '[ * ] Перезапускаю панель и компоненты (docker compose down/up)...' },
+      { kind: 'ok', text: '[ ✓ ] Готово: панель отправляет отчёты Torrent Blocker в Telegram.' },
+    ]} />
+
+</Steps>
+
+Если api.telegram.org недоступен с сервера (частое явление для серверов в РФ), модуль предложит отправлять сообщения через прокси, например socks-инбаунд xray на зарубежной ноде:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: 'Отправляю тестовое сообщение...' },
+  { kind: 'step', text: 'api.telegram.org недоступен с этого сервера (возможна блокировка в РФ).' },
+  { kind: 'step', text: 'Сообщения можно отправлять через SOCKS5/HTTP-прокси, например socks-инбаунд xray на зарубежной VPS/ноде.' },
+  { kind: 'input', text: 'Отправлять Telegram через прокси? (y/n): ', answer: 'y' },
+  { kind: 'plain', text: 'Адрес прокси (socks5h://хост:порт или socks5h://пользователь:пароль@хост:порт, пароль можно вводить как есть): ', answer: 'socks5h://45.151.100.214:1080' },
+  { kind: 'step', text: 'Отправляю тестовое сообщение...' },
+]} />
+
+Логин и пароль прокси можно вводить как есть: модуль сам закодирует специальные символы, а сами креды не светятся в списке процессов, уходя в curl через файловый дескриптор.
+
+Когда уведомления уже настроены, пункт предлагает `Перенастроить` или `Отключить уведомления Torrent Blocker`. Отключение чистит только чат Torrent Blocker: если другие категории уведомлений панели ещё живы, общий переключатель Telegram остаётся включённым.
+
+## Ingress Filter
+
+Фильтр блокирует входящие соединения на уровне nftables по списку подсетей: сканеры интернета стучатся в порт ноды и не получают ответа. Список один на все ноды, у каждой функции свой статус.
+
+:::danger[Важно]
+Пресеты режут целыми подсетями. Если хостер соседствует со сканерами в этих диапазонах, под бан могут попасть и его адреса: неактуальный для ваших нод пресет лучше не применять.
+:::
+
+Меню функции:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Ingress Filter' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Ingress Filter: выключен' },
+  { kind: 'dim', text: ' записей в блок-листе: 0' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Включить Ingress Filter' },
+  { kind: 'item', num: '2.', text: 'Пресеты блок-листа' },
+  { kind: 'item', num: '3.', text: 'Добавить IP/подсеть вручную' },
+  { kind: 'item', num: '4.', text: 'Убрать записи вручную' },
+  { kind: 'plain' },
+  { kind: 'item', num: '5.', text: 'Удалить настройки Ingress Filter' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-5):' },
+]} />
+
+### Включение
+
+<Steps>
+
+1. Выберите пункт `Включить Ingress Filter`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Включаю Ingress Filter...' },
+      { kind: 'ok', text: '[ ✓ ] Ingress Filter включён и синхронизирован на ноды.' },
+      { kind: 'step', text: 'Входящий трафик блокируется на уровне nftables по всему серверу. Пресеты режут целыми подсетями, под бан могут попасть и соседние адреса хостинга в этих подсетях.' },
+    ]} />
+
+</Steps>
+
+Фильтр можно включать и без списка, но работать он начнёт только после того, как в блок-листе появятся записи.
+
+### Пресеты блок-листа
+
+Пункт `Пресеты блок-листа` открывает три готовых списка. Напротив применённого пресета стоит метка `[установлен: N]`, а когда upstream обновил список, метка краснеет и показывает, сколько записей доступно:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Пресеты блок-листа Ingress' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Проверяю обновления применённых пресетов...' },
+  { kind: 'item', num: '1.', text: 'RU-сканеры (Skipa) ', answer: '[установлен: 145]' },
+  { kind: 'dim', text: '    Известные сканеры из РФ, ~145 подсетей' },
+  { kind: 'item', num: '2.', text: 'Классические сканеры ', warn: '[установлен: 270, доступно: 271 (обновите)]' },
+  { kind: 'dim', text: '    Censys, Shodan, Palo Alto, Shadowserver, Driftnet, ONYPHE, ZoomEye, LeakIX, Rapid7 (~270 подсетей)' },
+  { kind: 'item', num: '3.', text: 'FOFA + Quake' },
+  { kind: 'dim', text: '    Китайские скан-платформы FOFA и Quake, ~950 записей, большой список' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-3):' },
+]} />
+
+Списки скачиваются с GitHub, при недоступности напрямую модуль сам пробует зеркала. Повторное применение пресета заменяет только его прежние записи: записи других пресетов и добавленные вручную остаются на месте.
+
+<Steps>
+
+1. Выберите пресет, например `RU-сканеры (Skipa)`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Скачиваю списки пресета...' },
+      { kind: 'dim', text: ' Источник: github.com/tread-lightly/CyberOK_Skipa_ips' },
+      { kind: 'input', text: 'Записать в блок-лист 145 записей? Прежние записи этого пресета будут заменены, ручные останутся (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Пресет применён: 145 записей в блок-листе.' },
+      { kind: 'step', text: 'Ingress Filter сейчас выключен, включите его пунктом 1, иначе списки не работают.' },
+    ]} />
+
+</Steps>
+
+Если фильтр на момент применения выключен, модуль напоминает об этом жёлтой строкой: сами списки уже сохранены в панели, включить их можно в любой момент.
+
+### Свои подсети
+
+Пункт `Добавить IP/подсеть вручную` принимает IPv4 и подсети с префиксом через запятую:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'IP или CIDR через запятую (например 1.2.3.4, 10.0.0.0/24): ', answer: '185.220.101.5, 45.155.205.233' },
+  { kind: 'ok', text: '[ ✓ ] Блок-лист обновлён, всего записей: 2. Синхронизировано на ноды.' },
+]} />
+
+Пункт `Убрать записи вручную` показывает первые 20 записей и спрашивает, что вычеркнуть. Пустой Enter с подтверждением очищает весь список, `0` отменяет:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: ' Текущие записи (первые 20):' },
+  { kind: 'dim', text: '   185.220.101.5' },
+  { kind: 'dim', text: '   45.155.205.233' },
+  { kind: 'plain', text: 'Записи для удаления через запятую (Enter - очистить весь список, 0 - отмена): ', answer: '45.155.205.233' },
+  { kind: 'ok', text: '[ ✓ ] Блок-лист обновлён, всего записей: 1. Синхронизировано на ноды.' },
+]} />
+
+### Удаление настроек
+
+Пункт `Удалить настройки Ingress Filter` убирает только секцию ingressFilter из общего плагина: блок-лист и метки пресетов стираются, Torrent Blocker и Egress Filter не затрагиваются.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'Удалить настройки Ingress Filter из общего плагина (блок-лист и метки пресетов)? Torrent Blocker и Egress Filter не затрагиваются (y/n): ', answer: 'y' },
+  { kind: 'step', text: '[ * ] Удаляю настройки Ingress Filter...' },
+  { kind: 'ok', text: '[ ✓ ] Настройки Ingress Filter удалены из общего плагина.' },
+]} />
+
+## Egress Filter
+
+Фильтр блокирует исходящий трафик сервера по адресам назначения и портам. Основной сценарий: сервер взломали через украденную учётную запись, и вредоносная программа пытается уйти в частные сети или разослать спам, а двери уже закрыты.
+
+:::danger[Важно]
+Фильтр действует на весь исходящий трафик сервера, а не только клиентов: не блокируйте адреса, которые нужны самому хосту (DNS, mesh VPN). Loopback не блокируйте, 127.0.0.0/8 в пресеты не входит.
+:::
+
+Меню функции:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Egress Filter' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Egress Filter: не настроен' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Включить Egress Filter' },
+  { kind: 'item', num: '2.', text: 'Пресеты списков' },
+  { kind: 'item', num: '3.', text: 'Добавить IP/подсеть вручную' },
+  { kind: 'item', num: '4.', text: 'Добавить порты вручную' },
+  { kind: 'item', num: '5.', text: 'Убрать записи вручную' },
+  { kind: 'plain' },
+  { kind: 'item', num: '6.', text: 'Удалить настройки Egress Filter' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-6):' },
+]} />
+
+Когда списки уже есть, под статусом виден их размер: `IP-записей: 5 | портов: 3`.
+
+Включение похоже на Ingress:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[ * ] Включаю Egress Filter...' },
+  { kind: 'ok', text: '[ ✓ ] Egress Filter включён и синхронизирован на ноды.' },
+]} />
+
+### Пресеты списков
+
+Пункт `Пресеты списков` считает пресеты прямо на этом сервере, ничего не скачивая:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Пресеты Egress' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Частные диапазоны ', answer: '[установлен: 5]' },
+  { kind: 'dim', text: '    Внутренние сети (RFC1918, CGNAT, link-local), занятое на этом хосте пропускается автоматически' },
+  { kind: 'item', num: '2.', text: 'Почтовые порты' },
+  { kind: 'dim', text: '    Закрыть исходящую почту с сервера: 25, 465, 587' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-2):' },
+]} />
+
+<Steps>
+
+1. Пресет `Частные диапазоны` закрывает внутренние сети: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16 и IPv6-диапазон fc00::/7. Диапазоны, которые сам хост использует (маршруты, адреса интерфейсов, DNS-резолверы, мосты Docker, mesh-сети), автоматически пропускаются:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Будет заблокировано (5):' },
+      { kind: 'err', text: '   10.0.0.0/8' },
+      { kind: 'err', text: '   192.168.0.0/16' },
+      { kind: 'err', text: '   100.64.0.0/10' },
+      { kind: 'err', text: '   169.254.0.0/16' },
+      { kind: 'err', text: '   fc00::/7' },
+      { kind: 'dim', text: ' Пропущено, уже используется на хосте (1):' },
+      { kind: 'ok', text: '   172.16.0.0/12 ← 172.17.0.0/16' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Записать эти подсети в блок-лист исходящего? (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Пресет применён: 5 подсетей.' },
+      { kind: 'step', text: 'Egress Filter сейчас выключен, включите его пунктом 1, иначе списки не работают.' },
+    ]} />
+
+    Если состав подсетей на хосте изменится (появился новый мост Docker или mesh-адрес), пресет получит красную метку `установлен: 5, актуально: 4 (примените заново)` и пересчитается при повторном применении.
+
+2. Пресет `Почтовые порты` закрывает исходящие 25, 465 и 587: сервер перестаёт быть источником спама, обычный трафик не затрагивается:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Заблокировать исходящие порты 25, 465, 587? (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Пресет применён: порты заблокированы (25, 465, 587).' },
+    ]} />
+
+</Steps>
+
+### Свои адреса и порты
+
+Адреса принимаются IPv4 и IPv6, с префиксом и без; порты от 1 до 65535:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'IP или CIDR через запятую (IPv4/IPv6): ', answer: '185.220.101.5' },
+  { kind: 'ok', text: '[ ✓ ] Списки обновлены (IP: 1, портов: 0). Синхронизировано на ноды.' },
+]} />
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'Порты через запятую (1-65535): ', answer: '6667, 6697' },
+  { kind: 'ok', text: '[ ✓ ] Списки обновлены (IP: 1, портов: 2). Синхронизировано на ноды.' },
+]} />
+
+Пункт `Убрать записи вручную` показывает оба списка и принимает на удаление IP и порты вперемешку. Удаление настроек работает как у Ingress: из общего плагина уходит только секция egressFilter.
+
+## Общий плагин и привязка к нодам
+
+Несколько деталей, которые стоит знать про то, как модуль обращается с записями плагинов в панели:
+
+- **Одна запись на всё.** Плагин называется `Reverse Node Plugins`, uuid сохраняется на сервере панели, поэтому переименование записи в интерфейсе панели его не теряет.
+- **Привязка при каждом сохранении.** Сохранённый конфиг ничего не значит, пока плагин не активен на ноде. После каждого изменения модуль заново привязывает его ко всем включённым нодам и синхронизирует конфиг.
+- **Чужой плагин на нодах.** Если часть нод держит активным другой плагин (свой кастомный), модуль спросит, перевязать ли и их. Отказ запоминается до конца сессии: такие ноды остаются на своём плагине, запись в панели не удаляется.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'На этих нодах активен другой плагин: us-nyc-03. Привязать и их к общему плагину? Их текущий плагин на них перестанет действовать (запись останется в панели) (y/n): ', answer: 'n' },
+      { kind: 'step', text: 'Оставлены на своём плагине: us-nyc-03 — общий плагин на них не действует.' },
+    ]} />
+
+- **Объединение старых записей.** Записи, оставшиеся от прошлых версий скрипта, модуль при входе предлагает слить в одну: конфиги глубоко объединяются, списки адресов складываются без потерь, лишние записи удаляются.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Записи плагинов для объединения: Torrent Blocker, Egress Filter. Настройки будут слиты в «Reverse Node Plugins», остальные записи удалены, а плагин привязан ко всем включённым нодам. Объединить сейчас? (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Объединяю плагины ноды в одну запись: Torrent Blocker, Egress Filter...' },
+      { kind: 'ok', text: '[ ✓ ] Готово: один общий плагин, привязан ко всем включённым нодам.' },
+    ]} />
+
+### Удаление общего плагина
+
+Пункт `Удалить общий плагин (все три функции)` в меню Torrent Blocker убирает запись целиком: сначала плагин отвязывается от нод (чтобы не остались висящие ссылки), затем удаляется из панели.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'Удалить общий плагин из панели? Настройки Torrent Blocker, Ingress Filter и Egress Filter будут стёрты, плагин отвяжется от нод (y/n): ', answer: 'y' },
+  { kind: 'step', text: '[ * ] Удаляю общий плагин...' },
+  { kind: 'ok', text: '[ ✓ ] Плагин удалён и отвязан от нод. Активные баны истекут сами либо сбросьте их пересозданием таблиц.' },
+]} />
+
+Чтобы оставить часть функций, удаляйте секции по отдельности: пункты `Удалить настройки Ingress Filter` и `Удалить настройки Egress Filter` в их меню трогают только свои секции.

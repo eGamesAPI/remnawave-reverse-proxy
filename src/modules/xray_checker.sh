@@ -1637,6 +1637,7 @@ show_xray_checker_menu() {
 
     echo -e ""
     echo -e "${COLOR_GREEN}${LANG[XCHK_MENU_TITLE]}${COLOR_RESET}"
+    echo -e " ${COLOR_GRAY}${LANG[XCHK_DOC_LINK]}${COLOR_RESET}"
     echo -e ""
     echo -e " ${status_color}${LANG[XCHK_MENU_TITLE]}: ${status_text}${COLOR_RESET}"
     # The current public address rides in the header: it explains why the

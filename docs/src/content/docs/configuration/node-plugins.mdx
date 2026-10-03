@@ -1,0 +1,605 @@
+---
+title: "Node Plugins"
+description: "The Node Plugins module: Torrent Blocker, Ingress Filter and Egress Filter. Blocking torrent traffic, inbound scanners and unwanted outbound traffic through the Remnawave panel"
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import { APP_VERSION } from '../../../components/version';
+import NodePluginsDiagram from '../../../components/NodePluginsDiagram.astro';
+
+The `Node Plugins` module configures three built-in Remnawave Node plugins for every node of the panel at once:
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:1.2rem 0">
+  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+      Torrent Blocker
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Detects user torrent traffic and bans the IP at the nftables level: one caught packet is enough.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Ban</span><span>temporary, configurable duration</span>
+      <span style="opacity:.6;white-space:nowrap">Reports</span><span>stats and Telegram</span>
+      <span style="opacity:.6;white-space:nowrap">Exceptions</span><span>IP whitelist</span>
+    </div>
+  </div>
+  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
+      Ingress Filter
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Cuts inbound connections by whole subnets: scanners knock on the node port and get no answer.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Presets</span><span>RU, classic, FOFA scanners</span>
+      <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4 and /8…/32 subnets</span>
+      <span style="opacity:.6;white-space:nowrap">Traffic</span><span>inbound, whole node server</span>
+    </div>
+  </div>
+  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
+      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
+      Egress Filter
+    </div>
+    <div style="font-size:.92em;line-height:1.65;opacity:.9">
+      Blocks outbound traffic by destination address and port: a hijacked account reaches neither private networks nor spam sending.
+    </div>
+    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
+      <span style="opacity:.6;white-space:nowrap">Presets</span><span>private ranges, mail ports</span>
+      <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4/IPv6 and ports 1-65535</span>
+      <span style="opacity:.6;white-space:nowrap">Traffic</span><span>outbound, whole node server</span>
+    </div>
+  </div>
+</div>
+
+All three features live in a single `Reverse Node Plugins` plugin record, are configured through the panel API from the server the panel runs on, and apply on the nodes without restarts.
+
+## How it works
+
+<NodePluginsDiagram lang="en" />
+
+Every Remnawave node has exactly one active plugin (`activePluginUuid`), so the three features cannot be three separate records: only one of them would ever be active. The script keeps one shared record with three config sections: `torrentBlocker`, `ingressFilter` and `egressFilter`.
+
+Every settings change follows the same path:
+
+<div class="not-content" style="display:flex;flex-wrap:wrap;align-items:center;gap:0.45rem;margin:1rem 0;font-family:var(--sl-font-mono,monospace);font-size:.8rem">
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">config PATCH</span>
+  <span style="opacity:.55">→</span>
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">sync</span>
+  <span style="opacity:.55">→</span>
+  <span style="border:1px solid rgba(0,229,160,.4);border-radius:8px;padding:0.3rem 0.7rem;color:inherit">bind to every node</span>
+</div>
+
+Offline nodes get the binding in the panel database and pick the config up on reconnect.
+
+The top of the module menu always shows one line of truth: `Nodes running the plugin: 2 of 2`. A plugin no node points at is dead weight no matter what the per-feature statuses say.
+
+:::note[Panel cache]
+The panel API caches plugin state for a few seconds. If the menu still shows the previous status right after enabling, but the panel UI already shows it enabled, everything works — the status will catch up.
+:::
+
+## Requirements
+
+:::danger[Important]
+Plugins are configured through the panel API, so run the module on the server with the Remnawave panel installed. On a node-only server the menu entry does not appear.
+:::
+
+Torrent Blocker requires Node v2.7.0 or newer with Xray 26.3.27+.
+
+## Opening the module
+
+Run on the panel server:
+
+```bash
+remnawave_reverse
+```
+
+<Steps>
+
+1. In the main menu select `4`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install Remnawave Components' },
+      { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
+      { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
+      { kind: 'plain' },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'plain' },
+      { kind: 'item', num: '9.', text: 'Manage IPv6' },
+      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
+      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '12.', text: 'Check for updates script' },
+      { kind: 'item', num: '13.', text: 'Remove script' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):' },
+    ]} />
+
+2. In the extensions menu select `Node Plugins`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Node Extensions' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Install template for selfsteal node' },
+      { kind: 'item', num: '2.', text: 'Node Plugins', pick: true },
+      { kind: 'item', num: '3.', text: 'Xray core' },
+      { kind: 'item', num: '4.', text: 'SSH access to a remote machine' },
+      { kind: 'item', num: '5.', text: 'Server routing' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-5):' },
+    ]} />
+
+3. The module menu opens with the statuses of all three features and the binding count:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Node Plugins' },
+      { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/node-plugins' },
+      { kind: 'plain' },
+      { kind: 'dim', text: 'Nodes running the plugin: 2 of 2' },
+      { kind: 'item', num: '1.', text: 'Torrent Blocker: ', answer: 'ENABLED' },
+      { kind: 'item', num: '2.', text: 'Ingress Filter: disabled' },
+      { kind: 'item', num: '3.', text: 'Egress Filter: not configured' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select plugin (0-3):' },
+    ]} />
+
+</Steps>
+
+Each feature's status comes in four flavors:
+
+<div class="not-content" style="display:grid;gap:0.45rem;margin:1rem 0;font-size:.92em">
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
+    <span><b>ENABLED</b>: the feature works on the nodes</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#ffd84d;box-shadow:0 0 6px rgba(255,216,77,.6);flex:none"></span>
+    <span><b>disabled</b>: the section exists in the config but is off</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#8b968f;flex:none"></span>
+    <span><b>not configured</b>: the section is not in the plugin config yet</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:0.55rem">
+    <span style="width:9px;height:9px;border-radius:50%;background:#ff5d5d;box-shadow:0 0 6px rgba(255,93,93,.6);flex:none"></span>
+    <span><b>unknown</b>: the panel API did not answer</span>
+  </div>
+</div>
+
+When no node points at the plugin, the counter is replaced by the warning `The plugin is not bound to any node — the features are inactive on nodes. Any settings change binds it.`
+
+On entry the module checks for old plugin records left by earlier script versions (they were named `Torrent Blocker`, `Ingress Filter`, `Egress Filter` separately). Such records are offered to be merged into one: settings are combined, the extra records deleted, the plugin bound to every node. Declining changes nothing; the question repeats on the next entry.
+
+## Torrent Blocker
+
+The plugin detects torrent traffic on the Xray side and bans the offending IP on the node itself through nftables. The ban expires on its own after the configured time; the panel sends block notifications to Telegram when a bot is configured there.
+
+The feature menu:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Torrent Blocker' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Torrent Blocker: ', answer: 'ENABLED' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Disable Torrent Blocker' },
+  { kind: 'item', num: '2.', text: 'Settings (ban duration, whitelist IPs)' },
+  { kind: 'item', num: '3.', text: 'Stats and recent reports' },
+  { kind: 'item', num: '4.', text: 'Unblock IP' },
+  { kind: 'item', num: '5.', text: 'Recreate nftables tables' },
+  { kind: 'item', num: '6.', text: 'Configure Telegram notifications (panel)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '7.', text: 'Delete the shared plugin (all three features)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-7):' },
+]} />
+
+### Enable and disable
+
+<Steps>
+
+1. Select `Enable Torrent Blocker` (or `Disable` when it is enabled):
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Torrent Blocker' },
+      { kind: 'plain' },
+      { kind: 'plain', text: ' Torrent Blocker: disabled' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Enable Torrent Blocker', pick: true },
+      { kind: 'item', num: '2.', text: 'Settings (ban duration, whitelist IPs)' },
+      { kind: 'item', num: '3.', text: 'Stats and recent reports' },
+      { kind: 'item', num: '4.', text: 'Unblock IP' },
+      { kind: 'item', num: '5.', text: 'Recreate nftables tables' },
+      { kind: 'item', num: '6.', text: 'Configure Telegram notifications (panel)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '7.', text: 'Delete the shared plugin (all three features)' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-7): ', answer: '1' },
+      { kind: 'plain' },
+      { kind: 'step', text: '[ * ] Enabling Torrent Blocker...' },
+      { kind: 'ok', text: '[ ✓ ] Torrent Blocker enabled, the plugin is bound to every enabled node. Block notifications arrive in Telegram only if notifications are configured in the panel (Telegram bot).' },
+      { kind: 'step', text: 'Requires Node v2.7.0+ with Xray 26.3.27+. Xray sees only part of torrent traffic — one detected packet is enough to ban the IP.' },
+    ]} />
+
+</Steps>
+
+Disabling works the same way, but node blocks are not lifted by it: active bans live out their duration.
+
+### Settings (ban duration, whitelist IPs)
+
+The `Settings` entry shows current values: Enter keeps them as is, `-` on the whitelist clears it.
+
+<Steps>
+
+1. Select `2` and enter the new values:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Torrent Blocker settings' },
+      { kind: 'plain', text: 'Ban duration in seconds [current: 3600]: ', answer: '7200' },
+      { kind: 'plain', text: "Whitelist IPs, comma-separated [current: none] (Enter — keep, '-' — clear): ", answer: '203.0.113.7, 198.51.100.4' },
+      { kind: 'ok', text: '[ ✓ ] Settings saved and synced to nodes.' },
+    ]} />
+
+</Steps>
+
+The whitelist helps when an honest user has a static address and complains about blocks: add the IP and Torrent Blocker stops reacting to it.
+
+### Stats and recent reports
+
+The `Stats and recent reports` entry shows counters, top offenders and fresh blocks across all nodes:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[ * ] Torrent Blocker stats' },
+  { kind: 'plain', text: ' Total: 1284   24h: 17   Users: 96   Nodes: 2' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Top users:' },
+  { kind: 'step', text: '   megauser - 204' },
+  { kind: 'step', text: '   ivanpro - 118' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Top nodes:' },
+  { kind: 'step', text: '   de-fra-01 - 731' },
+  { kind: 'step', text: '   nl-ams-02 - 553' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Recent reports (up to 15):' },
+  { kind: 'dim', text: '       Date              User             IP                                        Node' },
+  { kind: 'plain', text: '    2026-10-03T11:52  megauser         45.151.100.214                            de-fra-01' },
+  { kind: 'plain', text: '    2026-10-03T09:14  ivanpro          178.62.95.10                              nl-ams-02' },
+  { kind: 'plain', text: '    2026-10-02T23:41  megauser         185.220.101.5                             de-fra-01' },
+]} />
+
+### Unblock IP
+
+When a ban lands on an address you did not want to touch (for example a user behind CGNAT, where the whole provider subnet went under the ban), the IP can be unblocked on all nodes at once:
+
+<Steps>
+
+1. Select `Unblock IP` and enter the address:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'IP to unblock on all nodes: ', answer: '185.220.101.5' },
+      { kind: 'step', text: '[ * ] Unblocking 185.220.101.5...' },
+      { kind: 'ok', text: '[ ✓ ] Unblock request for 185.220.101.5 accepted by the nodes.' },
+    ]} />
+
+</Steps>
+
+A banned address lands back in the blocklist on the next trigger. To never ban it at all, add the IP to the whitelist in Settings.
+
+### Recreate nftables tables
+
+This entry rebuilds the plugin nftables table on every node: it drops active bans and clears debris after failures. The Ingress Filter and Egress Filter lists live in the same table, so when those are on, the script warns: after the reset the nodes may keep them empty until the plugin config changes next time or the node restarts.
+
+<Steps>
+
+1. Confirm the reset:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Recreate nftables tables on all connected nodes? Existing blocks will be dropped (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Recreating nftables tables...' },
+      { kind: 'ok', text: '[ ✓ ] Recreate request accepted by the nodes.' },
+    ]} />
+
+</Steps>
+
+### Telegram notifications about blocks
+
+The `Configure Telegram notifications (panel)` entry writes settings into the panel's `/opt/remnawave/.env`: the panel's Telegram bot starts mirroring Torrent Blocker reports into the given chat.
+
+<Steps>
+
+1. Enter the bot token (from @BotFather) and the chat for reports. For a supergroup topic use `chat_id:thread_id`. Before saving, the module sends a test message:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Panel Telegram notifications: disabled, TB chat: —' },
+      { kind: 'plain', text: 'Telegram bot token [current: —]: ', answer: '7481203945:AAH3k2QvLpR9tXmZwYb5C1dE' },
+      { kind: 'plain', text: 'Chat for TB reports, chat_id or chat_id:thread_id [current: —]: ', answer: '-1002345678901' },
+      { kind: 'step', text: 'Sending a test message...' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Write to the panel .env and restart the panel and its components? Short downtime, ~30 seconds (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Saving settings to /opt/remnawave/.env...' },
+      { kind: 'step', text: '[ * ] Restarting the panel and its components (docker compose down/up)...' },
+      { kind: 'ok', text: '[ ✓ ] Done: the panel now sends Torrent Blocker reports to Telegram.' },
+    ]} />
+
+</Steps>
+
+When api.telegram.org is unreachable from the server (common for RU-hosted machines), the module offers to send messages through a proxy, for example a socks inbound of xray on a foreign node:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: 'Sending a test message...' },
+  { kind: 'step', text: 'api.telegram.org is unreachable from this server (possibly blocked in Russia).' },
+  { kind: 'step', text: 'Messages can be sent through a SOCKS5/HTTP proxy, for example an xray socks inbound on a foreign VPS/node.' },
+  { kind: 'input', text: 'Send Telegram through a proxy? (y/n): ', answer: 'y' },
+  { kind: 'plain', text: 'Proxy address (socks5h://host:port or socks5h://user:pass@host:port, the password can be typed as is): ', answer: 'socks5h://45.151.100.214:1080' },
+  { kind: 'step', text: 'Sending a test message...' },
+]} />
+
+The proxy login and password can be typed as is: the module percent-encodes special characters itself, and the credentials never show up in the process list because curl receives them through a file descriptor.
+
+When notifications are already configured, the entry offers `Reconfigure` or `Disable Torrent Blocker notifications`. Disabling clears only the Torrent Blocker chat: if other notification categories of the panel are still alive, the global Telegram switch stays on.
+
+## Ingress Filter
+
+The filter blocks inbound connections at the nftables level by a subnet list: internet scanners knock on the node port and get no answer. There is one list for all nodes, and each feature has its own status.
+
+:::danger[Important]
+Presets cut by whole subnets. If the hoster neighbors those scanners in the same ranges, its addresses may fall under the ban too: skip presets irrelevant to your nodes.
+:::
+
+The feature menu:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Ingress Filter' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Ingress Filter: disabled' },
+  { kind: 'dim', text: ' blocklist entries: 0' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Enable Ingress Filter' },
+  { kind: 'item', num: '2.', text: 'Blocklist presets' },
+  { kind: 'item', num: '3.', text: 'Add IP/subnet manually' },
+  { kind: 'item', num: '4.', text: 'Remove entries manually' },
+  { kind: 'plain' },
+  { kind: 'item', num: '5.', text: 'Delete Ingress Filter settings' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-5):' },
+]} />
+
+### Enable
+
+<Steps>
+
+1. Select `Enable Ingress Filter`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Enabling Ingress Filter...' },
+      { kind: 'ok', text: '[ ✓ ] Ingress Filter enabled and synced to nodes.' },
+      { kind: 'step', text: 'Inbound traffic is blocked at the nftables level for the whole server. Presets block entire subnets, so hosting neighbours of those subnets may be cut off too.' },
+    ]} />
+
+</Steps>
+
+The filter can be enabled with an empty list too, but it starts working only once the blocklist has entries.
+
+### Blocklist presets
+
+The `Blocklist presets` entry opens three ready lists. An applied preset carries an `[applied: N]` mark, and when the upstream list updates, the mark turns red and shows how many entries are available:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Ingress blocklist presets' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Checking applied presets for updates...' },
+  { kind: 'item', num: '1.', text: 'RU scanners (Skipa) ', answer: '[applied: 145]' },
+  { kind: 'dim', text: '    Known RU-based internet scanners, ~145 subnets' },
+  { kind: 'item', num: '2.', text: 'Classic scanners ', warn: '[applied: 270, available: 271 — update it]' },
+  { kind: 'dim', text: '    Censys, Shodan, Palo Alto, Shadowserver, Driftnet, ONYPHE, ZoomEye, LeakIX, Rapid7 — ~270 subnets' },
+  { kind: 'item', num: '3.', text: 'FOFA + Quake' },
+  { kind: 'dim', text: '    Chinese scan platforms FOFA and Quake — ~950 entries, a large list' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-3):' },
+]} />
+
+The lists are downloaded from GitHub; when it is unreachable directly, the module tries mirrors on its own. Re-applying a preset replaces only that preset's previous entries: entries of other presets and manual ones stay in place.
+
+<Steps>
+
+1. Select a preset, for example `RU scanners (Skipa)`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[ * ] Downloading preset lists...' },
+      { kind: 'dim', text: ' Source: github.com/tread-lightly/CyberOK_Skipa_ips' },
+      { kind: 'input', text: 'Write 145 entries into the blocklist? This preset\'s previous entries are replaced, manual entries stay (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Preset applied: 145 entries in the blocklist.' },
+      { kind: 'step', text: 'Ingress Filter is currently disabled — enable it via option 1, otherwise the lists do nothing.' },
+    ]} />
+
+</Steps>
+
+When the filter is off at apply time, the module reminds with a yellow line: the lists themselves are already saved in the panel, and enabling works at any moment.
+
+### Own subnets
+
+The `Add IP/subnet manually` entry accepts IPv4 and prefixed subnets, comma-separated:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'IP or CIDR, comma-separated (e.g. 1.2.3.4, 10.0.0.0/24): ', answer: '185.220.101.5, 45.155.205.233' },
+  { kind: 'ok', text: '[ ✓ ] Blocklist updated, 2 entries in total. Synced to nodes.' },
+]} />
+
+The `Remove entries manually` entry shows the first 20 entries and asks what to cross out. An empty Enter with confirmation clears the whole list, `0` cancels:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: ' Current entries (first 20):' },
+  { kind: 'dim', text: '   185.220.101.5' },
+  { kind: 'dim', text: '   45.155.205.233' },
+  { kind: 'plain', text: 'Entries to remove, comma-separated (Enter — clear the whole list, 0 — cancel): ', answer: '45.155.205.233' },
+  { kind: 'ok', text: '[ ✓ ] Blocklist updated, 1 entries in total. Synced to nodes.' },
+]} />
+
+### Deleting the settings
+
+The `Delete Ingress Filter settings` entry removes only the ingressFilter section from the shared plugin: the blocklist and preset marks are erased, Torrent Blocker and Egress Filter stay untouched.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'Delete the Ingress Filter settings from the shared plugin (blocklist and preset marks)? Torrent Blocker and Egress Filter stay untouched (y/n): ', answer: 'y' },
+  { kind: 'step', text: '[ * ] Deleting Ingress Filter settings...' },
+  { kind: 'ok', text: '[ ✓ ] Ingress Filter settings removed from the shared plugin.' },
+]} />
+
+## Egress Filter
+
+The filter blocks the server's outbound traffic by destination address and port. The main scenario: the server got compromised through a stolen account, the malware wants to reach private networks or send spam, and the doors are already closed.
+
+:::danger[Important]
+The filter applies to ALL outbound traffic of the server, not only clients: do not block addresses the host itself needs (DNS, mesh VPN). Never block loopback — 127.0.0.0/8 is deliberately absent from presets.
+:::
+
+The feature menu:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Egress Filter' },
+  { kind: 'plain' },
+  { kind: 'plain', text: ' Egress Filter: not configured' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Enable Egress Filter' },
+  { kind: 'item', num: '2.', text: 'List presets' },
+  { kind: 'item', num: '3.', text: 'Add IP/subnet manually' },
+  { kind: 'item', num: '4.', text: 'Add ports manually' },
+  { kind: 'item', num: '5.', text: 'Remove entries manually' },
+  { kind: 'plain' },
+  { kind: 'item', num: '6.', text: 'Delete Egress Filter settings' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-6):' },
+]} />
+
+When the lists already exist, their size shows under the status: `IP entries: 5 | ports: 3`.
+
+Enabling mirrors Ingress:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[ * ] Enabling Egress Filter...' },
+  { kind: 'ok', text: '[ ✓ ] Egress Filter enabled and synced to nodes.' },
+]} />
+
+### List presets
+
+The `List presets` entry computes presets right on this server, downloading nothing:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Egress presets' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Private ranges ', answer: '[applied: 5]' },
+  { kind: 'dim', text: '    Internal networks (RFC1918, CGNAT, link-local); ranges in use on this host are skipped automatically' },
+  { kind: 'item', num: '2.', text: 'Mail ports' },
+  { kind: 'dim', text: '    Close outbound mail from the server: 25, 465, 587' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-2):' },
+]} />
+
+<Steps>
+
+1. The `Private ranges` preset closes internal networks: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16 and the IPv6 range fc00::/7. Ranges the host itself uses (routes, interface addresses, DNS resolvers, Docker bridges, meshes) are skipped automatically:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Will be blocked (5):' },
+      { kind: 'err', text: '   10.0.0.0/8' },
+      { kind: 'err', text: '   192.168.0.0/16' },
+      { kind: 'err', text: '   100.64.0.0/10' },
+      { kind: 'err', text: '   169.254.0.0/16' },
+      { kind: 'err', text: '   fc00::/7' },
+      { kind: 'dim', text: ' Skipped — already used on this host (1):' },
+      { kind: 'ok', text: '   172.16.0.0/12 ← 172.17.0.0/16' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Write these subnets into the outbound blocklist? (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Preset applied: 5 subnets.' },
+      { kind: 'step', text: 'Egress Filter is currently disabled — enable it via option 1, otherwise the lists do nothing.' },
+    ]} />
+
+    When the host's subnet composition changes (a new Docker bridge or a mesh address), the preset gets a red `applied: 5, current: 4 — re-apply` mark and is recomputed on the next apply.
+
+2. The `Mail ports` preset closes outbound 25, 465 and 587: the server stops being a spam source, normal traffic is untouched:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Block outbound ports 25, 465, 587? (y/n): ', answer: 'y' },
+      { kind: 'ok', text: '[ ✓ ] Preset applied: ports blocked (25, 465, 587).' },
+    ]} />
+
+</Steps>
+
+### Own addresses and ports
+
+Addresses accept IPv4 and IPv6, with or without a prefix; ports go from 1 to 65535:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'IP or CIDR, comma-separated (IPv4/IPv6): ', answer: '185.220.101.5' },
+  { kind: 'ok', text: '[ ✓ ] Lists updated: IPs — 1, ports — 0. Synced to nodes.' },
+]} />
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'plain', text: 'Ports, comma-separated (1-65535): ', answer: '6667, 6697' },
+  { kind: 'ok', text: '[ ✓ ] Lists updated: IPs — 1, ports — 2. Synced to nodes.' },
+]} />
+
+The `Remove entries manually` entry shows both lists and accepts IPs and ports for removal in one input. Deleting the settings works like Ingress: only the egressFilter section leaves the shared plugin.
+
+## The shared plugin and node binding
+
+A few details worth knowing about how the module handles plugin records in the panel:
+
+- **One record for everything.** The plugin is named `Reverse Node Plugins`; its uuid is stored on the panel server, so renaming the record in the panel UI does not lose it.
+- **Binding on every save.** A saved config means nothing until the plugin is active on a node. After every change the module re-binds it to all enabled nodes and syncs the config.
+- **Another plugin on the nodes.** When some nodes keep a different plugin active (your own custom one), the module asks whether to re-bind them too. A decline is remembered for the session: such nodes stay on their plugin, and the record is not deleted from the panel.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'These nodes run another plugin: us-nyc-03. Bind them to the shared plugin as well? Their current plugin stops working on them (its record stays in the panel) (y/n): ', answer: 'n' },
+      { kind: 'step', text: 'Left on their own plugin: us-nyc-03 — the shared plugin is not active there.' },
+    ]} />
+
+- **Merging old records.** Records left from earlier script versions are offered to be merged into one on entry: configs are deep-merged, address lists are unioned without losses, extra records are deleted.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Plugin records to merge: Torrent Blocker, Egress Filter. Their settings are merged into "Reverse Node Plugins", the other records are deleted and the plugin is bound to every enabled node. Merge now? (y/n): ', answer: 'y' },
+      { kind: 'step', text: '[ * ] Merging node plugins into one record: Torrent Blocker, Egress Filter...' },
+      { kind: 'ok', text: '[ ✓ ] Done: one shared plugin, bound to every enabled node.' },
+    ]} />
+
+### Deleting the shared plugin
+
+The `Delete the shared plugin (all three features)` entry in the Torrent Blocker menu removes the record entirely: the plugin is first unbound from the nodes (so no dangling references stay), then deleted from the panel.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'Delete the shared plugin from the panel? Torrent Blocker, Ingress Filter and Egress Filter settings will be removed and the plugin unbound from nodes (y/n): ', answer: 'y' },
+  { kind: 'step', text: '[ * ] Deleting the shared plugin...' },
+  { kind: 'ok', text: '[ ✓ ] Plugin deleted and unbound from nodes. Active bans expire on their own, or reset them via the recreate tables option.' },
+]} />
+
+To keep some of the features, delete the sections one by one: the `Delete Ingress Filter settings` and `Delete Egress Filter settings` entries in their menus touch only their own sections.

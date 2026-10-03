@@ -32,10 +32,10 @@ const en = lang === 'en';
     <text x="180" y="110" class="cloud-lbl">NetBird · WireGuard mesh · 100.88.0.0/16</text>
 
     <!-- связи внутри облака: база + бегущий пунктир -->
-    <path class="wire w-vio" d="M240 168 C 213 168, 213 142, 188 142" />
-    <path class="flow f-vio" d="M240 168 C 213 168, 213 142, 188 142" />
-    <path class="wire w-vio" d="M240 185 C 213 185, 213 218, 188 218" />
-    <path class="flow f-vio" d="M240 185 C 213 185, 213 218, 188 218" />
+    <path class="wire w-vio" d="M240 168 C 213 168, 213 142, 198 142" />
+    <path class="flow f-vio" d="M240 168 C 213 168, 213 142, 198 142" />
+    <path class="wire w-vio" d="M240 185 C 213 185, 213 218, 198 218" />
+    <path class="flow f-vio" d="M240 185 C 213 185, 213 218, 198 218" />
     <path class="wire w-teal" d="M400 168 C 428 168, 428 142, 448 142" />
     <path class="flow f-teal" d="M400 168 C 428 168, 428 142, 448 142" />
     <path class="wire w-teal" d="M400 185 C 428 185, 428 218, 448 218" />
@@ -43,14 +43,14 @@ const en = lang === 'en';
 
     <!-- узлы -->
     <g class="node n-vio">
-      <rect x="28" y="120" width="160" height="44" rx="11" />
-      <text x="108" y="139" class="t">{en ? 'node · de-fra-01' : 'нода · de-fra-01'}</text>
-      <text x="108" y="155" class="s">100.88.4.12</text>
+      <rect x="28" y="120" width="172" height="44" rx="11" />
+      <text x="114" y="139" class="t">{en ? 'node · de-fra-01' : 'нода · de-fra-01'}</text>
+      <text x="114" y="155" class="s">100.88.4.12</text>
     </g>
     <g class="node n-vio">
-      <rect x="28" y="196" width="160" height="44" rx="11" />
-      <text x="108" y="215" class="t">{en ? 'node · nl-ams-02' : 'нода · nl-ams-02'}</text>
-      <text x="108" y="231" class="s">100.88.7.3</text>
+      <rect x="28" y="196" width="172" height="44" rx="11" />
+      <text x="114" y="215" class="t">{en ? 'node · nl-ams-02' : 'нода · nl-ams-02'}</text>
+      <text x="114" y="231" class="s">100.88.7.3</text>
     </g>
     <g class="node n-entry">
       <rect x="240" y="150" width="160" height="56" rx="12" />
@@ -58,14 +58,14 @@ const en = lang === 'en';
       <text x="320" y="192" class="s">100.88.10.7</text>
     </g>
     <g class="node n-teal">
-      <rect x="448" y="120" width="168" height="44" rx="11" />
-      <text x="532" y="139" class="t">{en ? 'subscription page' : 'страница подписки'}</text>
-      <text x="532" y="155" class="s">{en ? 'port 31xx, closed' : 'порт 31xx · закрыт'}</text>
+      <rect x="448" y="120" width="182" height="44" rx="11" />
+      <text x="539" y="139" class="t">{en ? 'subscription page' : 'страница подписки'}</text>
+      <text x="539" y="155" class="s">{en ? 'port 31xx, closed' : 'порт 31xx · закрыт'}</text>
     </g>
     <g class="node n-teal">
-      <rect x="448" y="196" width="168" height="44" rx="11" />
-      <text x="532" y="215" class="t">Xray Checker</text>
-      <text x="532" y="231" class="s">{en ? 'metrics inside the network only' : 'метрики только в сети'}</text>
+      <rect x="448" y="196" width="182" height="44" rx="11" />
+      <text x="539" y="215" class="t">Xray Checker</text>
+      <text x="539" y="231" class="s">{en ? 'metrics inside the network only' : 'метрики только в сети'}</text>
     </g>
 
     <!-- публичный запасной путь — вне облака, статичный -->
