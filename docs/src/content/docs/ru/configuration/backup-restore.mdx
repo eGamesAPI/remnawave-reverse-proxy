@@ -1,0 +1,501 @@
+---
+title: "Backup and Restore"
+description: 'Модуль бэкапа от distillium: резервные копии панели и Telegram-бота, восстановление на том же или новом сервере, отправка в Telegram, Google Drive и S3'
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+
+Пункт `Backup and Restore` главного меню подключает инструмент distillium `remnawave-backup-restore`. Он снимает резервную копию всей панели Remnawave: базу PostgreSQL и директорию установки со всеми конфигурациями. Копию можно вернуть на тот же сервер или развернуть на новом, делать вручную или по расписанию, отправлять в Telegram, Google Drive или S3-хранилище. Старые копии подчищаются сами по политике хранения.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Backup &amp; Restore
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Резервные копии Remnawave: база данных и директория панели целиком, вручную и по расписанию, с восстановлением на тот же или новый сервер.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Версия</span><span style="opacity:.92">v4.0.0</span>
+          <span style="opacity:.55;white-space:nowrap">Отправка</span><span style="opacity:.92">Telegram, Google Drive, S3</span>
+          <span style="opacity:.55;white-space:nowrap">Расписание</span><span style="opacity:.92">cron, время по UTC+0</span>
+          <span style="opacity:.55;white-space:nowrap">Восстановление</span><span style="opacity:.92">всё, только база, только файлы</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/distillium.png" alt="distillium" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/distillium" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">distillium</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@distillium</span>
+          </div>
+          <a href="https://github.com/distillium/remnawave-backup-restore" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            remnawave-backup-restore
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+## Что попадает в копию
+
+- **База данных.** В режиме Docker дамп снимается командой `pg_dumpall` прямо внутри контейнера `remnawave-db`, поэтому в копию попадает и база, и роли с глобальными настройками. Для внешней PostgreSQL инструмент поднимает одноразовый контейнер `postgres` и снимает дамп по сети, SSL-режим настраивается.
+- **Директория панели.** Архивируется целиком, кроме временных файлов: `*.log`, `*.tmp` и `.git` исключаются.
+- **Telegram-бот магазина (опционально).** Если включён бэкап бота, его база и директория добавляются в тот же архив.
+
+Всё складывается в один файл вида `remnawave_backup_full_2026-10-04_12_00_00.tar.gz`. Слово в имени (`full`, `panel`, `bot`) сразу показывает состав. Внутри архива дамп базы, архив директории и файл `backup_meta.info` с версией панели, версией скрипта и типом дампа: при восстановлении инструмент сверяет эти данные с текущим режимом и предупредит о несовпадении.
+
+## Запуск
+
+Выполните на сервере панели:
+
+```bash
+remnawave_reverse
+```
+
+<Steps>
+
+1. В главном меню выберите пункт `8`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-13):' },
+    ]} />
+
+2. При первом запуске модуль скачивает `backup-restore.sh` с двух независимых зеркал и сверяет контрольные суммы: файл запускается только когда оба источника отдали одинаковые байты. Если проверки не сошлись, запуск отменяется с сообщением «Скрипт не подтверждён двумя независимыми источниками, возможна подмена. Запуск отменён».
+
+3. Дальше инструмент переносит сам себя в постоянный каталог и перезапускается уже оттуда:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Configuration not found. Script launched from temporary location.' },
+      { kind: 'dim', text: '[INFO] Moving script to main install directory: /opt/rw-backup-restore/backup-restore.sh...' },
+      { kind: 'ok', text: '[SUCCESS] Script successfully moved to /opt/rw-backup-restore/backup-restore.sh.' },
+      { kind: 'plain', text: '[ACTION] Restarting script from new location to complete setup.' },
+    ]} />
+
+</Steps>
+
+Повторные запуски пункта `8` сразу открывают установленную копию через команду `rw-backup`, скачивания не происходит.
+
+## Первый запуск
+
+<Steps>
+
+1. Выберите язык интерфейса:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Select language / Выберите язык:' },
+      { kind: 'item', num: '1.', text: 'Русский', pick: true },
+      { kind: 'item', num: '2.', text: 'English' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?]: ', answer: '1' },
+    ]} />
+
+2. Выберите режим работы. `Полный` копирует панель (бот добавляется позже по желанию), `Только Бот` нужен, когда панель живёт на другом сервере:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: '[ACTION] Выберите режим работы скрипта:' },
+      { kind: 'item', num: '1.', text: 'Полный (Панель Remnawave + Бот опционально)', pick: true },
+      { kind: 'item', num: '2.', text: 'Только Бот (если панель установлена на другом сервере)' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Ваш выбор: ', answer: '1' },
+    ]} />
+
+3. Настройка Telegram. Токен созданного в @BotFather бота и ваш ID можно оставить пустыми: уведомления легко включить позже в настройках, но без них вы не узнаете о результатах автоматических бэкапов:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Настройка уведомлений Telegram:' },
+      { kind: 'dim', text: '[INFO] Создайте Telegram бота в @BotFather и получите API Token' },
+      { kind: 'dim', text: '[INFO] Оставьте пустым чтобы пропустить, настроить можно позже в меню настроек.' },
+      { kind: 'step', text: '[WARN] Без Telegram вы не будете получать уведомления о бэкапах и обновлениях.' },
+      { kind: 'input', text: '    Введите API Token: ', answer: '1234567890:AA…' },
+      { kind: 'dim', text: '[INFO] Введите Chat ID (для отправки в группу) или свой Telegram ID (для прямой отправки в бота)' },
+      { kind: 'dim', text: '       Chat ID/Telegram ID можно узнать у этого бота @username_to_id_bot' },
+      { kind: 'input', text: '    Введите ID: ', answer: '112233445' },
+      { kind: 'dim', text: '[INFO] Опционально: для отправки в определенный топик группы, введите ID топика (Message Thread ID)' },
+      { kind: 'dim', text: '       Оставьте пустым для общего потока или отправки напрямую в бота' },
+      { kind: 'input', text: '    Введите Message Thread ID: ' },
+    ]} />
+
+4. Имя пользователя базы данных панели (обычно подходит значение по умолчанию):
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Введите имя пользователя БД (по умолчанию postgres):' },
+      { kind: 'input', text: '    Ввод: ', answer: 'postgres' },
+    ]} />
+
+5. Укажите, где установлена панель:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: '[ACTION] Где установлена/устанавливается ваша панель Remnawave?' },
+      { kind: 'item', num: '1.', text: '/opt/remnawave', pick: true },
+      { kind: 'item', num: '2.', text: '/root/remnawave' },
+      { kind: 'item', num: '3.', text: '/opt/stacks/remnawave' },
+      { kind: 'item', num: '4.', text: 'Указать свой путь' },
+      { kind: 'plain' },
+      { kind: 'input', text: ' [?] Выберите вариант: ', answer: '1' },
+    ]} />
+
+6. Готово. Конфигурация сохраняется в `/opt/rw-backup-restore/config.env`, а для быстрого запуска создаётся команда `rw-backup`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'ok', text: '[SUCCESS] Новая конфигурация сохранена в /opt/rw-backup-restore/config.env' },
+      { kind: 'dim', text: '[INFO] Создание или обновление символической ссылки /usr/local/bin/rw-backup...' },
+      { kind: 'ok', text: '[SUCCESS] Символическая ссылка успешно настроена.' },
+    ]} />
+
+</Steps>
+
+## Главное меню
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'REMNAWAVE BACKUP & RESTORE by distillium' },
+  { kind: 'dim', text: 'Версия: 4.0.0' },
+  { kind: 'dim', text: 'БД: Docker контейнер' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Создание бэкапа вручную' },
+  { kind: 'item', num: '2.', text: 'Восстановление из бэкапа' },
+  { kind: 'plain' },
+  { kind: 'item', num: '3.', text: 'Настройка бэкапа Telegram бота' },
+  { kind: 'item', num: '4.', text: 'Настройка автоматической отправки и уведомлений' },
+  { kind: 'item', num: '5.', text: 'Настройка способа отправки' },
+  { kind: 'item', num: '6.', text: 'Настройка конфигурации скрипта' },
+  { kind: 'plain' },
+  { kind: 'item', num: '7.', text: 'Обновление скрипта' },
+  { kind: 'item', num: '8.', text: 'Удаление скрипта' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain', text: '—  Быстрый запуск: rw-backup доступен из любой точки системы' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Выберите пункт: ' },
+]} />
+
+Строка `БД:` под версией показывает текущее подключение: контейнер `remnawave-db` или внешняя PostgreSQL с адресом. Команда `rw-backup` запускает инструмент из любой точки системы без открытия главного меню скрипта, а `rw-backup backup` сразу делает копию без меню: так работает расписание.
+
+## Создание бэкапа
+
+<Steps>
+
+1. Выберите пункт `1`. Инструмент снимет дамп базы, заархивирует директорию панели и соберёт итоговый архив:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Начинаю процесс создания резервной копии...' },
+      { kind: 'dim', text: '[INFO] Режим подключения к БД: Docker контейнер (remnawave-db)' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Создание PostgreSQL дампа и сжатие в файл...' },
+      { kind: 'ok', text: '[SUCCESS] Дамп PostgreSQL успешно создан.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Архивирование директории Remnawave...' },
+      { kind: 'dim', text: '[INFO] Архивирование директории /opt/remnawave...' },
+      { kind: 'ok', text: '[SUCCESS] Директория Remnawave успешно заархивирована.' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[SUCCESS] Итоговый архив бэкапа успешно создан: /opt/rw-backup-restore/backup/remnawave_backup_full_2026-10-04_12_00_00.tar.gz' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Очистка промежуточных файлов бэкапа...' },
+      { kind: 'ok', text: '[SUCCESS] Промежуточные файлы удалены.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Отправка бэкапа (telegram)...' },
+      { kind: 'ok', text: '[SUCCESS] Бэкап успешно отправлен в Telegram.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Применение политики хранения бэкапов (оставляем за последние 7 дней)...' },
+      { kind: 'ok', text: '[SUCCESS] Политика хранения применена. Старые бэкапы удалены.' },
+    ]} />
+
+</Steps>
+
+Несколько деталей поведения:
+
+- Файл всегда остаётся на сервере в `/opt/rw-backup-restore/backup`, отправка в Telegram или облако происходит дополнительно.
+- Telegram не принимает файлы больше 50 МБ: такой бэкап остаётся только локально, а в чат приходит уведомление о превышении лимита.
+- Политика хранения по умолчанию держит локальные копии 7 дней, в S3 отдельно настраивается 30 дней.
+- После отправки инструмент проверяет обновление самого себя и при наличии свежей версии присылает уведомление в Telegram.
+
+### Что приходит в Telegram
+
+К копии прикладывается сообщение с составом, размером и версией панели:
+
+<Terminal title="Telegram" lines={[
+  { kind: 'plain', text: '💾 #backup_success' },
+  { kind: 'plain', text: '➖➖➖➖➖➖➖➖➖' },
+  { kind: 'plain', text: '✅ Бэкап успешно создан' },
+  { kind: 'plain', text: '🌊 Remnawave: 3.7.0' },
+  { kind: 'plain', text: '🖥️ Только панель' },
+  { kind: 'plain', text: '🐳 БД: Docker' },
+  { kind: 'plain', text: '📁 БД + директория' },
+  { kind: 'plain', text: '📏 Размер: 24M' },
+  { kind: 'plain', text: '📅 Дата: 2026-10-04 12:00:00' },
+]} />
+
+## Восстановление
+
+:::danger[Важно]
+Восстановление перезаписывает текущую базу данных и файлы панели. Перед ним стоит сделать свежую копию пунктом `1` и убедиться, что она дошла до Telegram или облака.
+:::
+
+<Steps>
+
+1. Выберите пункт `2` и источник копии: локальные файлы или скачивание из S3:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Восстановление из бэкапа' },
+      { kind: 'dim', text: '[INFO] Режим подключения к БД: Docker контейнер (remnawave-db)' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Выберите источник бэкапа:' },
+      { kind: 'item', num: '1.', text: 'Локальные файлы', pick: true },
+      { kind: 'item', num: '2.', text: 'Скачать из S3 Storage' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Вернуться в главное меню' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Выберите пункт: ', answer: '1' },
+    ]} />
+
+2. Локальные копии ищутся в `/opt/rw-backup-restore/backup`: архив с другого сервера достаточно скопировать туда по SFTP. Из списка выбирается нужный файл:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Поместите файл бэкапа в папку: /opt/rw-backup-restore/backup' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Выберите файл для восстановления:' },
+      { kind: 'item', num: '1)', text: 'remnawave_backup_full_2026-10-04_12_00_00.tar.gz', pick: true },
+      { kind: 'item', num: '2)', text: 'remnawave_backup_full_2026-10-03_12_00_00.tar.gz' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0)', text: 'Вернуться в главное меню' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Введите номер файла (0 для выхода): ', answer: '1' },
+    ]} />
+
+3. Архив распаковывается, и инструмент показывает метаданные: тип дампа, версию скрипта и версию панели на момент копии:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Распаковка архива бэкапа...' },
+      { kind: 'ok', text: '[SUCCESS] Архив распакован' },
+      { kind: 'dim', text: '[INFO] Метаданные бэкапа: тип дампа = dumpall' },
+      { kind: 'dim', text: '[INFO] Версия скрипта бэкапа = 4.0.0' },
+      { kind: 'dim', text: '[INFO] Версия панели в бэкапе = 3.7.0' },
+    ]} />
+
+4. Если в архиве есть и база, и файлы, инструмент спросит объём восстановления:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[WARN] Найден бэкап панели. Восстановление перезапишет текущую БД.' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Всё (БД + файлы)', pick: true },
+      { kind: 'item', num: '2.', text: 'Только база данных' },
+      { kind: 'item', num: '3.', text: 'Только файлы' },
+      { kind: 'item', num: '0.', text: 'Назад' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Выберите пункт: ', answer: '1' },
+      { kind: 'input', text: '[?] Восстановить панель? (Y/N): ', answer: 'y' },
+      { kind: 'dim', text: '[INFO] Введите имя БД (по умолчанию postgres):' },
+      { kind: 'input', text: 'Ввод: ', answer: 'postgres' },
+    ]} />
+
+5. Ход восстановления: панель останавливается, база восстанавливается из дампа, контейнеры поднимаются заново:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Ожидание готовности БД...' },
+      { kind: 'dim', text: '[INFO] Восстановление базы данных...' },
+      { kind: 'ok', text: '[SUCCESS] База данных успешно восстановлена.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Запуск остальных контейнеров...' },
+      { kind: 'ok', text: '[SUCCESS] Панель успешно запущена.' },
+      { kind: 'ok', text: '[SUCCESS] Панель готова. Нажмите Enter для продолжения...' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[SUCCESS] Процесс восстановления завершен.' },
+    ]} />
+
+</Steps>
+
+Если в архиве нашёлся бэкап магазина, следом инструмент предложит восстановить и его, предварительно предупредив: бот, запущенный на другом сервере, нужно остановить, иначе два экземпляра начнут конфликтовать.
+
+:::note[Восстановление из S3]
+Источник `Скачать из S3 Storage` показывает список копий прямо из бакета и восстанавливает потоком, не сохраняя файл на диск: это удобно на серверах с маленьким свободным местом.
+:::
+
+## Бэкап Telegram-бота
+
+Пункт `3` подключает к копии магазин. Поддерживаются `remnawave-telegram-shop`, приватный `rwp-shop`, `remnawave-tg-shop`, `remnashop` и `remnawave-minishop`:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Настройка бэкапа Telegram бота' },
+  { kind: 'plain' },
+  { kind: 'plain', text: '  Бот:      ', val: 'Бот Minishop' },
+  { kind: 'plain', text: '  Путь:     ', val: '/opt/remnawave-minishop' },
+  { kind: 'plain', text: '  Режим:    ', val: 'ПАНЕЛЬ + БОТ' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Настроить / Изменить параметры бота' },
+  { kind: 'item', num: '2.', text: 'Полностью выключить бэкап бота' },
+  { kind: 'item', num: '3.', text: 'Исключить бэкап панели (Режим Только Бот)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Вернуться в главное меню' },
+  { kind: 'plain' },
+  { kind: 'input', text: ' [?] Выберите пункт: ' },
+]} />
+
+При настройке выбирается бот из списка, путь к его директории и пользователь базы. Режим `Только Бот` пригодится, когда панель и магазин живут на разных серверах: копия будет содержать один магазин. Имя файла в этом случае получит пометку `bot`.
+
+## Расписание
+
+Пункт `4` ставит cron-задачу, которая сама делает и отправляет копию. Время задаётся по UTC+0 в виде списка часов:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Настройка автоматической отправки' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Автоматическая отправка выключена.' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Включить/перезаписать автоматическую отправку бэкапов', pick: true },
+  { kind: 'item', num: '2.', text: 'Выключить автоматическую отправку бэкапов' },
+  { kind: 'item', num: '0.', text: 'Вернуться в главное меню' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Выберите пункт: ', answer: '1' },
+  { kind: 'plain', text: 'Выберите вариант автоматической отправки:' },
+  { kind: 'item', num: '1)', text: 'Ввести время (например: 08:00 12:00 18:00)', pick: true },
+  { kind: 'item', num: '2)', text: 'Ежечасно' },
+  { kind: 'item', num: '3)', text: 'Ежедневно' },
+  { kind: 'input', text: 'Ваш выбор: ', answer: '1' },
+  { kind: 'plain', text: 'Введите желаемое время отправки по UTC+0 (например, 08:00 12:00):' },
+  { kind: 'input', text: 'Время через пробел: ', answer: '08:00' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Настройка cron-задачи для автоматической отправки...' },
+  { kind: 'dim', text: '[INFO] SHELL=/bin/bash добавлен в crontab.' },
+  { kind: 'dim', text: '[INFO] PATH переменная уже существует в crontab.' },
+  { kind: 'ok', text: '[SUCCESS] CRON-задача для автоматической отправки успешно установлена.' },
+  { kind: 'ok', text: '[SUCCESS] Автоматическая отправка установлена на: 08:00 по UTC+0.' },
+]} />
+
+Введённое время инструмент сам пересчитывает в часовой пояс сервера, поэтому копия приходит в ожидаемый час по вашему локальному времени. Вывод задачи пишется в `/var/log/rw_backup_cron.log`.
+
+## Способ отправки
+
+Пункт `5` выбирает, куда уходят копии:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Настройка способа отправки бэкапов' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Текущий способ: TELEGRAM' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Установить способ отправки: Telegram' },
+  { kind: 'item', num: '2.', text: 'Установить способ отправки: Google Drive' },
+  { kind: 'item', num: '3.', text: 'S3 Storage (S3-совместимое хранилище)', pick: true },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Вернуться в главное меню' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Выберите пункт: ' },
+]} />
+
+- **Telegram** отправляет копию файлом в чат или топик группы. Лимит 50 МБ, крупные панели лучше отправлять в облако.
+- **Google Drive** требует создать Google API-приложение и получить Client ID, Client Secret и Refresh Token: инструмент проведёт по шагам, покажет ссылку авторизации и запросит код из браузера. Копии складываются в выбранную папку диска, а уведомления по-прежнему приходят в Telegram.
+- **S3 Storage** работает с любым S3-совместимым хранилищем. Понадобятся Endpoint URL, Region, имя бакета, Access Key и Secret Key, по желанию префикс (папка) и срок хранения в днях. AWS CLI устанавливается автоматически, подключение проверяется тестом в настройках.
+
+Если настройка Google Drive или S3 не завершена, инструмент откатывает отправку на Telegram и сообщает об этом.
+
+## Настройки
+
+Пункт `6` открывает конфигурацию инструмента:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Настройка конфигурации скрипта' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Настройки Telegram' },
+  { kind: 'item', num: '2.', text: 'Настройки Google Drive' },
+  { kind: 'item', num: '3.', text: 'Настройки S3 Storage' },
+  { kind: 'item', num: '4.', text: 'Подключение к БД панели' },
+  { kind: 'item', num: '5.', text: 'Путь Remnawave' },
+  { kind: 'item', num: '6.', text: 'Политика хранения бэкапов' },
+  { kind: 'item', num: '7.', text: 'Язык / Language' },
+  { kind: 'item', num: '8.', text: 'Автообновление скрипта' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Вернуться в главное меню' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Выберите пункт: ' },
+]} />
+
+Самое полезное внутри:
+
+- **Настройки Telegram** хранят токен, ID чата и топик, а также прокси для Telegram API с тестом: три попытки с выводом времени ответа и причин ошибок.
+- **Подключение к БД панели** переключает между контейнером `remnawave-db` и внешней PostgreSQL, хранит хост, порт, имя базы, SSL-режим и версию клиента, подключение проверяется кнопкой теста.
+- **Политика хранения** задаёт, сколько дней (или часов) живут локальные копии и копии в S3.
+- **Автообновление** разрешает инструменту обновлять себя при каждом бэкапе, о чём приходит уведомление со ссылкой на список изменений.
+
+## Обновление и удаление
+
+Пункт `7` сравнивает версию с GitHub и при наличии свежей предлагает обновление: перед заменой текущий файл сохраняется как резервная копия, а после установки скрипт перезапускается.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: '[INFO] Начинаю процесс проверки обновлений...' },
+  { kind: 'dim', text: '[INFO] Получение информации о последней версии скрипта с GitHub...' },
+  { kind: 'dim', text: '[INFO] Текущая версия: 4.0.0' },
+  { kind: 'dim', text: '[INFO] Доступная версия: 4.1.0' },
+  { kind: 'plain' },
+  { kind: 'plain', text: '[ACTION] Доступно обновление до версии 4.1.0.' },
+  { kind: 'input', text: 'Хотите обновить скрипт? Введите Y/N: ', answer: 'y' },
+  { kind: 'dim', text: '[INFO] Загрузка обновления...' },
+  { kind: 'dim', text: '[INFO] Удаление старых резервных копий скрипта...' },
+  { kind: 'dim', text: '[INFO] Создание резервной копии текущего скрипта...' },
+  { kind: 'ok', text: '[SUCCESS] Скрипт успешно обновлен до версии 4.1.0.' },
+  { kind: 'dim', text: '[INFO] Для применения изменений скрипт будет перезапущен...' },
+]} />
+
+Пункт `8` удаляет инструмент, но перед этим даёт сохранить локальные копии в отдельный каталог `/opt/rw-backup-restore-saved`:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[WARN] ВНИМАНИЕ! Будут удалены:' },
+  { kind: 'plain', text: ' - Скрипт' },
+  { kind: 'plain', text: ' - Каталог установки (бэкапы можно сохранить)' },
+  { kind: 'plain', text: ' - Символическая ссылка (если существует)' },
+  { kind: 'plain', text: ' - Задачи cron' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Вы уверены, что хотите продолжить? Введите Y/N: ', answer: 'y' },
+  { kind: 'input', text: 'Сохранить локальные бэкапы перед удалением? Y/N: ', answer: 'y' },
+  { kind: 'ok', text: '[SUCCESS] Бэкапы сохранены в /opt/rw-backup-restore-saved' },
+  { kind: 'dim', text: '[INFO] Удаление cron-задач...' },
+  { kind: 'ok', text: '[SUCCESS] Задачи cron для автоматического бэкапа удалены.' },
+  { kind: 'dim', text: '[INFO] Удаление символической ссылки...' },
+  { kind: 'ok', text: '[SUCCESS] Символическая ссылка удалена.' },
+  { kind: 'dim', text: '[INFO] Удаление каталога установки и всех данных...' },
+  { kind: 'ok', text: '[SUCCESS] /opt/rw-backup-restore (включая скрипт, конфигурацию, бэкапы) удален.' },
+]} />
+
+Сохранённые копии легко вернуть: скопируйте нужные `.tar.gz` в `/opt/rw-backup-restore/backup` после новой установки и выберите «Восстановление из бэкапа».
+
+## Переезд на новый сервер
+
+Копия переносит панель целиком, поэтому для переезда достаточно восстановить её на новом сервере и поправить окружение:
+
+1. В Cloudflare смените IP поддомена панели (и поддомены остальных сервисов, если они переезжают вместе с ней).
+2. Восстановите директорию и базу из копии, как описано выше.
+3. Ссылка доступа и пароль панели останутся от старого сервера: их трогать не нужно.
+4. Если сервисный порт панели (по умолчанию 2222) на нодах открыт только для старого адреса, замените правило на каждой ноде:
+
+```bash
+ufw delete allow from OLD_IP to any port 2222 && ufw allow from NEW_IP to any port 2222
+```
+
+При переезде связки «панель и нода на одном сервере» дополнительно поменяйте адрес корневой ноды в управлении нодами панели: она активируется сама. Сертификаты для домена восстанавливаются отдельно, например через Certwarden или пункт «Управление сертификатами домена» главного меню.
+
+## Файлы и пути
+
+- `/opt/rw-backup-restore`: каталог установки, внутри скрипт, `config.env` с настройками и переводы.
+- `/opt/rw-backup-restore/backup`: склад готовых копий, отсюда же идёт восстановление.
+- `/opt/rw-backup-restore-saved`: сюда сохраняются копии при удалении инструмента.
+
+:::note[Команды без меню]
+Установленный скрипт принимает аргументы: `rw-backup backup`, `rw-backup restore`, `rw-backup update` и `rw-backup remove` выполняют соответствующие действия сразу, без главного меню.
+:::

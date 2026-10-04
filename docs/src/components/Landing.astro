@@ -132,7 +132,7 @@ const T = en
         ['5', 'Xray Checker', 'host health monitoring with metrics', 'xray-checker', true],
         ['6', 'legiz templates', 'custom camouflage site templates', ''],
         ['7', 'WARP Native', 'WireGuard interface via wgcf for chosen domains', 'warp-native'],
-        ['8', 'Backup and Restore', 'copies of configs and data', ''],
+        ['8', 'Backup and Restore', 'copies of configs and data', 'backup-restore'],
         ['9', 'IPv6', 'address management and connectivity checks', ''],
         ['10', 'Certificates', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, own certs', ''],
         ['11', 'NetBird', 'private network for the panel and nodes', 'netbird', true],
@@ -249,7 +249,7 @@ const T = en
         ['5', 'Xray Checker', 'проверка хостов с метриками', 'xray-checker', true],
         ['6', 'Шаблоны legiz', 'кастомные шаблоны сайта-маски', ''],
         ['7', 'WARP Native', 'интерфейс WireGuard через wgcf для выбранных доменов', 'warp-native'],
-        ['8', 'Backup and Restore', 'резервные копии конфигураций и данных', ''],
+        ['8', 'Backup and Restore', 'резервные копии конфигураций и данных', 'backup-restore'],
         ['9', 'IPv6', 'управление адресами и проверка связи', ''],
         ['10', 'Сертификаты', 'Cloudflare, Gcore, Bunny.net DNS API, ACME, свои', ''],
         ['11', 'NetBird', 'приватная сеть для панели и нод', 'netbird', true],
@@ -1266,11 +1266,13 @@ const PLAY = JSON.stringify({
   }
   @keyframes mod-new-pulse { 50% { opacity: 0.35; } }
   .mod-head { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; }
-  .mod-head b { color: #eef7f0; font-size: 0.95rem; }
+  .mod-head b { color: #eef7f0; font-size: 0.95rem; min-width: 0; }
   .mod-head .num {
     font-family: var(--sl-font-mono, monospace);
     font-size: 0.65rem; color: #00e5a0; letter-spacing: 0.08em;
     border: 1px solid rgba(0, 229, 160, 0.3); border-radius: 6px; padding: 0.12rem 0.4rem;
+    /* длинное имя карточки сжимает flex-ряд: чип не должен ломаться внутри себя */
+    white-space: nowrap; flex: none;
   }
   .mod-card p { margin: 0; font-size: 0.85rem; color: #7f9d8e; line-height: 1.55; }
 

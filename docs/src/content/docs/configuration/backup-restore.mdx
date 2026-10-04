@@ -1,0 +1,501 @@
+---
+title: "Backup and Restore"
+description: 'The backup module by distillium: panel and Telegram bot backups, restoring on the same or a new server, delivery to Telegram, Google Drive and S3'
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+
+The `Backup and Restore` entry of the main menu wires in the `remnawave-backup-restore` tool by distillium. It takes a full copy of the Remnawave panel: the PostgreSQL database and the entire installation directory with all of its configuration. The copy can be restored on the same server or deployed on a new one, created manually or on a schedule, and delivered to Telegram, Google Drive or an S3-compatible storage. Old copies clean themselves up according to the retention policy.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Backup &amp; Restore
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Remnawave backups: the database and the whole panel directory, manual or scheduled, with restore on the same or a new server.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Version</span><span style="opacity:.92">v4.0.0</span>
+          <span style="opacity:.55;white-space:nowrap">Delivery</span><span style="opacity:.92">Telegram, Google Drive, S3</span>
+          <span style="opacity:.55;white-space:nowrap">Schedule</span><span style="opacity:.92">cron, times in UTC+0</span>
+          <span style="opacity:.55;white-space:nowrap">Restore</span><span style="opacity:.92">everything, database only, files only</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/distillium.png" alt="distillium" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/distillium" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">distillium</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@distillium</span>
+          </div>
+          <a href="https://github.com/distillium/remnawave-backup-restore" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            remnawave-backup-restore
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+## What goes into a copy
+
+- **The database.** In Docker mode the dump is taken with `pg_dumpall` right inside the `remnawave-db` container, so roles and global settings land in the copy along with the data. For an external PostgreSQL the tool spins up a throwaway `postgres` container and dumps over the network, with a configurable SSL mode.
+- **The panel directory.** Archived in full, minus temporary files: `*.log`, `*.tmp` and `.git` are excluded.
+- **A Telegram shop bot (optional).** When bot backup is enabled, its database and directory are added to the same archive.
+
+Everything is packed into a single file like `remnawave_backup_full_2026-10-04_12_00_00.tar.gz`. The word in the name (`full`, `panel`, `bot`) tells you the scope at a glance. Inside the archive sit the database dump, the directory archive and a `backup_meta.info` file with the panel version, the script version and the dump type: on restore the tool matches this data against the current mode and warns about a mismatch.
+
+## Launching
+
+Run on the panel server:
+
+```bash
+remnawave_reverse
+```
+
+<Steps>
+
+1. In the main menu pick entry `8`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
+      { kind: 'item', num: '7.', text: 'WARP Native' },
+      { kind: 'item', num: '8.', text: 'Backup and Restore', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select an action (0-13):' },
+    ]} />
+
+2. On first launch the module downloads `backup-restore.sh` from two independent mirrors and compares checksums: the file only runs when both sources served identical bytes. If the checks disagree, the launch is aborted with «Скрипт не подтверждён двумя независимыми источниками, возможна подмена. Запуск отменён».
+
+3. The tool then moves itself to a permanent directory and restarts from there:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Configuration not found. Script launched from temporary location.' },
+      { kind: 'dim', text: '[INFO] Moving script to main install directory: /opt/rw-backup-restore/backup-restore.sh...' },
+      { kind: 'ok', text: '[SUCCESS] Script successfully moved to /opt/rw-backup-restore/backup-restore.sh.' },
+      { kind: 'plain', text: '[ACTION] Restarting script from new location to complete setup.' },
+    ]} />
+
+</Steps>
+
+Every later run of entry `8` opens the installed copy straight away through the `rw-backup` command, with no downloading.
+
+## First run
+
+<Steps>
+
+1. Pick the interface language:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: 'Select language / Выберите язык:' },
+      { kind: 'item', num: '1.', text: 'Русский' },
+      { kind: 'item', num: '2.', text: 'English', pick: true },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?]: ', answer: '2' },
+    ]} />
+
+2. Choose the operation mode. `Full` backs up the panel (a bot can be added later), while `Bot Only` fits when the panel lives on another server:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: '[ACTION] Select script operation mode:' },
+      { kind: 'item', num: '1.', text: 'Full (Remnawave Panel + Bot optionally)', pick: true },
+      { kind: 'item', num: '2.', text: 'Bot Only (if panel is on another server)' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Your choice: ', answer: '1' },
+    ]} />
+
+3. Telegram setup. The token of a bot created via @BotFather and your ID can be left empty: notifications are easy to enable later in the settings, but without them you will not hear about scheduled backup results:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Telegram notification setup:' },
+      { kind: 'dim', text: '[INFO] Create a Telegram bot via @BotFather and get API Token' },
+      { kind: 'dim', text: '[INFO] Leave empty to skip, you can set it up later in the settings menu.' },
+      { kind: 'step', text: '[WARN] Without Telegram you won\'t receive backup and update notifications.' },
+      { kind: 'input', text: '    Enter API Token: ', answer: '1234567890:AA…' },
+      { kind: 'dim', text: '[INFO] Enter Chat ID (for group) or your Telegram ID (for direct messages)' },
+      { kind: 'dim', text: '       Chat ID/Telegram ID can be found via @username_to_id_bot' },
+      { kind: 'input', text: '    Enter ID: ', answer: '112233445' },
+      { kind: 'dim', text: '[INFO] Optional: to send to a specific group topic, enter Message Thread ID' },
+      { kind: 'dim', text: '       Leave empty for general thread or direct bot messages' },
+      { kind: 'input', text: '    Enter Message Thread ID: ' },
+    ]} />
+
+4. The panel database username (the default usually fits):
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Enter DB username (default postgres):' },
+      { kind: 'input', text: '    Input: ', answer: 'postgres' },
+    ]} />
+
+5. Tell the tool where the panel is installed:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'plain', text: '[ACTION] Where is your Remnawave panel installed?' },
+      { kind: 'item', num: '1.', text: '/opt/remnawave', pick: true },
+      { kind: 'item', num: '2.', text: '/root/remnawave' },
+      { kind: 'item', num: '3.', text: '/opt/stacks/remnawave' },
+      { kind: 'item', num: '4.', text: 'Enter custom path' },
+      { kind: 'plain' },
+      { kind: 'input', text: ' [?] Select option: ', answer: '1' },
+    ]} />
+
+6. Done. The configuration lands in `/opt/rw-backup-restore/config.env`, and a `rw-backup` command appears for quick launches:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'ok', text: '[SUCCESS] New configuration saved in /opt/rw-backup-restore/config.env' },
+      { kind: 'dim', text: '[INFO] Creating or updating symlink /usr/local/bin/rw-backup...' },
+      { kind: 'ok', text: '[SUCCESS] Symlink successfully configured.' },
+    ]} />
+
+</Steps>
+
+## The main menu
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'REMNAWAVE BACKUP & RESTORE by distillium' },
+  { kind: 'dim', text: 'Version: 4.0.0' },
+  { kind: 'dim', text: 'DB: Docker container' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Create backup manually' },
+  { kind: 'item', num: '2.', text: 'Restore from backup' },
+  { kind: 'plain' },
+  { kind: 'item', num: '3.', text: 'Telegram bot backup configuration' },
+  { kind: 'item', num: '4.', text: 'Auto-send and notifications setup' },
+  { kind: 'item', num: '5.', text: 'Upload method configuration' },
+  { kind: 'item', num: '6.', text: 'Script configuration' },
+  { kind: 'plain' },
+  { kind: 'item', num: '7.', text: 'Update script' },
+  { kind: 'item', num: '8.', text: 'Remove script' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain', text: '—  Quick launch: rw-backup available from anywhere in the system' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Select option: ' },
+]} />
+
+The `DB:` line under the version shows the current connection: the `remnawave-db` container or an external PostgreSQL with its address. The `rw-backup` command starts the tool from anywhere in the system without opening the script's main menu, and `rw-backup backup` creates a copy immediately with no menu at all: that is how the schedule works.
+
+## Creating a backup
+
+<Steps>
+
+1. Pick entry `1`. The tool takes a database dump, archives the panel directory and assembles the final archive:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Starting backup creation process...' },
+      { kind: 'dim', text: '[INFO] DB connection mode: Docker container (remnawave-db)' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Creating PostgreSQL dump and compressing...' },
+      { kind: 'ok', text: '[SUCCESS] PostgreSQL dump successfully created.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Archiving Remnawave directory...' },
+      { kind: 'dim', text: '[INFO] Archiving directory /opt/remnawave...' },
+      { kind: 'ok', text: '[SUCCESS] Remnawave directory successfully archived.' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[SUCCESS] Final backup archive successfully created: /opt/rw-backup-restore/backup/remnawave_backup_full_2026-10-04_12_00_00.tar.gz' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Cleaning intermediate backup files...' },
+      { kind: 'ok', text: '[SUCCESS] Intermediate files removed.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Sending backup (telegram)...' },
+      { kind: 'ok', text: '[SUCCESS] Backup successfully sent to Telegram.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Applying backup retention policy (keeping last 7 days)...' },
+      { kind: 'ok', text: '[SUCCESS] Retention policy applied. Old backups removed.' },
+    ]} />
+
+</Steps>
+
+A few details about the behavior:
+
+- The file always stays on the server in `/opt/rw-backup-restore/backup`, delivery to Telegram or cloud storage happens on top of that.
+- Telegram refuses files over 50 MB: such a backup remains local only, and a notice about the exceeded limit arrives in the chat.
+- By default the retention policy keeps local copies for 7 days, while S3 keeps its own configurable 30 days.
+- After delivery the tool checks for updates to itself and sends a Telegram notification when a newer version is out.
+
+### What arrives in Telegram
+
+The copy comes with a message describing the scope, size and panel version:
+
+<Terminal title="Telegram" lines={[
+  { kind: 'plain', text: '💾 #backup_success' },
+  { kind: 'plain', text: '➖➖➖➖➖➖➖➖➖' },
+  { kind: 'plain', text: '✅ Backup successfully created' },
+  { kind: 'plain', text: '🌊 Remnawave: 3.7.0' },
+  { kind: 'plain', text: '🖥️ Panel only' },
+  { kind: 'plain', text: '🐳 DB: Docker' },
+  { kind: 'plain', text: '📁 DB + directory' },
+  { kind: 'plain', text: '📏 Size: 24M' },
+  { kind: 'plain', text: '📅 Date: 2026-10-04 12:00:00' },
+]} />
+
+## Restoring
+
+:::danger[Important]
+Restore overwrites the current database and panel files. Take a fresh copy with entry `1` beforehand and make sure it has reached Telegram or the cloud.
+:::
+
+<Steps>
+
+1. Pick entry `2` and the source of the copy: local files or a download from S3:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Restore from Backup' },
+      { kind: 'dim', text: '[INFO] DB connection mode: Docker container (remnawave-db)' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Select backup source:' },
+      { kind: 'item', num: '1.', text: 'Local files', pick: true },
+      { kind: 'item', num: '2.', text: 'Download from S3 Storage' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Return to main menu' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Select option: ', answer: '1' },
+    ]} />
+
+2. Local copies are looked up in `/opt/rw-backup-restore/backup`: copying a foreign archive there over SFTP is enough. Pick the file you need from the list:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Place backup file in folder: /opt/rw-backup-restore/backup' },
+      { kind: 'plain' },
+      { kind: 'plain', text: 'Select file to restore:' },
+      { kind: 'item', num: '1)', text: 'remnawave_backup_full_2026-10-04_12_00_00.tar.gz', pick: true },
+      { kind: 'item', num: '2)', text: 'remnawave_backup_full_2026-10-03_12_00_00.tar.gz' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0)', text: 'Return to main menu' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Enter file number (0 to exit): ', answer: '1' },
+    ]} />
+
+3. The archive is unpacked and the tool shows the metadata: the dump type, the script version and the panel version at copy time:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Unpacking backup archive...' },
+      { kind: 'ok', text: '[SUCCESS] Archive unpacked' },
+      { kind: 'dim', text: '[INFO] Backup metadata: dump type = dumpall' },
+      { kind: 'dim', text: '[INFO] Backup script version = 4.0.0' },
+      { kind: 'dim', text: '[INFO] Panel version = 3.7.0' },
+    ]} />
+
+4. When the archive holds both the database and the files, the tool asks how much to restore:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: '[WARN] Panel backup found. Restore will overwrite current DB.' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'All (DB + files)', pick: true },
+      { kind: 'item', num: '2.', text: 'Database only' },
+      { kind: 'item', num: '3.', text: 'Files only' },
+      { kind: 'item', num: '0.', text: 'Back' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Select option: ', answer: '1' },
+      { kind: 'input', text: '[?] Restore panel? (Y/N): ', answer: 'y' },
+      { kind: 'dim', text: '[INFO] Enter DB name (default postgres):' },
+      { kind: 'input', text: 'Input: ', answer: 'postgres' },
+    ]} />
+
+5. The restore itself: the panel stops, the database is replayed from the dump, the containers come back up:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: '[INFO] Waiting for DB to be ready...' },
+      { kind: 'dim', text: '[INFO] Restoring database...' },
+      { kind: 'ok', text: '[SUCCESS] Database successfully restored.' },
+      { kind: 'plain' },
+      { kind: 'dim', text: '[INFO] Starting remaining containers...' },
+      { kind: 'ok', text: '[SUCCESS] Panel successfully started.' },
+      { kind: 'ok', text: '[SUCCESS] Panel ready. Press Enter to continue...' },
+      { kind: 'plain' },
+      { kind: 'ok', text: '[SUCCESS] Restore process completed.' },
+    ]} />
+
+</Steps>
+
+If the archive contains a shop backup, the tool offers to restore it next, with a warning first: a bot running on another server must be stopped, or the two instances will conflict.
+
+:::note[Restoring from S3]
+The `Download from S3 Storage` source lists the copies straight from the bucket and restores them as a stream without saving the file to disk: handy on servers with little free space.
+:::
+
+## Telegram bot backup
+
+Entry `3` adds a Telegram shop bot to the copy. `remnawave-telegram-shop`, the private `rwp-shop`, `remnawave-tg-shop`, `remnashop` and `remnawave-minishop` are supported:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Telegram Bot Backup Configuration' },
+  { kind: 'plain' },
+  { kind: 'plain', text: '  Bot:      ', val: 'Minishop Bot' },
+  { kind: 'plain', text: '  Path:     ', val: '/opt/remnawave-minishop' },
+  { kind: 'plain', text: '  Mode:     ', val: 'PANEL + BOT' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Configure / Change bot parameters' },
+  { kind: 'item', num: '2.', text: 'Completely disable bot backup' },
+  { kind: 'item', num: '3.', text: 'Exclude panel backup (Bot Only mode)' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Return to main menu' },
+  { kind: 'plain' },
+  { kind: 'input', text: ' [?] Select option: ' },
+]} />
+
+During setup you pick the bot from the list, the path to its directory and the database user. `Bot Only` mode fits when the panel and the shop live on different servers: the copy will contain the shop alone, and the file name gets a `bot` tag.
+
+## Schedule
+
+Entry `4` installs a cron job that creates and delivers copies on its own. Times are entered in UTC+0 as a list of hours:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Auto-send Configuration' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Auto-send is disabled.' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Enable/overwrite automatic backup sending', pick: true },
+  { kind: 'item', num: '2.', text: 'Disable automatic backup sending' },
+  { kind: 'item', num: '0.', text: 'Return to main menu' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Select option: ', answer: '1' },
+  { kind: 'plain', text: 'Select auto-send variant:' },
+  { kind: 'item', num: '1)', text: 'Enter time (e.g.: 08:00 12:00 18:00)', pick: true },
+  { kind: 'item', num: '2)', text: 'Hourly' },
+  { kind: 'item', num: '3)', text: 'Daily' },
+  { kind: 'input', text: 'Your choice: ', answer: '1' },
+  { kind: 'plain', text: 'Enter desired send time in UTC+0 (e.g., 08:00 12:00):' },
+  { kind: 'input', text: 'Time separated by spaces: ', answer: '08:00' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Setting up cron job for auto-send...' },
+  { kind: 'dim', text: '[INFO] SHELL=/bin/bash added to crontab.' },
+  { kind: 'dim', text: '[INFO] PATH variable already exists in crontab.' },
+  { kind: 'ok', text: '[SUCCESS] CRON job for auto-send successfully installed.' },
+  { kind: 'ok', text: '[SUCCESS] Auto-send set for: 08:00 UTC+0.' },
+]} />
+
+The entered times are recalculated into the server's timezone, so the copy arrives at the hour you expect in your local time. The job output goes to `/var/log/rw_backup_cron.log`.
+
+## Upload method
+
+Entry `5` chooses where copies go:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Backup Upload Method Configuration' },
+  { kind: 'plain' },
+  { kind: 'dim', text: '[INFO] Current method: TELEGRAM' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Set upload method: Telegram' },
+  { kind: 'item', num: '2.', text: 'Set upload method: Google Drive' },
+  { kind: 'item', num: '3.', text: 'S3 Storage (S3-compatible storage)', pick: true },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Return to main menu' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Select option: ' },
+]} />
+
+- **Telegram** delivers the copy as a file to a chat or group topic. The limit is 50 MB, so larger panels are better off with cloud delivery.
+- **Google Drive** requires creating a Google API app and obtaining a Client ID, Client Secret and Refresh Token: the tool walks you through, shows the authorization link and asks for the code from the browser. Copies land in the chosen Drive folder, while notifications still arrive in Telegram.
+- **S3 Storage** works with any S3-compatible storage. You need an Endpoint URL, Region, bucket name, Access Key and Secret Key, plus an optional prefix (folder) and a retention period in days. AWS CLI is installed automatically, and the connection can be checked with a test in the settings.
+
+When Google Drive or S3 setup is left unfinished, the tool does not stay silent: it falls back to Telegram and tells you about it.
+
+## Settings
+
+Entry `6` opens the tool's configuration:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Script Configuration' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Telegram Settings' },
+  { kind: 'item', num: '2.', text: 'Google Drive Settings' },
+  { kind: 'item', num: '3.', text: 'S3 Storage Settings' },
+  { kind: 'item', num: '4.', text: 'Panel DB Connection' },
+  { kind: 'item', num: '5.', text: 'Remnawave Path' },
+  { kind: 'item', num: '6.', text: 'Backup Retention Policy' },
+  { kind: 'item', num: '7.', text: 'Language / Язык' },
+  { kind: 'item', num: '8.', text: 'Script auto-update' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Return to main menu' },
+  { kind: 'plain' },
+  { kind: 'input', text: '[?] Select option: ' },
+]} />
+
+The most useful parts inside:
+
+- **Telegram Settings** hold the token, chat ID and topic, plus a proxy for the Telegram API with a test: three attempts showing response times and the reasons behind errors.
+- **Panel DB Connection** switches between the `remnawave-db` container and an external PostgreSQL, stores the host, port, database name, SSL mode and client version, and checks the connection with a test button.
+- **Backup Retention Policy** sets how many days (or hours) local copies and S3 copies live.
+- **Script auto-update** lets the tool update itself on every backup, with a notification and a changelog link.
+
+## Update and removal
+
+Entry `7` compares the version against GitHub and offers an update when a newer one exists: before the replacement the current file is saved as a backup, and after installation the script restarts.
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: '[INFO] Starting update check...' },
+  { kind: 'dim', text: '[INFO] Fetching latest version info from GitHub...' },
+  { kind: 'dim', text: '[INFO] Current version: 4.0.0' },
+  { kind: 'dim', text: '[INFO] Available version: 4.1.0' },
+  { kind: 'plain' },
+  { kind: 'plain', text: '[ACTION] Update available to version 4.1.0.' },
+  { kind: 'input', text: 'Do you want to update? Enter Y/N: ', answer: 'y' },
+  { kind: 'dim', text: '[INFO] Downloading update...' },
+  { kind: 'dim', text: '[INFO] Removing old script backups...' },
+  { kind: 'dim', text: '[INFO] Creating backup of current script...' },
+  { kind: 'ok', text: '[SUCCESS] Script successfully updated to version 4.1.0.' },
+  { kind: 'dim', text: '[INFO] Script will restart to apply changes...' },
+]} />
+
+Entry `8` removes the tool, but first offers to keep the local copies in a separate `/opt/rw-backup-restore-saved` directory:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'step', text: '[WARN] WARNING! The following will be removed:' },
+  { kind: 'plain', text: ' - Script' },
+  { kind: 'plain', text: ' - Install directory (backups can be preserved)' },
+  { kind: 'plain', text: ' - Symlink (if exists)' },
+  { kind: 'plain', text: ' - Cron jobs' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Are you sure you want to continue? Enter Y/N: ', answer: 'y' },
+  { kind: 'input', text: 'Keep local backups before removal? Y/N: ', answer: 'y' },
+  { kind: 'ok', text: '[SUCCESS] Backups saved to /opt/rw-backup-restore-saved' },
+  { kind: 'dim', text: '[INFO] Removing cron jobs...' },
+  { kind: 'ok', text: '[SUCCESS] Automatic backup cron jobs removed.' },
+  { kind: 'dim', text: '[INFO] Removing symlink...' },
+  { kind: 'ok', text: '[SUCCESS] Symlink removed.' },
+  { kind: 'dim', text: '[INFO] Removing install directory and all data...' },
+  { kind: 'ok', text: '[SUCCESS] /opt/rw-backup-restore (including script, config, backups) removed.' },
+]} />
+
+Saved copies are easy to bring back: after a fresh install, copy the `.tar.gz` files you need into `/opt/rw-backup-restore/backup` and pick "Restore from backup".
+
+## Moving to a new server
+
+The copy carries the panel in full, so a migration boils down to restoring it on the new server and adjusting the pieces around it:
+
+1. In Cloudflare change the IP of the panel subdomain (and of other services moving along with it).
+2. Restore the directory and the database from the copy as described above.
+3. The access link and the panel password stay the ones from the old server: no need to touch them.
+4. If the panel was given a dedicated service port, the nodes must allow traffic from the new address. Replace the rule on every node:
+
+```bash
+ufw delete allow from OLD_IP to any port 2222 && ufw allow from NEW_IP to any port 2222
+```
+
+When moving a panel and a node that share one server, also update the address of the root node in the panel's node management: it activates on its own. Domain certificates are restored separately, for example via Certwarden or the "Manage certificates domain" entry of the main menu.
+
+## Files and paths
+
+- `/opt/rw-backup-restore`: the install directory holding the script, the `config.env` settings and the translations.
+- `/opt/rw-backup-restore/backup`: the storage for finished copies and the place restore reads from.
+- `/opt/rw-backup-restore-saved`: copies are preserved here when the tool is removed.
+
+:::note[Commands without the menu]
+The installed script accepts arguments: `rw-backup backup`, `rw-backup restore`, `rw-backup update` and `rw-backup remove` run the matching action immediately, skipping the main menu.
+:::

@@ -7,48 +7,78 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 import { LinkButton } from '@astrojs/starlight/components';
 import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin:1.2rem 0">
-  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
-    <img src="https://github.com/pluralplay.png" alt="pluralplay" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(88,166,255,.45);flex:none;background:#0e1a14" />
-    <div style="min-width:0">
-      <div style="font-weight:650"><a href="https://github.com/pluralplay" style="color:inherit">pluralplay</a></div>
-      <div style="font-size:.85em;opacity:.85;line-height:1.6">гайд по мониторингу и хранилище дашбордов awesome-docs</div>
-      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/pluralplay/awesome-docs/tree/main/grafana" style="color:inherit">github.com/pluralplay/awesome-docs</a></div>
-    </div>
-  </div>
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
-    <img src="https://github.com/kutovoys.png" alt="kutovoys" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(0,229,160,.45);flex:none;background:#0e1a14" />
-    <div style="min-width:0">
-      <div style="font-weight:650"><a href="https://github.com/kutovoys" style="color:inherit">kutovoys</a></div>
-      <div style="font-size:.85em;opacity:.85;line-height:1.6">соавтор гайда и пять системных дашбордов: Node, Network, Memory, Filesystem, CPU</div>
-      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/kutovoys" style="color:inherit">github.com/kutovoys</a></div>
-    </div>
-  </div>
-</div>
+Состав мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами. Всё живёт на отдельном мониторинговом VPS: панель и ноды только отдают метрики изнутри сети NetBird, сборкой на каждом сервере занимается vmagent.
 
-Состав мониторинга: Grafana для дашбордов, Victoria Metrics для хранения метрик, Node Exporter и cAdvisor для сбора метрик серверов и контейнеров, Xray Checker для контроля хостов и NetBird для безопасной сети между серверами.
+Гайд и дашборды подготовили два автора:
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Где живёт
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Гайд по мониторингу
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Пошаговая инструкция и хранилище готовых дашбордов awesome-docs: от compose-файла до импорта в Grafana.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Автор</span><span style="opacity:.92">pluralplay</span>
+          <span style="opacity:.55;white-space:nowrap">Хранилище</span><span style="opacity:.92">репозиторий awesome-docs</span>
+          <span style="opacity:.55;white-space:nowrap">Дашборд панели</span><span style="opacity:.92">от kastov</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/pluralplay.png" alt="pluralplay" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/pluralplay" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">pluralplay</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@pluralplay</span>
+          </div>
+          <a href="https://github.com/pluralplay/awesome-docs" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            awesome-docs
+          </a>
+        </div>
+      </div>
     </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">Отдельный мониторинговый VPS. Панель и ноды только отдают метрики изнутри сети NetBird.</div>
   </div>
-  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
-      Кто собирает
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.16), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Системные дашборды
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Пять дашбордов для наблюдения за серверами (Node, Network, Memory, Filesystem, CPU) и соавторство в гайде.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Автор</span><span style="opacity:.92">kutovoys</span>
+          <span style="opacity:.55;white-space:nowrap">Дашборды</span><span style="opacity:.92">пять готовых шаблонов</span>
+          <span style="opacity:.55;white-space:nowrap">Источник данных</span><span style="opacity:.92">Victoria Metrics</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(88,166,255,.95), rgba(88,166,255,.12) 55%, rgba(88,166,255,.55));box-shadow:0 0 14px rgba(88,166,255,.3);flex:none;display:inline-block">
+          <img src="https://github.com/kutovoys.png" alt="kutovoys" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/kutovoys" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">kutovoys</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@kutovoys</span>
+          </div>
+          <a href="https://github.com/pluralplay/awesome-docs/tree/main/grafana" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(88,166,255,.16);flex:none">↗</span>
+            awesome-docs · grafana
+          </a>
+        </div>
+      </div>
     </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">vmagent на каждом сервере: node_exporter, cAdvisor и метрики панели, доставка в vmsingle.</div>
-  </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Веб-сервер
-    </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">Nginx или Caddy на выбор: Caddy получает сертификат на домен сам.</div>
   </div>
 </div>
 
@@ -108,7 +138,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
 ```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
     services:
       vmsingle:
-        image: victoriametrics/victoria-metrics:v1.124.0
+        image: victoriametrics/victoria-metrics:v1.153.0
         container_name: vmsingle
         hostname: vmsingle
         restart: unless-stopped
@@ -122,7 +152,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
           - IP:8428:8428 # Тут указываем адрес NetBird (здесь это адрес сервера Grafana)
 
       grafana:
-        image: grafana/grafana:12.2.0-17027759091
+        image: grafana/grafana:13.2.3
         container_name: grafana
         hostname: grafana
         restart: unless-stopped
@@ -142,7 +172,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
           - grafana-network
 
       xray-checker:
-        image: kutovoys/xray-checker
+        image: kutovoys/xray-checker:v1.3.1
         container_name: xray-checker
         hostname: xraychecker
         restart: unless-stopped
@@ -156,7 +186,7 @@ import GrafanaDiagram from '../../../../components/GrafanaDiagram.astro';
           - grafana-network
 
       grafana-nginx:
-        image: nginx:1.28
+        image: nginx:1.30.5
         container_name: grafana-nginx
         volumes:
             - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
@@ -220,7 +250,7 @@ location /grafana {
 ```yaml title="docker-compose.yml" "IP:" "yourdomain.com" "subscription_link"
 services:
   vmsingle:
-    image: victoriametrics/victoria-metrics:v1.124.0
+    image: victoriametrics/victoria-metrics:v1.153.0
     container_name: vmsingle
     hostname: vmsingle
     restart: unless-stopped
@@ -234,7 +264,7 @@ services:
       - IP:8428:8428 # Тут указываем адрес NetBird (здесь это адрес сервера Grafana)
 
   grafana:
-    image: grafana/grafana:12.2.0-17027759091
+    image: grafana/grafana:13.2.3
     container_name: grafana
     hostname: grafana
     restart: unless-stopped
@@ -254,7 +284,7 @@ services:
       - grafana-network
 
   xray-checker:
-    image: kutovoys/xray-checker
+    image: kutovoys/xray-checker:v1.3.1
     container_name: xray-checker
     hostname: xraychecker
     restart: unless-stopped
@@ -268,7 +298,7 @@ services:
       - grafana-network
 
   grafana-caddy:
-    image: caddy:2.10
+    image: caddy:2.11.6
     container_name: grafana-caddy
     restart: unless-stopped
     ports:
@@ -319,7 +349,7 @@ docker compose up -d && docker compose logs -f -t
 1. Установка cadvisor, node_exporter, vmagent:
 
     ```bash
-    cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.53.0/cadvisor-v0.53.0-linux-amd64 && mv cadvisor-v0.53.0-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.9.1.linux-amd64.tar.gz && cd node_exporter-1.9.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.9.1.linux-amd64.tar.gz && rm -r node_exporter-1.9.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.123.0/vmutils-linux-amd64-v1.123.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.123.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
+    cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.60.6/cadvisor-v0.60.6-linux-amd64 && mv cadvisor-v0.60.6-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.12.1/node_exporter-1.12.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.12.1.linux-amd64.tar.gz && cd node_exporter-1.12.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.12.1.linux-amd64.tar.gz && rm -r node_exporter-1.12.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.153.0/vmutils-linux-amd64-v1.153.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.153.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
     ```
 
 2. Создаем файл конфигурации vmagent:
@@ -500,7 +530,7 @@ docker compose up -d && docker compose logs -f -t
 1. Создаем директории и устанавливаем cadvisor, node_exporter, vmagent:
 
     ```bash
-    mkdir -p /opt/monitoring/{cadvisor,nodeexporter,vmagent/conf.d} && cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.53.0/cadvisor-v0.53.0-linux-amd64 && mv cadvisor-v0.53.0-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.9.1.linux-amd64.tar.gz && cd node_exporter-1.9.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.9.1.linux-amd64.tar.gz && rm -r node_exporter-1.9.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.123.0/vmutils-linux-amd64-v1.123.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.123.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
+    mkdir -p /opt/monitoring/{cadvisor,nodeexporter,vmagent/conf.d} && cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.60.6/cadvisor-v0.60.6-linux-amd64 && mv cadvisor-v0.60.6-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.12.1/node_exporter-1.12.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.12.1.linux-amd64.tar.gz && cd node_exporter-1.12.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.12.1.linux-amd64.tar.gz && rm -r node_exporter-1.12.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.153.0/vmutils-linux-amd64-v1.153.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.153.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
     ```
 
 2. Создаем файл конфигурации vmagent:
@@ -736,7 +766,7 @@ docker compose up -d && docker compose logs -f -t
 1. Создаем директории и устанавливаем cadvisor, node_exporter, vmagent:
 
     ```bash
-    mkdir -p /opt/monitoring/{cadvisor,nodeexporter,vmagent/conf.d} && cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.53.0/cadvisor-v0.53.0-linux-amd64 && mv cadvisor-v0.53.0-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.9.1.linux-amd64.tar.gz && cd node_exporter-1.9.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.9.1.linux-amd64.tar.gz && rm -r node_exporter-1.9.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.123.0/vmutils-linux-amd64-v1.123.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.123.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
+    mkdir -p /opt/monitoring/{cadvisor,nodeexporter,vmagent/conf.d} && cd /opt/monitoring/cadvisor && wget https://github.com/google/cadvisor/releases/download/v0.60.6/cadvisor-v0.60.6-linux-amd64 && mv cadvisor-v0.60.6-linux-amd64 cadvisor && chmod +x cadvisor && cd /opt/monitoring/nodeexporter && wget https://github.com/prometheus/node_exporter/releases/download/v1.12.1/node_exporter-1.12.1.linux-amd64.tar.gz && tar -xvf node_exporter-1.12.1.linux-amd64.tar.gz && cd node_exporter-1.12.1.linux-amd64 && mv node_exporter /opt/monitoring/nodeexporter && cd .. && chmod +x node_exporter && rm -f node_exporter-1.12.1.linux-amd64.tar.gz && rm -r node_exporter-1.12.1.linux-amd64 && cd /opt/monitoring/vmagent && wget https://github.com/VictoriaMetrics/VictoriaMetrics/releases/download/v1.153.0/vmutils-linux-amd64-v1.153.0.tar.gz && tar -xvf vmutils-linux-amd64-v1.153.0.tar.gz && mv vmagent-prod vmagent && find . ! -name 'vmagent' -type f -delete && chmod +x vmagent && cd
     ```
 
 2. Создаем файл конфигурации vmagent:

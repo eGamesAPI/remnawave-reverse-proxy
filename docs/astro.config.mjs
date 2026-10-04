@@ -136,6 +136,7 @@ export default defineConfig({
 					{ label: 'SSH remote access', slug: 'configuration/ssh-remote-access', translations: { ru: 'SSH-доступ к серверам' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'Server routing (bridge)', slug: 'configuration/server-routing', translations: { ru: 'Серверный роутинг (мост)' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'NetBird module', slug: 'configuration/netbird-module', translations: { ru: 'Модуль NetBird' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
+					{ label: 'Backup and Restore', slug: 'configuration/backup-restore', translations: { ru: 'Бэкап и восстановление' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					],
 				},
 				{
