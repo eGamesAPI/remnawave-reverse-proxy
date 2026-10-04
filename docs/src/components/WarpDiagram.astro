@@ -1,0 +1,156 @@
+---
+/**
+ * Анимированная схема WARP Native: панель пишет в конфиг ноды исходящий
+ * блок warp-out и правило с выделенными доменами, нода ведёт трафик этих
+ * доменов через интерфейс warp (профиль wgcf) в Cloudflare WARP, остальное
+ * уходит напрямую. Подписи на линиях — непрозрачные чипы.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="wpd">
+  <svg viewBox="0 0 640 384" role="img" aria-label={en
+    ? 'Warp Native scheme: the panel writes the warp-out outbound and a routing rule into the node config; the node sends only the selected domains through the warp interface into Cloudflare WARP, everything else goes direct'
+    : 'Схема WARP Native: панель пишет в конфиг ноды блок warp-out и правило; нода ведёт только выделенные домены через интерфейс warp в Cloudflare WARP, остальное уходит напрямую'}>
+    <!-- панель -->
+    <g class="node n-mgmt">
+      <rect x="14" y="14" width="200" height="48" rx="11" />
+      <text x="114" y="33" class="t">{en ? 'panel' : 'панель'}</text>
+      <text x="114" y="50" class="s">{en ? 'module writes the rule' : 'модуль пишет правило'}</text>
+    </g>
+
+    <!-- конфиг ноды: приглушённая статичная линия + чип -->
+    <path class="backup" d="M114 62 V96" />
+    <g class="pill">
+      <rect x="54" y="67" width="120" height="22" rx="11" />
+      <text x="114" y="82">{en ? 'node config' : 'конфиг ноды'}</text>
+    </g>
+
+    <!-- сервер ноды -->
+    <g class="box">
+      <rect x="40" y="96" width="310" height="160" rx="14" />
+      <text x="195" y="120" class="bt">{en ? 'node server' : 'сервер ноды'}</text>
+      <text x="195" y="138" class="bs">Xray-core · Remnawave</text>
+    </g>
+    <g class="chip c-tb">
+      <rect x="60" y="148" width="270" height="26" rx="8" />
+      <circle cx="74" cy="161" r="3.5" />
+      <text x="86" y="166" class="ct">outbound · warp-out</text>
+    </g>
+    <g class="chip c-ig">
+      <rect x="60" y="180" width="270" height="26" rx="8" />
+      <circle cx="74" cy="193" r="3.5" />
+      <text x="86" y="198" class="ct">direct</text>
+      <text x="318" y="198" class="cs">{en ? 'everything else' : 'всё остальное'}</text>
+    </g>
+    <g class="chip c-eg">
+      <rect x="60" y="212" width="270" height="26" rx="8" />
+      <circle cx="74" cy="225" r="3.5" />
+      <text x="86" y="230" class="ct">{en ? 'warp interface' : 'интерфейс warp'}</text>
+      <text x="318" y="230" class="cs">wgcf</text>
+    </g>
+
+    <!-- выделенные домены: через интерфейс в WARP -->
+    <path class="wire w-mgmt" d="M330 161 C 360 150, 395 142, 456 168" />
+    <path class="flow f-mint" d="M330 161 C 360 150, 395 142, 456 168" />
+    <g class="pill">
+      <rect x="352" y="130" width="130" height="22" rx="11" />
+      <text x="417" y="145">{en ? 'selected domains' : 'выделенные домены'}</text>
+    </g>
+
+    <!-- Cloudflare WARP -->
+    <g class="node n-vio">
+      <rect x="456" y="154" width="170" height="72" rx="14" />
+      <text x="541" y="178" class="t">Cloudflare WARP</text>
+      <text x="541" y="196" class="s">{en ? 'global network' : 'глобальная сеть'}</text>
+    </g>
+
+    <!-- из WARP в интернет -->
+    <path class="wire w-mgmt" d="M541 226 C 544 252, 552 274, 558 300" />
+    <path class="flow f-mint" d="M541 226 C 544 252, 552 274, 558 300" />
+    <g class="pill">
+      <rect x="508" y="250" width="124" height="22" rx="11" />
+      <text x="570" y="265">{en ? 'Cloudflare IP' : 'адрес Cloudflare'}</text>
+    </g>
+
+    <!-- остальной трафик напрямую -->
+    <path class="wire w-teal" d="M330 193 C 395 215, 470 252, 524 300" />
+    <path class="flow f-teal" d="M330 193 C 395 215, 470 252, 524 300" />
+    <g class="pill">
+      <rect x="394" y="226" width="76" height="22" rx="11" />
+      <text x="432" y="241">{en ? 'direct' : 'напрямую'}</text>
+    </g>
+
+    <!-- интернет -->
+    <g class="node n-mgmt">
+      <rect x="490" y="300" width="148" height="44" rx="11" />
+      <text x="564" y="319" class="t">{en ? 'internet' : 'интернет'}</text>
+      <text x="564" y="335" class="s">{en ? 'sites and services' : 'сайты и сервисы'}</text>
+    </g>
+
+    <text x="320" y="372" class="cap mid">{en
+      ? 'only the selected domains travel through WARP, everything else goes direct'
+      : 'через WARP идёт только трафик выделенных доменов, остальной уходит напрямую'}</text>
+  </svg>
+</div>
+
+<style>
+  .wpd{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .wpd svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-mgmt{stroke:#2a4737}
+  .w-teal{stroke:#1d4a4d}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:wpd-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0}
+  .f-teal{stroke:#39c5cf}
+  @keyframes wpd-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-mgmt rect{stroke:#2a4737;stroke-dasharray:5 4}
+  .n-vio rect{stroke:rgba(188,140,255,.55)}
+  .node .t{fill:#e9f4ec;font-size:16px;font-weight:600;text-anchor:middle}
+  .n-vio .t{fill:#cdaaff}
+  .n-mgmt .t{fill:#8ca08f}
+  .node .s{fill:#a9c0b0;font-size:13px;text-anchor:middle}
+
+  .box rect{fill:rgba(0,229,160,.02);stroke:rgba(0,229,160,.35);
+    stroke-width:1.5;stroke-dasharray:7 7}
+  .box .bt{fill:#00e5a0;font-size:15px;font-weight:600;text-anchor:middle}
+  .box .bs{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+
+  .chip rect{fill:#0e1a14;stroke-width:1.5}
+  .c-tb rect{stroke:rgba(0,229,160,.55)}
+  .c-ig rect{stroke:rgba(88,166,255,.5)}
+  .c-eg rect{stroke:rgba(188,140,255,.55)}
+  .chip circle{fill:#00e5a0}
+  .c-ig circle{fill:#58a6ff}
+  .c-eg circle{fill:#bc8cff}
+  .chip .ct{fill:#e9f4ec;font-size:13px;font-weight:600}
+  .c-tb .ct{fill:#7defc4}
+  .c-ig .ct{fill:#9cc7ff}
+  .c-eg .ct{fill:#cdaaff}
+  .chip .cs{fill:#8ca08f;font-size:12px;text-anchor:end}
+
+  .pill rect{fill:#0a0f0c;stroke:rgba(0,229,160,.35);stroke-width:1.5}
+  .pill text{fill:#a9c0b0;font-size:12px;text-anchor:middle}
+
+  .cap{fill:#8ca08f;font-size:12.5px}
+  .cap.mid{text-anchor:middle}
+
+  .backup{fill:none;stroke:#5c6a7d;stroke-width:1.5;stroke-dasharray:3 7;opacity:.75}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

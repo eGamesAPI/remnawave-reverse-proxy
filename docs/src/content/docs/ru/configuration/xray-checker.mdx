@@ -9,66 +9,77 @@ import XrayCheckerDiagram from '../../../../components/XrayCheckerDiagram.astro'
 
 Модуль `Xray Checker` ставит внешний мониторинг нод: чекер живёт на отдельном сервере, забирает настоящую подписку из панели и проверяет каждый прокси так, как это делал бы обычный пользователь. Упавшая нода, сбой дата-центра или задыхающаяся сеть видны снаружи сразу, а статус-страница и Telegram-бот сообщают о них подписчикам.
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:1.2rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Чекер
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Ходит через каждый прокси подписки по расписанию и решает, жив ли хост.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.2rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Интервал</span><span>от 30 секунд, по умолчанию 300</span>
-      <span style="opacity:.6;white-space:nowrap">Методы</span><span>IP, HTTP-статус, скачивание</span>
-      <span style="opacity:.6;white-space:nowrap">Метрики</span><span>Prometheus на 127.0.0.1:2112</span>
-    </div>
-  </div>
-  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
-      Статус-страница
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Публичная страница состояния by Mrvibecodic: аптайм хостов, инциденты, техработы.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.2rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Домен</span><span>например status.example.com</span>
-      <span style="opacity:.6;white-space:nowrap">Без домена</span><span>localhost или SSH-туннель</span>
-      <span style="opacity:.6;white-space:nowrap">Данные</span><span>история и secret.key в томе Docker</span>
-    </div>
-  </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Telegram-бот
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Живёт в статус-странице: алерты о сбоях, инциденты, техработы и управление подписками.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.2rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Команды</span><span>/start, затем /menu</span>
-      <span style="opacity:.6;white-space:nowrap">Алерты</span><span>в чаты по ID из настроек</span>
-      <span style="opacity:.6;white-space:nowrap">Настройка</span><span>при установке или из меню</span>
-    </div>
-  </div>
-</div>
+Модуль собирает два открытых проекта:
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin:1.2rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
-    <img src="https://github.com/kutovoys.png" alt="kutovoys" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(0,229,160,.45);flex:none;background:#0e1a14" />
-    <div style="min-width:0">
-      <div style="font-weight:650"><a href="https://github.com/kutovoys" style="color:inherit">kutovoys</a></div>
-      <div style="font-size:.85em;opacity:.85;line-height:1.6">сам чекер: проверяет прокси из подписки по расписанию и пишет метрики</div>
-      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/kutovoys/xray-checker" style="color:inherit">github.com/kutovoys/xray-checker</a></div>
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Чекер
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Ходит через каждый прокси подписки по расписанию и решает, жив ли хост, а результат отправляет в метрики и на статус-страницу.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Интервал</span><span style="opacity:.92">от 30 секунд, по умолчанию 300</span>
+          <span style="opacity:.55;white-space:nowrap">Методы</span><span style="opacity:.92">IP, HTTP-статус, скачивание</span>
+          <span style="opacity:.55;white-space:nowrap">Метрики</span><span style="opacity:.92">Prometheus на 127.0.0.1:2112</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/kutovoys.png" alt="kutovoys" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/kutovoys" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">kutovoys</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@kutovoys</span>
+          </div>
+          <a href="https://github.com/kutovoys/xray-checker" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            xray-checker
+          </a>
+        </div>
+      </div>
     </div>
   </div>
-  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem;display:flex;gap:0.9rem;align-items:center">
-    <img src="https://github.com/Mrvibecodic.png" alt="Mrvibecodic" width="48" height="48" loading="lazy" style="border-radius:50%;border:1px solid rgba(88,166,255,.45);flex:none;background:#0e1a14" />
-    <div style="min-width:0">
-      <div style="font-weight:650"><a href="https://github.com/Mrvibecodic" style="color:inherit">Mrvibecodic</a></div>
-      <div style="font-size:.85em;opacity:.85;line-height:1.6">статус-страница и Telegram-бот: алерты, инциденты, техработы, управление</div>
-      <div style="font-size:.8em;opacity:.75;margin-top:0.15rem"><a href="https://github.com/Mrvibecodic/xray-checker-statuspage" style="color:inherit">github.com/Mrvibecodic/xray-checker-statuspage</a></div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.16), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Статус-страница и Telegram-бот
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Публичная страница состояния и живущий в ней Telegram-бот: аптайм хостов, инциденты, техработы, алерты и управление подписками.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Домен</span><span style="opacity:.92">например status.example.com</span>
+          <span style="opacity:.55;white-space:nowrap">Без домена</span><span style="opacity:.92">localhost или SSH-туннель</span>
+          <span style="opacity:.55;white-space:nowrap">Команды</span><span style="opacity:.92">/start, затем /menu</span>
+          <span style="opacity:.55;white-space:nowrap">Алерты</span><span style="opacity:.92">в чаты по ID из настроек</span>
+          <span style="opacity:.55;white-space:nowrap">Данные</span><span style="opacity:.92">история и secret.key в томе Docker</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(88,166,255,.95), rgba(88,166,255,.12) 55%, rgba(88,166,255,.55));box-shadow:0 0 14px rgba(88,166,255,.3);flex:none;display:inline-block">
+          <img src="https://github.com/Mrvibecodic.png" alt="Mrvibecodic" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/Mrvibecodic" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">Mrvibecodic</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@Mrvibecodic</span>
+          </div>
+          <a href="https://github.com/Mrvibecodic/xray-checker-statuspage" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(88,166,255,.16);flex:none">↗</span>
+            xray-checker-statuspage
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -80,13 +91,9 @@ import XrayCheckerDiagram from '../../../../components/XrayCheckerDiagram.astro'
 Подписку чекер получает одним из двух способов:
 
 - **Служебный пользователь (рекомендуется).** Модуль создаёт в панели пользователя `xray-checker`, подключает его ко внутренним группам и берёт его подписку: новые ноды попадают в мониторинг сами, без перестройки.
-- **URL вручную.** Подойдёт любая ссылка подписки `https://...`; при изменении набора нод адрес придётся обновлять самому.
+- **URL вручную.** Подойдёт любая ссылка подписки `https://...`. При изменении набора нод адрес придётся обновлять самому.
 
-:::note[Нестандартная страница подписки]
-Авто-вариант ищет в compose панели сервис `remnawave-subscription-page`. Страница подписки, установленная не скриптом (например, [366-days](https://github.com/Mrvibecodic/366-days) by Mrvibecodic), тоже подходит: если её сервис назван так же, авто-подключение увидит её как обычную. При другом имени сервиса выбирайте «Указать URL подписки вручную».
-:::
-
-Каждый цикл чекер проходит прокси из подписки выбранным методом и пишет результат в метрики; статус-страница показывает историю, бот рассылает алерты.
+Каждый цикл чекер проходит прокси из подписки выбранным методом и пишет результат в метрики. Статус-страница показывает историю, бот рассылает алерты.
 
 :::note[Кэш страницы]
 Статус-страница может стартовать дольше чекера. Установка не считается от этого проваленной: чекер отвечает на `127.0.0.1:2112`, а страница догонит через минуту-другую.
@@ -288,7 +295,7 @@ remnawave_reverse
 
 ### Обновление и удаление
 
-`Обновить образы` подтягивает свежие версии чекера и страницы и перезапускает их; `Перезапустить` пересоздаёт контейнеры с сохранением данных страницы. Удаление стирает контейнеры и том статус-страницы вместе с историей и `secret.key`, а служебный пользователь `xray-checker` остаётся в панели:
+`Обновить образы` подтягивает свежие версии чекера и страницы и перезапускает их. `Перезапустить` пересоздаёт контейнеры с сохранением данных страницы. Удаление стирает контейнеры и том статус-страницы вместе с историей и `secret.key`, а служебный пользователь `xray-checker` остаётся в панели:
 
 <Terminal title="root@server: ~" lines={[
   { kind: 'step', text: '[ * ] Обновляю образы...' },

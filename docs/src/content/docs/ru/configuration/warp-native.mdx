@@ -6,8 +6,82 @@ description: 'Установка и настройка Warp Native: меню м�
 import { Code } from '@astrojs/starlight/components';
 import { Steps } from '@astrojs/starlight/components';
 import Terminal from '../../../../components/Terminal.astro';
+import WarpDiagram from '../../../../components/WarpDiagram.astro';
 
 Модуль `WARP Native` поднимает Cloudflare WARP на сервере в нативном режиме, то есть как обычный сетевой интерфейс WireGuard: профиль генерирует инструмент wgcf, а официальный клиент Cloudflare (приложение 1.1.1.1 или warp-cli) не нужен. Через этот интерфейс нода отправляет в WARP только выбранные домены, остальной трафик идёт напрямую.
+
+В основе модуля два открытых проекта:
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        WARP Native
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Скрипты установки и удаления: поднимают WARP на сервере ноды как обычный сетевой интерфейс WireGuard.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Режим</span><span style="opacity:.92">нативный, без клиента Cloudflare</span>
+          <span style="opacity:.55;white-space:nowrap">Трафик</span><span style="opacity:.92">только выбранные домены</span>
+          <span style="opacity:.55;white-space:nowrap">Проверка</span><span style="opacity:.92">контрольные суммы двух источников</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/distillium.png" alt="distillium" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/distillium" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">distillium</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@distillium</span>
+          </div>
+          <a href="https://github.com/distillium/warp-native" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            warp-native
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.16), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        wgcf
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Генератор профилей: создаёт бесплатный аккаунт WARP и превращает его в готовый конфиг WireGuard.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Роль</span><span style="opacity:.92">профиль WARP для интерфейса</span>
+          <span style="opacity:.55;white-space:nowrap">Аккаунт</span><span style="opacity:.92">создаётся автоматически</span>
+          <span style="opacity:.55;white-space:nowrap">Формат</span><span style="opacity:.92">стандартный конфиг WireGuard</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(88,166,255,.95), rgba(88,166,255,.12) 55%, rgba(88,166,255,.55));box-shadow:0 0 14px rgba(88,166,255,.3);flex:none;display:inline-block">
+          <img src="https://github.com/ViRb3.png" alt="ViRb3" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/ViRb3" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">ViRb3</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@ViRb3</span>
+          </div>
+          <a href="https://github.com/ViRb3/wgcf" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(88,166,255,.16);flex:none">↗</span>
+            wgcf
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Что такое Cloudflare WARP?
 
@@ -16,6 +90,12 @@ import Terminal from '../../../../components/Terminal.astro';
 - **Шифрование**: канал между сервером и Cloudflare работает по WireGuard, данные защищены на этом участке пути.
 - **Другой адрес**: сайты видят адрес Cloudflare, а не адрес вашего сервера. Именно это проверяют сервисы whoer.net и 2ip.io из примеров ниже.
 - **Маршрут через сеть Cloudflare**: трафик идёт по магистралям глобальной сети Cloudflare.
+
+## Как это работает
+
+<WarpDiagram lang="ru" />
+
+Модуль на сервере панели добавляет в конфигурационный профиль ноды исходящий блок `warp-out` и правило маршрутизации с выделенными доменами. Нода направляет через интерфейс `warp` трафик только этих доменов, всё остальное уходит напрямую, а сайты видят адрес Cloudflare, а не адрес сервера.
 
 ## Меню модуля
 
