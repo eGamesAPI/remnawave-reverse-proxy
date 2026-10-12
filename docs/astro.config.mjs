@@ -135,6 +135,8 @@ export default defineConfig({
 					{ label: 'Xray Checker', slug: 'configuration/xray-checker', translations: { ru: 'Xray Checker' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'SSH remote access', slug: 'configuration/ssh-remote-access', translations: { ru: 'SSH-доступ к серверам' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'Server routing (bridge)', slug: 'configuration/server-routing', translations: { ru: 'Серверный роутинг (мост)' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
+					{ label: 'Client balancer', slug: 'configuration/client-balancer', translations: { ru: 'Клиентский балансировщик' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
+					{ label: 'Subscriptions and response rules', slug: 'configuration/subscription-rules', translations: { ru: 'Подписки и правила' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'NetBird module', slug: 'configuration/netbird-module', translations: { ru: 'Модуль NetBird' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					{ label: 'Backup and Restore', slug: 'configuration/backup-restore', translations: { ru: 'Бэкап и восстановление' }, badge: { text: { en: 'NEW', ru: 'Новое' }, variant: 'caution' } },
 					],

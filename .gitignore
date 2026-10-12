@@ -18,3 +18,4 @@ changelog_draft.md
 # Local API snapshots (Remnawave panel OpenAPI spec)
 api-1.yaml
 api-1.json
+.ssh-harness/

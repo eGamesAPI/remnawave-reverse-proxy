@@ -1,0 +1,505 @@
+---
+title: Клиентский балансировщик (Xray JSON)
+description: "Одна запись в подписке, которая всегда идёт через быстрейший хост: панель собирает конфиг Xray JSON из скрытых копий ваших хостов, а клиент сам меряет задержку и выбирает лучший маршрут"
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Terminal from '../../../../components/Terminal.astro';
+import BalancerDiagram from '../../../../components/BalancerDiagram.astro';
+import PresetDiagram from '../../../../components/PresetDiagram.astro';
+import RoutingComboDiagram from '../../../../components/RoutingComboDiagram.astro';
+
+Клиентский балансировщик даёт пользователю одну запись в подписке, которая всегда работает хорошо. Когда один из хостов слабеет или падает, ничего перенастраивать не нужно: клиент сам меряет задержку каждого хоста и держит трафик на двух лучших. Панель собирает такой конфиг автоматически, на нодах ничего не меняется, оригинальные хосты не удаляются. Пока балансировщик работает, они скрыты из подписки: мёртвые записи только путали бы пользователей. Разбор балансировщика возвращает и ноды, и записи.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Два пресета
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Один пул, где побеждает быстрейший, или основные хосты с резервом, который вступает в дело при недоступности основных.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Скрытые копии
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        В конфиг попадают скрытые копии ваших хостов, а для Mihomo добавляется готовая группа. Обычные подписки продолжают отдавать исходный список без изменений.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Незаметен для чекера
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray Checker и остальные типы подписок не видят запись балансировщика, ложных алертов не будет.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Всё через API
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Шаблон Xray JSON, копии и хост-обёртка создаются через API панели и так же чисто убираются.
+      </div>
+    </div>
+  </div>
+</div>
+
+Пункт находится в меню скрипта: **4. Расширения ноды → Клиентский балансировщик**.
+
+## Как это работает
+
+<BalancerDiagram lang="ru" />
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em;margin-bottom:.6rem">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Клиентам Xray JSON
+      </div>
+      <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span>панель собирает единый конфиг из скрытых копий хостов</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span>каждые 30 секунд клиент замеряет задержку каждого хоста через <code style="font-family:var(--sl-font-mono);font-size:.92em">burstObservatory</code></span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span><code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> держит соединения на двух лучших, при деградации хоста новые соединения уходят на другой сами</span></div>
+    </div>
+  </div>
+  <div style="overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em;margin-bottom:.6rem">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Клиентам Mihomo
+      </div>
+      <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>в дефолтный Mihomo-шаблон добавляется готовая группа с вашими хостами</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>«Всегда быстрейший» работает как <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code>, «Основные с резервом» как <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code> с вашим порядком</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>клиент сам выбирает быстрейшего, обычная группа хостов остаётся рядом, переключение делается один раз</span></div>
+    </div>
+  </div>
+</div>
+
+В подписке появляется одна запись с именем балансировщика, отдельного адреса у неё нет. Соединения клиент открывает напрямую с хостами внутри балансировщика.
+
+## Настройка
+
+:::note[Настройка панели]
+Мастер сам включает в панели пункт «Отдавать JSON на базовом пути подписки»: без него полный конфиг с балансировщиком клиент получает только по прямой ссылке с суффиксом `/v2ray-json`. Если изменить настройку через API не удалось, мастер подскажет, как сделать это вручную. Клиентам Mihomo настройка не нужна, группа приходит в обычной подписке.
+:::
+
+<Steps>
+
+1. Откройте **4. Расширения ноды** и выберите пункт `Клиентский балансировщик`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Расширения ноды' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Шаблон для selfsteal ноды' },
+      { kind: 'dim', text: '    маскировка ноды под обычный сайт' },
+      { kind: 'item', num: '2.', text: 'Плагины ноды' },
+      { kind: 'dim', text: '    дополнительные функции для ноды' },
+      { kind: 'item', num: '3.', text: 'SSH-доступ к удалённым серверам' },
+      { kind: 'dim', text: '    сохранённые серверы и запуск команд на них' },
+      { kind: 'item', num: '4.', text: 'Серверный роутинг' },
+      { kind: 'dim', text: '    российские домены через мост на сервер выхода, остальное напрямую' },
+      { kind: 'item', num: '5.', text: 'Клиентский балансировщик', pick: true },
+      { kind: 'dim', text: '    одна запись в подписке вместо списка хостов' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-5):', answer: '5' },
+    ]} />
+
+2. Балансировщиков ещё нет, создайте первый:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Клиентский балансировщик' },
+      { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/client-balancer/' },
+      { kind: 'plain' },
+      { kind: 'dim', text: ' Балансировщики не настроены' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Создать балансировщик', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-1):', answer: '1' },
+    ]} />
+
+3. Выберите, кто будет пользоваться балансировщиком. Дальше примеры для Xray JSON, вариант для Mihomo описан в подразделе ниже:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Кто будет пользоваться балансировщиком?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Xray JSON', pick: true },
+      { kind: 'dim', text: '    v2rayN, Happ и другие клиенты полных конфигов Xray' },
+      { kind: 'item', num: '2.', text: 'Mihomo' },
+      { kind: 'dim', text: '    Clash Meta, Stash и подобные: группа с автоварьированием в подписке' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-2):', answer: '1' },
+    ]} />
+
+4. Выберите пресет. Дальше примеры идут для пресета «Всегда быстрейший»:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Как клиенту выбирать хост?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Всегда быстрейший', pick: true },
+      { kind: 'dim', text: '    клиент сам меряет задержку и держит связь через два лучших хоста' },
+      { kind: 'item', num: '2.', text: 'Основные с резервом' },
+      { kind: 'dim', text: '    обычно трафик идёт через основные, когда они недоступны, через первый резервный' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Выход' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Выберите действие (0-2):', answer: '1' },
+    ]} />
+
+5. Если ни на одном инбаунде нет двух подходящих хостов (частая картина сразу после add-node, когда у каждой ноды свой профиль), мастер сам предложит хосты со всех инбаундов. Если подходящие инбаунды есть, он покажет их списком, как в подразделе ниже. Выберите основные хосты, номера вводятся через запятую:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Ни на одном инбаунде нет 2 подходящих хостов: выберу хосты со всех инбаундов и соберу на отдельный профиль' },
+      { kind: 'plain' },
+      { kind: 'title', text: 'Основные хосты:' },
+      { kind: 'dim', text: ' порядок выбора сохраняется в конфиге клиента' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Германия (de-1.example.com) — Германия / VLESS' },
+      { kind: 'item', num: '2.', text: 'Эстония (ee-1.example.com) — Эстония / VLESS' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Номера хостов через запятую (1-2):', answer: '1,2' },
+    ]} />
+
+6. Хосты на разных инбаундах, поэтому мастер предложит собрать их на отдельный профиль. Старые профили и хосты останутся как есть и проснутся после разбора балансировщика:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'Выбранные хосты на разных инбаундах. Для балансировщика будет создан отдельный профиль, ноды переключатся на него, а старые профили и хосты останутся как есть: они оживут, когда нода вернётся. Разбор балансировщика вернёт ноды на свои профили сам' },
+      { kind: 'input', text: '[?] Продолжить с отдельным профилем? (y/n): ', answer: 'y' },
+      { kind: 'step', text: 'Создаю отдельный профиль «Balancer» и перевожу на него ноды...' },
+      { kind: 'ok', text: 'Ноды на профиле «Balancer», старые профили не тронуты' },
+    ]} />
+
+7. Введите название. Именно это имя пользователь увидит в подписке, Enter подставит «Авто-выбор»:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Название в подписке (Enter подставит Авто-выбор):', answer: 'Германия+Эстония' },
+      { kind: 'step', text: 'Создаю шаблон подписки Xray JSON: CB balancer' },
+      { kind: 'ok', text: 'Шаблон создан' },
+      { kind: 'step', text: 'Скрываю копию хоста Германия...' },
+      { kind: 'ok', text: 'Копия скрыта: Германия' },
+      { kind: 'step', text: 'Скрываю копию хоста Эстония...' },
+      { kind: 'ok', text: 'Копия скрыта: Эстония' },
+      { kind: 'step', text: 'Записываю конфиг в шаблон...' },
+      { kind: 'ok', text: 'Конфиг записан' },
+      { kind: 'step', text: 'Создаю хост-обёртку «Германия+Эстония»...' },
+      { kind: 'ok', text: 'Хост-обёртка готова' },
+      { kind: 'plain' },
+      { kind: 'step', text: 'Скрываю исходные хосты, пока они спят...' },
+      { kind: 'ok', text: 'Исходные хосты скрыты: 2. Записи вернутся в подписку после разбора балансировщика' },
+      { kind: 'ok', text: 'Готово: в подписках Xray JSON появился хост «Германия+Эстония», внутри 2 основных' },
+      { kind: 'dim', text: ' Обычные подписки и Xray Checker его не видят, это задумано' },
+      { kind: 'dim', text: ' Исходные хосты спят и скрыты из подписки, пока их ноды заняты балансировщиком: уберёте его, ноды и записи вернутся сами' },
+    ]} />
+
+</Steps>
+
+### Если хосты уже на одном инбаунде
+
+Когда хосты живут на одном инбаунде, отдельный профиль не нужен: балансировщик использует существующий, ноды не трогаются. Мастер покажет подходящие инбаунды списком, вариант «С разных инбаундов» собирает хосты на отдельный профиль:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: ' Все подходящие хосты уже на одном инбаунде: Германия / VLESS' },
+  { kind: 'plain' },
+  { kind: 'title', text: 'Инбаунд для балансировщика:' },
+  { kind: 'dim', text: ' хосты должны жить на одном инбаунде, и он должен быть в группах пользователей, которым положен балансировщик' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Германия / VLESS — подходящих хостов: 3', pick: true },
+  { kind: 'item', num: '2.', text: 'С разных инбаундов' },
+  { kind: 'dim', text: '    хосты соберутся на отдельный профиль, ноды переключатся на него' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-2):', answer: '1' },
+]} />
+
+Дальше выбор хостов идёт только с этого инбаунда, подтверждение отдельного профиля не спрашивается.
+
+### Балансировщик для Mihomo
+
+С Mihomo проще: хосты годятся с любых инбаундов, отдельный профиль и скрытые копии не нужны. Мастер добавляет готовую группу в стандартный шаблон Mihomo, и она появляется в подписке рядом с обычным списком хостов. Пользователь переключается на неё в клиенте один раз:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Кто будет пользоваться балансировщиком?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Xray JSON' },
+  { kind: 'dim', text: '    v2rayN, Happ и другие клиенты полных конфигов Xray' },
+  { kind: 'item', num: '2.', text: 'Mihomo', pick: true },
+  { kind: 'dim', text: '    Clash Meta, Stash и подобные: группа с автоварьированием в подписке' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-2):', answer: '2' },
+  { kind: 'title', text: 'Как клиенту выбирать хост?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Всегда быстрейший', pick: true },
+  { kind: 'dim', text: '    клиент сам меряет задержку и держит связь через два лучших хоста' },
+  { kind: 'item', num: '2.', text: 'Основные с резервом' },
+  { kind: 'dim', text: '    обычно трафик идёт через основные, когда они недоступны, через первый резервный' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-2):', answer: '1' },
+  { kind: 'title', text: 'Основные хосты:' },
+  { kind: 'dim', text: ' порядок выбора сохраняется в конфиге клиента' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Германия (de-1.example.com) — Германия / VLESS' },
+  { kind: 'item', num: '2.', text: 'Эстония (ee-1.example.com) — Эстония / VLESS' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Номера хостов через запятую (1-2):', answer: '1,2' },
+  { kind: 'input', text: 'Название в подписке (Enter подставит Авто-выбор):', answer: 'Мой Mihomo' },
+  { kind: 'step', text: 'Добавляю группу «Мой Mihomo» в шаблон Mihomo...' },
+  { kind: 'ok', text: 'Готово: в подписках Mihomo появилась группа «Мой Mihomo»' },
+  { kind: 'dim', text: ' Клиент сам меряет задержку и держит связь через лучший хост группы' },
+]} />
+
+Пресеты превращаются в родные группы Mihomo: «Всегда быстрейший» становится `url-test`, «Основные с резервом» становится `fallback` с вашим порядком хостов. Группа перемеряет хосты каждые 30 секунд. Добавление и удаление хостов пересобирают группу, разбор убирает её из шаблона и не трогает остальное.
+
+## Пресеты
+
+<Tabs>
+  <TabItem label="Всегда быстрейший">
+
+  Один пул, все хосты равны. Балансировщик распределяет соединения по двум лучшим хостам по замеренной задержке (`leastLoad`, `expected: 2`). Подходит набору похожих серверов, где любой вариант хорош.
+
+  <PresetDiagram variant="fastest" lang="ru" />
+
+  </TabItem>
+  <TabItem label="Основные с резервом">
+
+  Две группы. Трафик идёт через основные хосты, а когда все они недоступны, клиент переходит на первый резервный. Подходит, когда основная линия за рубежом дополнена одним входом, который переживает региональные блокировки: резерв молчит, пока не понадобится.
+
+  <PresetDiagram variant="reserve" lang="ru" />
+
+  Балансировщики Xray не умеют ссылаться друг на друга (`fallbackTag` указывает на outbound), поэтому запасным выходом служит первый хост резервной группы. Когда первым должен стать другой, поменяйте порядок через удаление и добавление.
+
+  Занять все хосты основными не выйдет: мастер потребует оставить хотя бы один резервным, а если подходящих хостов меньше двух, предупредит, что на две группы не хватает.
+
+  Клиент перемеряет пул каждые 30 секунд, поэтому переключение на резерв укладывается в один замер. Соединения, которые уже летели через упавший хост, доживают до собственного таймаута.
+
+  </TabItem>
+</Tabs>
+
+В балансировщик не предлагаются занятые хосты: личные выходы VLESS Route серверного роутинга (модуль роутинга может их перестроить) и обёртки других балансировщиков.
+
+## Несколько балансировщиков
+
+Балансировщиков может быть сколько нужно, у каждого свой список хостов, свой шаблон Xray JSON и своя запись в подписке. Пять нод Германии собираются балансировщиком «Германия», пять нод Финляндии другим «Финляндия», и пользователь видит в подписке обе записи с разными именами.
+
+При сборке с разных инбаундов каждый получает свой профиль: первый занимает «Balancer», второй автоматически «Balancer 2», и так далее. Разбор одного не затрагивает другой, а хост-обёртки соседних балансировщиков никогда не попадают в список выбора, продублировать запись случайно не выйдет.
+
+Меню модуля показывает все балансировщики сразу, с режимом каждого. Выберите номер, откроется меню этого балансировщика с живым статусом и пятью действиями:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Клиентский балансировщик' },
+  { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/client-balancer/' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Настроено балансировщиков: 2' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Германия • режим: быстрейший из пула', pick: true },
+  { kind: 'item', num: '2.', text: 'Финляндия • режим: основные с резервом' },
+  { kind: 'item', num: '3.', text: 'Создать балансировщик' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-3):' },
+]} />
+
+## Балансировщик и серверный роутинг
+
+Модули работают вместе, потому что решают разные задачи: балансировщик на клиенте выбирает точку входа, серверный роутинг затем определяет, куда уйдёт трафик. Российские домены уходят в мост на сервер выхода, остальное идёт напрямую со входной ноды.
+
+### Однородный пул
+
+Соберите пул из нод с одинаковым роутингом, и ничего не сломается: ноды остаются на своих профилях со своими правилами, балансировщик просто выбирает среди них быстрейший. Отдельный профиль даже не создаётся.
+
+<RoutingComboDiagram variant="alike" lang="ru" />
+
+### Смешанный пул
+
+Не собирайте «С разных инбаундов» ноды с роутингом и без. Отдельный профиль наследует правила первого выбранного хоста, включая ссылку на файл RU-списков, а этот файл смонтирован не на всех нодах: нода без него не поднимет конфигурацию и отключится от панели. После разбора балансировщика она вернётся сама. Личные выходы VLESS Route в пул не попадают: серверный роутинг может их перестроить, поэтому модуль их не предлагает.
+
+<RoutingComboDiagram variant="mixed" lang="ru" />
+
+## Управление
+
+Меню конкретного балансировщика показывает живой статус и пять действий:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Балансировщик «Германия+Эстония»' },
+  { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/client-balancer/' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' хостов: 2 основных' },
+  { kind: 'dim', text: ' режим: быстрейший из пула' },
+  { kind: 'dim', text: ' хост-обёртка на месте' },
+  { kind: 'dim', text: ' шаблон Xray JSON на месте' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Показать хосты' },
+  { kind: 'dim', text: '    живой список из панели с проверкой, что никто не потерялся' },
+  { kind: 'item', num: '2.', text: 'Добавить хосты' },
+  { kind: 'dim', text: '    скрытая копия каждого хоста попадёт в конфиг' },
+  { kind: 'item', num: '3.', text: 'Убрать хост' },
+  { kind: 'dim', text: '    скрытая копия удалится, оригинал останется как был' },
+  { kind: 'item', num: '4.', text: 'Переименовать' },
+  { kind: 'dim', text: '    новое название увидят клиенты в подписке' },
+  { kind: 'item', num: '5.', text: 'Убрать балансировщик' },
+  { kind: 'dim', text: '    обёртка, скрытые копии и шаблон удалятся, оригиналы хостов останутся' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Выход' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-5):' },
+]} />
+
+**Показать хосты** сверяет сохранённый список с панелью:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Основные:' },
+  { kind: 'strong', text: ' Германия (de-1.example.com)' },
+  { kind: 'strong', text: ' Эстония (ee-1.example.com)' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Все хосты на месте' },
+]} />
+
+**Добавить хосты** берёт кандидатов с инбаунда балансировщика. Если он собран на отдельном профиле, мастер ответит прямо:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'err', text: 'Подходящих хостов больше нет' },
+]} />
+
+У балансировщика на реальном инбаунде список не пуст, новая копия входит в конфиг:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Какие хосты добавить:' },
+  { kind: 'dim', text: ' порядок выбора сохраняется в конфиге клиента' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Франкфурт (de-3.example.com) — Германия / VLESS' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Номера хостов через запятую (1-1):', answer: '1' },
+  { kind: 'step', text: 'Скрываю копию хоста Франкфурт...' },
+  { kind: 'ok', text: 'Копия скрыта: Германия-2' },
+  { kind: 'step', text: 'Обновляю конфиг шаблона...' },
+  { kind: 'step', text: 'Записываю конфиг в шаблон...' },
+  { kind: 'ok', text: 'Конфиг записан' },
+  { kind: 'ok', text: 'Добавлено хостов: 1' },
+]} />
+
+**Убрать хост** удаляет скрытую копию и пересобирает конфиг. Последний резерв уйти может, последние основные нет:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Какой хост убрать?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Германия (de-1.example.com) — Основные', pick: true },
+  { kind: 'item', num: '2.', text: 'Эстония (ee-1.example.com) — Основные' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Выберите действие (0-2):', answer: '1' },
+  { kind: 'step', text: 'В основных должно остаться не меньше 2, для полного разбора уберите балансировщик целиком' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'Хост убран, конфиг обновлён' },
+]} />
+
+**Переименовать** меняет имя записи в подписке:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'Новое название (Enter оставит Германия+Эстония):', answer: 'Европа' },
+  { kind: 'ok', text: 'Хост переименован в «Европа»' },
+]} />
+
+**Убрать балансировщик** возвращает всё как было: обёртка, скрытые копии и шаблон удаляются, оригиналы хостов не трогаются. Если ноды были переведены на отдельный профиль, они вернутся на свои сами:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: '[?] Убрать балансировщик «Европа»? Хост-обёртка, скрытые копии и шаблон будут удалены, оригиналы хостов останутся (y/n): ', answer: 'y' },
+  { kind: 'step', text: 'Разбираю балансировщик «Европа»...' },
+  { kind: 'step', text: 'Возвращаю ноды на их исходные профили...' },
+  { kind: 'ok', text: 'Ноды вернулись на свои профили' },
+  { kind: 'ok', text: 'Балансировщик убран, оригиналы хостов не тронуты' },
+]} />
+
+## Совместимость
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Клиенты Xray и Mihomo
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Запись в подписке Xray JSON для v2rayN и Happ, группа в подписке Mihomo. Клиенты base64, Clash, Stash и sing-box продолжают видеть обычный список хостов.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.16), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Ссылка подписки
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Для Xray JSON прямой адрес содержит суффикс <code style="font-family:var(--sl-font-mono);font-size:.92em">/v2ray-json</code>, а мастер включает настройку «Отдавать JSON на базовом пути подписки» сам, полный конфиг приходит по обычной ссылке. Для Mihomo ничего включать не нужно: группа приходит в обычной подписке.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Чекер молчит
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray Checker проверяет хосты, по которым реально идут соединения. Обёртка исключена из его подписки, группа Mihomo живёт только в шаблоне Mihomo: ложных алертов не будет.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Дружит с серверным роутингом
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Работают вместе: балансировщик выбирает вход на клиенте, роутинг решает выход после входа. Границы сочетания описаны в разделе выше.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        Знакомый конфиг
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Конфиг Xray повторяет официальный пример Remnawave: <code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> с бюджетом в одну секунду, DNS <code style="font-family:var(--sl-font-mono);font-size:.92em">1.1.1.1</code>, SOCKS 10808 и HTTP 10809. Для Mihomo используются родные группы <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code> и <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code>. Ручные правки живут до следующего изменения списка.
+      </div>
+    </div>
+  </div>
+</div>

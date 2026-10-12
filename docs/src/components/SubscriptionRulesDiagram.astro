@@ -1,0 +1,164 @@
+---
+/**
+ * Анимированная схема правил ответов: панель читает заголовки запроса
+ * (user-agent, x-hwid) и по первому подходящему правилу выбирает ответ.
+ * Четыре дорожки проходят сквозь панель: Happ/INCY с устройством,
+ * известные приложения, браузер, чужой запрос. Подписи условий на
+ * линиях — непрозрачные чипы поверх дорожек.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="srd">
+  <svg viewBox="0 0 904 430" role="img" aria-label={en
+    ? 'Response rules scheme: the panel inspects request headers and picks the response by the first matching rule'
+    : 'Схема правил ответов: панель читает заголовки запроса и отвечает по первому подходящему правилу'}>
+
+    <!-- панель: рисуется первой, дорожки проходят сквозь неё -->
+    <g class="panelbox">
+      <rect x="300" y="40" width="270" height="290" rx="14" />
+      <text x="435" y="66" class="pt">{en ? 'Response rules' : 'Правила ответов'}</text>
+      <text x="435" y="82" class="ps">{en ? 'first matching rule wins' : 'первое подходящее правило решает'}</text>
+    </g>
+
+    <!-- дорожки насквозь -->
+    <path class="wire" d="M190 100 L714 100" />
+    <path class="wire" d="M190 168 L714 168" />
+    <path class="wire" d="M190 236 L714 236" />
+    <path class="wire" d="M190 304 L714 304" />
+
+    <!-- потоки поверх дорожек -->
+    <path class="flow f-mint"   d="M190 100 L714 100" />
+    <path class="flow f-teal"   d="M190 168 L714 168" />
+    <path class="flow f-violet" d="M190 236 L714 236" />
+    <path class="flow f-red"    d="M190 304 L714 304" />
+
+    <!-- условия на дорожках -->
+    <g class="pill p-mint">
+      <rect x="345" y="89" width="180" height="22" rx="11" />
+      <text x="435" y="104">Happ/INCY + x-hwid</text>
+    </g>
+    <g class="pill p-teal">
+      <rect x="350" y="157" width="170" height="22" rx="11" />
+      <text x="435" y="172">{en ? 'known apps' : 'известные приложения'}</text>
+    </g>
+    <g class="pill p-violet">
+      <rect x="345" y="225" width="180" height="22" rx="11" />
+      <text x="435" y="240">{en ? 'Mozilla in user-agent' : 'Mozilla в user-agent'}</text>
+    </g>
+    <g class="pill p-red">
+      <rect x="352" y="293" width="166" height="22" rx="11" />
+      <text x="435" y="308">{en ? 'nothing matched' : 'не подошло ни одно'}</text>
+    </g>
+
+    <!-- запросы -->
+    <g class="node n-mint">
+      <rect x="14" y="74" width="176" height="52" rx="12" />
+      <text x="102" y="96" class="t">Happ · INCY</text>
+      <text x="102" y="114" class="s">{en ? 'x-hwid: device id' : 'x-hwid: устройство'}</text>
+    </g>
+    <g class="node n-teal">
+      <rect x="14" y="142" width="176" height="52" rx="12" />
+      <text x="102" y="164" class="t">{en ? 'Other apps' : 'Другие приложения'}</text>
+      <text x="102" y="182" class="s">v2rayN · V2Box…</text>
+    </g>
+    <g class="node n-violet">
+      <rect x="14" y="210" width="176" height="52" rx="12" />
+      <text x="102" y="232" class="t">{en ? 'Browser' : 'Браузер'}</text>
+      <text x="102" y="250" class="s">{en ? 'opens the link' : 'открывает ссылку'}</text>
+    </g>
+    <g class="node n-red">
+      <rect x="14" y="278" width="176" height="52" rx="12" />
+      <text x="102" y="300" class="t">{en ? 'Stranger request' : 'Чужой запрос'}</text>
+      <text x="102" y="318" class="s">{en ? 'link guessing' : 'перебор ссылок'}</text>
+    </g>
+
+    <!-- ответы -->
+    <g class="node n-mint">
+      <rect x="714" y="74" width="176" height="52" rx="12" />
+      <text x="802" y="96" class="t">Xray JSON</text>
+      <text x="802" y="114" class="s">{en ? 'full config' : 'полный конфиг'}</text>
+    </g>
+    <g class="node n-teal">
+      <rect x="714" y="142" width="176" height="52" rx="12" />
+      <text x="802" y="164" class="t">Base64</text>
+      <text x="802" y="182" class="s">{en ? 'server list' : 'список серверов'}</text>
+    </g>
+    <g class="node n-violet">
+      <rect x="714" y="210" width="176" height="52" rx="12" />
+      <text x="802" y="232" class="t">{en ? 'Subscription page' : 'Страница подписки'}</text>
+      <text x="802" y="250" class="s">HTML</text>
+    </g>
+    <g class="node n-red">
+      <rect x="714" y="278" width="176" height="52" rx="12" />
+      <text x="802" y="300" class="t">404</text>
+      <text x="802" y="318" class="s">{en ? 'as if nothing here' : 'как будто ничего нет'}</text>
+    </g>
+
+    <!-- лимит устройств -->
+    <path class="wire w-link" d="M435 330 L435 348" />
+    <g class="chip">
+      <rect x="305" y="348" width="260" height="28" rx="8" />
+      <circle cx="321" cy="362" r="3.5" />
+      <text x="333" y="367" class="ct">{en ? 'Device limit · N devices' : 'Лимит устройств · N устройств'}</text>
+    </g>
+
+    <text x="452" y="412" class="cap mid">{en
+      ? 'the panel reads request headers and answers by the first matching rule'
+      : 'панель читает заголовки запроса и отвечает по первому подходящему правилу'}</text>
+  </svg>
+</div>
+
+<style>
+  .srd{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .srd svg{display:block;width:100%;min-width:640px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-link{stroke:#3a3550}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:srd-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0}
+  .f-teal{stroke:#39c5cf}
+  .f-violet{stroke:#a78bfa}
+  .f-red{stroke:#ff5d5d}
+  @keyframes srd-flow{to{stroke-dashoffset:-16}}
+
+  .panelbox rect{fill:#0b1310;stroke:#3a5a47;stroke-width:1.5}
+  .panelbox .pt{fill:#e9f4ec;font-size:16px;font-weight:600;text-anchor:middle}
+  .panelbox .ps{fill:#8ca08f;font-size:12px;text-anchor:middle}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-mint rect{stroke:rgba(0,229,160,.5)}
+  .n-teal rect{stroke:rgba(57,197,207,.5)}
+  .n-violet rect{stroke:rgba(167,139,250,.5)}
+  .n-red rect{stroke:rgba(255,93,93,.45)}
+  .node .t{fill:#e9f4ec;font-size:15px;font-weight:600;text-anchor:middle}
+  .node .s{fill:#a9c0b0;font-size:12.5px;text-anchor:middle}
+
+  .pill rect{fill:#0a0f0c;stroke-width:1.5}
+  .pill text{fill:#a9c0b0;font-size:12px;text-anchor:middle}
+  .p-mint rect{stroke:rgba(0,229,160,.35)}
+  .p-teal rect{stroke:rgba(57,197,207,.35)}
+  .p-violet rect{stroke:rgba(167,139,250,.35)}
+  .p-red rect{stroke:rgba(255,93,93,.35)}
+
+  .chip rect{fill:#0e1a14;stroke:rgba(0,229,160,.55);stroke-width:1.5}
+  .chip circle{fill:#00e5a0}
+  .chip .ct{fill:#7defc4;font-size:13px;font-weight:600}
+
+  .cap{fill:#8ca08f;font-size:12.5px}
+  .cap.mid{text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

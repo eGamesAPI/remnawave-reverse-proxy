@@ -12,9 +12,44 @@ import SshDiagram from '../../../../components/SshDiagram.astro';
 
 Модуль SSH-доступа позволяет обслуживать второй сервер (например, сервер с нодой) прямо из меню скрипта на панели: обновить пакеты, перезапустить контейнер ноды, посмотреть логи, не открывая вторую SSH-сессию. Другой модуль, [серверный роутинг](/ru/configuration/server-routing/), использует этот доступ автоматически, когда ставит ноду на второй сервер.
 
-- **Пароль спрашивается один раз.** Скрипт установит свой ключ и забудет пароль: на диск он не пишется никогда.
-- **Ваш ключ не читается.** Собственный ключ используется по пути, содержимое не копируется и не открывается.
-- **Одна строка в `authorized_keys`.** Ключ скрипта живёт отдельной строкой с пометкой `remnawave-reverse-proxy`, ваши строки не трогаются.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Пароль спрашивается один раз
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Скрипт установит свой ключ и забудет пароль: на диск он не пишется никогда.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Ваш ключ не читается
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Собственный ключ используется по пути, содержимое не копируется и не открывается.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Одна строка в authorized_keys
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Ключ скрипта живёт отдельной строкой с пометкой <code style="font-family:var(--sl-font-mono);font-size:.92em">remnawave-reverse-proxy</code>, ваши строки не трогаются.
+      </div>
+    </div>
+  </div>
+</div>
 
 Пункт находится в меню скрипта: **4. Расширения ноды → SSH-доступ к удалённому серверу**.
 
@@ -29,7 +64,7 @@ import SshDiagram from '../../../../components/SshDiagram.astro';
 При первом входе список пуст, и модуль сразу предлагает настроить первый сервер:
 
 <Terminal title="root@server: ~" lines={[
-  { kind: 'title', text: 'SSH-доступ к удалённому серверу' },
+  { kind: 'title', text: 'SSH-доступ к удалённым серверам' },
   { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/ssh-remote-access' },
   { kind: 'plain' },
   { kind: 'dim', text: ' Доступ не настроен' },
@@ -44,7 +79,7 @@ import SshDiagram from '../../../../components/SshDiagram.astro';
 Когда серверы уже есть, список выглядит так, с подписями и пометкой, каким ключом ходим:
 
 <Terminal title="root@server: ~" lines={[
-  { kind: 'title', text: 'SSH-доступ к удалённому серверу' },
+  { kind: 'title', text: 'SSH-доступ к удалённым серверам' },
   { kind: 'dim', text: ' Подробности в wiki: https://wiki.egam.es/ru/configuration/ssh-remote-access' },
   { kind: 'plain' },
   { kind: 'dim', text: ' Настроено серверов: 2' },
@@ -145,7 +180,7 @@ import SshDiagram from '../../../../components/SshDiagram.astro';
 Выбор сервера из списка открывает его меню:
 
 <Terminal title="root@server: ~" lines={[
-  { kind: 'title', text: 'SSH-доступ к удалённому серверу' },
+  { kind: 'title', text: 'SSH-доступ к удалённым серверам' },
   { kind: 'plain' },
   { kind: 'dim', text: ' Название: Kazan' },
   { kind: 'dim', text: ' Настроено: root@203.0.113.20:22' },

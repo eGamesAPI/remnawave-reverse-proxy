@@ -10,47 +10,56 @@ import NodePluginsDiagram from '../../../components/NodePluginsDiagram.astro';
 
 The `Node Plugins` module configures three built-in Remnawave Node plugins for every node of the panel at once:
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:1.2rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Torrent Blocker
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Detects user torrent traffic and bans the IP at the nftables level: one caught packet is enough.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Ban</span><span>temporary, configurable duration</span>
-      <span style="opacity:.6;white-space:nowrap">Reports</span><span>stats and Telegram</span>
-      <span style="opacity:.6;white-space:nowrap">Exceptions</span><span>IP whitelist</span>
-    </div>
-  </div>
-  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
-      Ingress Filter
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Cuts inbound connections by whole subnets: scanners knock on the node port and get no answer.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Presets</span><span>RU, classic, FOFA scanners</span>
-      <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4 and /8…/32 subnets</span>
-      <span style="opacity:.6;white-space:nowrap">Traffic</span><span>inbound, whole node server</span>
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Torrent Blocker
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Detects user torrent traffic and bans the IP at the nftables level: one caught packet is enough.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Ban</span><span>temporary, configurable duration</span>
+        <span style="opacity:.6;white-space:nowrap">Reports</span><span>stats and Telegram</span>
+        <span style="opacity:.6;white-space:nowrap">Exceptions</span><span>IP whitelist</span>
+      </div>
     </div>
   </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Egress Filter
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Ingress Filter
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Cuts inbound connections by whole subnets: scanners knock on the node port and get no answer.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Presets</span><span>RU, classic, FOFA scanners</span>
+        <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4 and /8…/32 subnets</span>
+        <span style="opacity:.6;white-space:nowrap">Traffic</span><span>inbound, whole node server</span>
+      </div>
     </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Blocks outbound traffic by destination address and port: a hijacked account reaches neither private networks nor spam sending.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Presets</span><span>private ranges, mail ports</span>
-      <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4/IPv6 and ports 1-65535</span>
-      <span style="opacity:.6;white-space:nowrap">Traffic</span><span>outbound, whole node server</span>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Egress Filter
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Blocks outbound traffic by destination address and port: a hijacked account reaches neither private networks nor spam sending.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Presets</span><span>private ranges, mail ports</span>
+        <span style="opacity:.6;white-space:nowrap">Own lists</span><span>IPv4/IPv6 and ports 1-65535</span>
+        <span style="opacity:.6;white-space:nowrap">Traffic</span><span>outbound, whole node server</span>
+      </div>
     </div>
   </div>
 </div>
@@ -110,22 +119,22 @@ remnawave_reverse
       { kind: 'item', num: '2.', text: 'Reinstall Panel and Components' },
       { kind: 'item', num: '3.', text: 'Manage Panel and Components' },
       { kind: 'plain' },
-      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)', pick: true },
+      { kind: 'item', num: '4.', text: 'Node extensions (templates, plugins, core)' },
+      { kind: 'item', num: '5.', text: 'Subscriptions: rules and page' },
       { kind: 'plain' },
-      { kind: 'item', num: '5.', text: 'Xray Checker — subscription monitoring' },
-      { kind: 'item', num: '6.', text: 'Custom extensions by legiz' },
-      { kind: 'item', num: '7.', text: 'WARP Native' },
-      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'item', num: '6.', text: 'WARP Native' },
+      { kind: 'item', num: '7.', text: 'Backup and restore' },
       { kind: 'plain' },
-      { kind: 'item', num: '9.', text: 'Manage IPv6' },
-      { kind: 'item', num: '10.', text: 'Manage certificates domain' },
+      { kind: 'item', num: '8.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '9.', text: 'NetBird: overlay network for nodes and panel' },
       { kind: 'plain' },
-      { kind: 'item', num: '11.', text: 'NetBird: overlay network for nodes and panel' },
+      { kind: 'item', num: '10.', text: 'Manage IPv6' },
+      { kind: 'item', num: '11.', text: 'Manage certificates domain' },
+      { kind: 'plain' },
       { kind: 'item', num: '12.', text: 'Check for updates script' },
       { kind: 'item', num: '13.', text: 'Remove script' },
-      { kind: 'plain' },
       { kind: 'item', num: '0.', text: 'Exit' },
-      { kind: 'dim', text: '- Quick start: remnawave_reverse' },
+      { kind: 'dim', text: '- Quick start: remnawave_reverse (or rr)' },
       { kind: 'plain' },
       { kind: 'input', text: 'Select action (0-13):' },
     ]} />
@@ -135,11 +144,16 @@ remnawave_reverse
     <Terminal title="root@server: ~" lines={[
       { kind: 'title', text: 'Node Extensions' },
       { kind: 'plain' },
-      { kind: 'item', num: '1.', text: 'Install template for selfsteal node' },
+      { kind: 'item', num: '1.', text: 'Selfsteal node template' },
+      { kind: 'dim', text: '    disguise the node as a regular website' },
       { kind: 'item', num: '2.', text: 'Node Plugins', pick: true },
+      { kind: 'dim', text: '    extra features for the node' },
       { kind: 'item', num: '3.', text: 'Xray core' },
-      { kind: 'item', num: '4.', text: 'SSH access to a remote machine' },
+      { kind: 'dim', text: '    a fresh Xray core instead of the stock one' },
+      { kind: 'item', num: '4.', text: 'SSH access to remote machines' },
+      { kind: 'dim', text: '    saved servers and running commands on them' },
       { kind: 'item', num: '5.', text: 'Server routing' },
+      { kind: 'dim', text: '    Russian domains through the bridge to the exit server, the rest directly' },
       { kind: 'plain' },
       { kind: 'item', num: '0.', text: 'Exit' },
       { kind: 'plain' },

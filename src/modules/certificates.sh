@@ -977,12 +977,17 @@ handle_certificates() {
     # Mounts follow the resolved lineage: one wildcard certificate is
     # mounted once even when several domains live under it, and -0001
     # suffixes from certbot renewals resolve to the real directory.
+    local has_certbot_lineage=false
     for domain in "${!domains_to_check_ref[@]}"; do
         local cert_domain
         if ! cert_domain=$(resolve_certificate_domain "$domain"); then
             echo -e "${COLOR_RED}${LANG[CERT_GENERATION_FAILED]} $domain${COLOR_RESET}"
             return 1
         fi
+        # A renewal conf is what separates a certbot lineage from an own
+        # upload sitting in the same directory: only the former can be
+        # renewed by the cron below
+        [ -f "/etc/letsencrypt/renewal/$cert_domain.conf" ] && has_certbot_lineage=true
         if [ -z "${cert_domains_added[$cert_domain]}" ]; then
             # Appending at EOF only works for composes whose last block IS
             # the web server's volume list (the node flow); flow-specific
@@ -1012,7 +1017,17 @@ handle_certificates() {
         legacy_cron=true
     fi
 
-    if ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
+    if [ "$has_certbot_lineage" != true ]; then
+        # Own certificates everywhere: certbot has no lineage to renew, so
+        # the auto-renew job must not exist. A line left by an earlier
+        # Let's Encrypt install is matched by our restart hook — a user's
+        # own certbot cron (no remnawave in it) and the xray-checker job
+        # (xray-checker containers in the hook) are never touched.
+        if crontab -u root -l 2>/dev/null | grep "certbot renew" | grep "remnawave-nginx" | grep -qv "xray-checker"; then
+            echo -e "${COLOR_YELLOW}${LANG[CERT_CRON_REMOVED_OWN_CERTS]}${COLOR_RESET}"
+            crontab -u root -l 2>/dev/null | awk '!(/certbot renew/ && /remnawave-nginx/ && !/xray-checker/)' | crontab -u root -
+        fi
+    elif ! crontab -u root -l 2>/dev/null | grep -q "/usr/bin/certbot renew"; then
         echo -e "${COLOR_YELLOW}${LANG[ADDING_CRON_FOR_EXISTING_CERTS]}${COLOR_RESET}"
         add_cron_rule "0 5 * * 0 $cron_command"
     elif { [ "$legacy_cron" = true ] || [ "$min_days_left" -le 30 ]; } && ! crontab -u root -l 2>/dev/null | grep -q "0 5 * * 0.*$cron_command"; then

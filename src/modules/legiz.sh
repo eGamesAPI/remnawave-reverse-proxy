@@ -3,7 +3,7 @@
 
 show_custom_legiz_menu() {
     echo -e ""
-    echo -e "${COLOR_GREEN}${LANG[MENU_5]}${COLOR_RESET}"
+    echo -e "${COLOR_GREEN}${LANG[SUBS_HUB_PAGE]}${COLOR_RESET}"
     echo -e ""
     echo -e "${COLOR_YELLOW}1. ${LANG[SELECT_SUB_PAGE_CUSTOM1]}${COLOR_RESET}" # Custom sub page
     echo -e ""

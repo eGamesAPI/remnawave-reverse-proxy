@@ -1,0 +1,116 @@
+---
+/**
+ * Анимированная схема клиентского балансировщика: у пользователя в подписке
+ * одна запись, клиент сам меряет задержку каждого хоста и держит трафик на
+ * двух лучших. Подписи на линиях — непрозрачные чипы.
+ * lang="ru" (по умолчанию) / lang="en" — язык подписей.
+ */
+interface Props {
+  lang?: 'ru' | 'en';
+}
+const { lang = 'ru' } = Astro.props;
+const en = lang === 'en';
+---
+
+<div class="cbd">
+  <svg viewBox="0 0 640 400" role="img" aria-label={en
+    ? 'Client balancer scheme: one subscription entry, the client probes every host and keeps traffic on the two best'
+    : 'Схема клиентского балансировщика: одна запись в подписке, клиент сам меряет задержку и держит трафик на двух лучших хостах'}>
+    <!-- клиент -->
+    <g class="node n-cli">
+      <rect x="14" y="168" width="180" height="64" rx="14" />
+      <text x="104" y="192" class="t">{en ? 'client' : 'клиент'}</text>
+      <text x="104" y="210" class="s">v2rayN · Happ</text>
+    </g>
+
+    <!-- провода к хостам -->
+    <path class="wire w-win" d="M194 196 C 300 196, 380 88, 456 88" />
+    <path class="wire w-two" d="M194 200 C 300 200, 380 198, 456 198" />
+    <path class="wire" d="M194 204 C 300 204, 380 308, 456 308" />
+
+    <!-- потоки: мятный к лучшему, бирюзовый ко второму -->
+    <path class="flow f-mint" d="M194 196 C 300 196, 380 88, 456 88" />
+    <path class="flow f-teal" d="M194 200 C 300 200, 380 198, 456 198" />
+
+    <!-- одна запись в подписке -->
+    <g class="pill">
+      <rect x="252" y="131" width="168" height="22" rx="11" />
+      <text x="336" y="146">{en ? 'one subscription entry' : 'одна запись в подписке'}</text>
+    </g>
+    <!-- замер задержки -->
+    <g class="pill">
+      <rect x="266" y="189" width="140" height="22" rx="11" />
+      <text x="336" y="204">{en ? 'probe every minute' : 'замер каждую минуту'}</text>
+    </g>
+
+    <!-- хосты -->
+    <g class="node n-win">
+      <rect x="456" y="60" width="170" height="56" rx="12" />
+      <text x="541" y="84" class="t">{en ? 'Germany' : 'Германия'}</text>
+      <text x="541" y="103" class="s win">{en ? '12 ms · traffic' : '12 мс · трафик'}</text>
+    </g>
+    <g class="node n-two">
+      <rect x="456" y="170" width="170" height="56" rx="12" />
+      <text x="541" y="194" class="t">{en ? 'Estonia' : 'Эстония'}</text>
+      <text x="541" y="213" class="s">{en ? '34 ms' : '34 мс'}</text>
+    </g>
+    <g class="node n-idle">
+      <rect x="456" y="280" width="170" height="56" rx="12" />
+      <text x="541" y="304" class="t">{en ? 'Frankfurt' : 'Франкфурт'}</text>
+      <text x="541" y="323" class="s dim">{en ? '48 ms' : '48 мс'}</text>
+    </g>
+
+    <!-- как выбран маршрут -->
+    <g class="chip">
+      <rect x="40" y="300" width="250" height="26" rx="8" />
+      <circle cx="54" cy="313" r="3.5" />
+      <text x="66" y="318" class="ct">leastLoad · {en ? 'two best hosts' : 'два лучших хоста'}</text>
+    </g>
+
+    <text x="320" y="372" class="cap mid">{en
+      ? 'the client measures latency itself and keeps traffic on the two best hosts'
+      : 'клиент сам меряет задержку и держит трафик на двух лучших хостах'}</text>
+  </svg>
+</div>
+
+<style>
+  .cbd{
+    background:#0a0f0c;border:1px solid #2a4737;border-radius:12px;
+    padding:1rem 1.25rem;margin:1rem 0;overflow-x:auto;
+    box-shadow:0 14px 40px rgba(0,0,0,.35);
+  }
+  .cbd svg{display:block;width:100%;min-width:600px;height:auto;
+    font-family:var(--sl-font-mono, ui-monospace, Consolas, monospace)}
+  .wire{fill:none;stroke:#24344a;stroke-width:2}
+  .w-win{stroke:#2a4737}
+  .w-two{stroke:#1d4a4d}
+  .flow{fill:none;stroke-width:2;stroke-linecap:round;
+    stroke-dasharray:4 12;animation:cbd-flow 1.1s linear infinite}
+  .f-mint{stroke:#00e5a0}
+  .f-teal{stroke:#39c5cf}
+  @keyframes cbd-flow{to{stroke-dashoffset:-16}}
+
+  .node rect{fill:#0e1a14;stroke:#2a4737;stroke-width:1.5}
+  .n-cli rect{stroke-dasharray:5 4}
+  .n-win rect{stroke:rgba(0,229,160,.55)}
+  .n-two rect{stroke:rgba(57,197,207,.5)}
+  .n-idle rect{opacity:.85}
+  .node .t{fill:#e9f4ec;font-size:16px;font-weight:600;text-anchor:middle}
+  .node .s{fill:#a9c0b0;font-size:13px;text-anchor:middle}
+  .node .s.win{fill:#7defc4}
+  .node .s.dim{fill:#8ca08f}
+
+  .pill rect{fill:#0a0f0c;stroke:rgba(0,229,160,.35);stroke-width:1.5}
+  .pill text{fill:#a9c0b0;font-size:12px;text-anchor:middle}
+
+  .chip rect{fill:#0e1a14;stroke:rgba(0,229,160,.55);stroke-width:1.5}
+  .chip circle{fill:#00e5a0}
+  .chip .ct{fill:#7defc4;font-size:13px;font-weight:600}
+
+  .cap{fill:#8ca08f;font-size:12.5px}
+  .cap.mid{text-anchor:middle}
+
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;stroke-dasharray:none;opacity:.9}
+  }
+</style>

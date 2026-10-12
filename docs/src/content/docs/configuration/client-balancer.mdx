@@ -1,0 +1,505 @@
+---
+title: Client balancer (Xray JSON)
+description: "One subscription entry that always follows the fastest host: the panel assembles an Xray JSON config from hidden copies of your hosts, and the client itself measures latency and picks the best route"
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import Terminal from '../../../components/Terminal.astro';
+import BalancerDiagram from '../../../components/BalancerDiagram.astro';
+import PresetDiagram from '../../../components/PresetDiagram.astro';
+import RoutingComboDiagram from '../../../components/RoutingComboDiagram.astro';
+
+The client balancer gives users one entry in the subscription that always works well. When one of the hosts gets weak or goes down, there is nothing to reconfigure: the client measures the latency of every host and keeps traffic on the two best ones. The panel assembles this config automatically, nothing changes on the nodes, and the original hosts are not deleted. While the balancer lives they are hidden from the subscription: dead entries would only confuse users. Removing the balancer brings back both the nodes and the entries.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Two presets
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        A single pool where the fastest wins, or main hosts with a backup that takes over when the mains are unreachable.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Hidden copies
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The config is assembled from hidden clones of your hosts, and for Mihomo a ready group is added. Regular subscriptions keep the original list untouched.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Checker-safe
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray Checker and other subscription types never see the balancer entry, so no false down alerts.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Panel-driven
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The Xray JSON template, the clones and the wrapper host are created through the API, with cleanup on teardown.
+      </div>
+    </div>
+  </div>
+</div>
+
+The entry lives in the script menu: **4. Node extensions → Client balancer**.
+
+## How it works
+
+<BalancerDiagram lang="en" />
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em;margin-bottom:.6rem">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Xray JSON clients
+      </div>
+      <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span>the panel assembles one config from hidden clones of your hosts</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span>every 30 seconds the client measures every host through <code style="font-family:var(--sl-font-mono);font-size:.92em">burstObservatory</code></span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px #00e5a0;flex:none;margin-top:.5em"></span><span><code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> keeps connections on the two best, a degraded host is left on its own</span></div>
+    </div>
+  </div>
+  <div style="overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em;margin-bottom:.6rem">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Mihomo clients
+      </div>
+      <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>a ready group with your hosts is added to the default Mihomo template</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>"Always the fastest" works as <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code>, "Main with backup" as <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code> with your order</span></div>
+        <div style="display:flex;gap:.55rem;margin:.42rem 0;font-size:.87em;line-height:1.62;opacity:.88"><span style="width:6px;height:6px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px #39c5cf;flex:none;margin-top:.5em"></span><span>the client picks the fastest itself, the plain host group stays next to it, one switch in the client</span></div>
+    </div>
+  </div>
+</div>
+
+The subscription shows one entry with the balancer name, and it has no address of its own: the client connects straight to the hosts inside the balancer.
+
+## Setup
+
+:::note[Panel setting]
+The wizard enables the "Serve JSON at the base subscription path" panel setting on its own: without it the full balancer config only arrives through the direct link with the `/v2ray-json` suffix. When the API change fails, the wizard explains how to flip the setting manually. Mihomo clients need no setting, the group arrives in the plain subscription.
+:::
+
+<Steps>
+
+1. Open **4. Node extensions** and pick `Client balancer`:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Node Extensions' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Selfsteal node template' },
+      { kind: 'dim', text: '    disguise the node as a regular website' },
+      { kind: 'item', num: '2.', text: 'Node Plugins' },
+      { kind: 'dim', text: '    extra features for the node' },
+      { kind: 'item', num: '3.', text: 'SSH access to remote machines' },
+      { kind: 'dim', text: '    saved servers and running commands on them' },
+      { kind: 'item', num: '4.', text: 'Server routing' },
+      { kind: 'dim', text: '    Russian domains through the bridge to the exit server, the rest directly' },
+      { kind: 'item', num: '5.', text: 'Client balancer', pick: true },
+      { kind: 'dim', text: '    one subscription entry instead of a host list' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-5):', answer: '5' },
+    ]} />
+
+2. No balancers yet, create the first one:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Client balancer' },
+      { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/client-balancer/' },
+      { kind: 'plain' },
+      { kind: 'dim', text: ' No balancers configured' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Create a balancer', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-1):', answer: '1' },
+    ]} />
+
+3. Pick who will use the balancer. The examples below follow Xray JSON, the Mihomo variant is described in the subsection later:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Who will use the balancer?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Xray JSON', pick: true },
+      { kind: 'dim', text: '    v2rayN, Happ and other full Xray config clients' },
+      { kind: 'item', num: '2.', text: 'Mihomo' },
+      { kind: 'dim', text: '    Clash Meta, Stash and the like: an auto-picking group in the subscription' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+    ]} />
+
+4. Pick the preset. The examples below follow "Always the fastest":
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'How should the client pick a host?' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Always the fastest', pick: true },
+      { kind: 'dim', text: '    the client measures latency and keeps traffic on the two best hosts' },
+      { kind: 'item', num: '2.', text: 'Main with backup' },
+      { kind: 'dim', text: '    traffic uses the main hosts, the first backup takes over when they are unreachable' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+    ]} />
+
+5. When no inbound offers two fitting hosts (the common picture right after add-node, where every node carries a profile of its own), the wizard offers hosts from all inbounds on its own. When fitting inbounds exist, it lists them as in the subsection below. Pick the main hosts, numbers are entered comma separated:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' No inbound offers 2 fitting hosts: hosts will be picked across all inbounds and gathered onto a dedicated profile' },
+      { kind: 'plain' },
+      { kind: 'title', text: 'Main hosts:' },
+      { kind: 'dim', text: ' the selection order is kept in the client config' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Germany / VLESS' },
+      { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Estonia / VLESS' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Host numbers, comma separated (1-2):', answer: '1,2' },
+    ]} />
+
+6. The hosts sit on different inbounds, so the wizard offers to gather them onto a dedicated profile. The old profiles and hosts stay exactly as they are and wake up once the balancer is removed:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'step', text: 'The picked hosts sit on different inbounds. A dedicated profile will be created for the balancer, the nodes switch to it, and the old profiles and hosts stay exactly as they are: they wake up once a node returns. Removing the balancer sends the nodes home automatically' },
+      { kind: 'input', text: '[?] Proceed with a dedicated profile? (y/n): ', answer: 'y' },
+      { kind: 'step', text: 'Creating a dedicated profile Balancer and moving the nodes onto it...' },
+      { kind: 'ok', text: 'Nodes are on profile Balancer, the old profiles are untouched' },
+    ]} />
+
+7. Enter the name. This is what users see in their subscription, Enter picks "Auto":
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: 'Name in the subscription (Enter picks Auto):', answer: 'Germany+Estonia' },
+      { kind: 'step', text: 'Creating the Xray JSON subscription template: CB balancer' },
+      { kind: 'ok', text: 'Template created' },
+      { kind: 'step', text: 'Hiding a copy of host Germany...' },
+      { kind: 'ok', text: 'Copy hidden: Germany' },
+      { kind: 'step', text: 'Hiding a copy of host Estonia...' },
+      { kind: 'ok', text: 'Copy hidden: Estonia' },
+      { kind: 'step', text: 'Writing the balancer config into the template...' },
+      { kind: 'ok', text: 'Config written' },
+      { kind: 'step', text: 'Creating the wrapper host Germany+Estonia...' },
+      { kind: 'ok', text: 'Wrapper host ready' },
+      { kind: 'plain' },
+      { kind: 'step', text: 'Hiding the sleeping original hosts...' },
+      { kind: 'ok', text: 'Original hosts hidden: 2. They return to the subscription once the balancer is removed' },
+      { kind: 'ok', text: 'Done: subscriptions of type Xray JSON now show host Germany+Estonia with 2 main hosts inside' },
+      { kind: 'dim', text: ' Regular subscriptions and Xray Checker never see it, that is by design' },
+      { kind: 'dim', text: ' The original hosts sleep hidden from the subscription while their nodes serve the balancer: remove it and both the nodes and the entries come back on their own' },
+    ]} />
+
+</Steps>
+
+### When the hosts already share one inbound
+
+A balancer needs no dedicated profile when its hosts live on one inbound: it takes the existing one and the nodes are never touched. The wizard lists the fitting inbounds, the "Across inbounds" option gathers the hosts onto a dedicated profile instead:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'dim', text: ' Every eligible host already sits on one inbound: Germany / VLESS' },
+  { kind: 'plain' },
+  { kind: 'title', text: 'Inbound for the balancer:' },
+  { kind: 'dim', text: ' hosts must live on one inbound, and it must be in the squads of the users who should get the balancer' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Germany / VLESS — eligible hosts: 3', pick: true },
+  { kind: 'item', num: '2.', text: 'Across inbounds' },
+  { kind: 'dim', text: '    the hosts are gathered onto a dedicated profile the nodes switch to' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+]} />
+
+From there the host picker shows only that inbound, and the dedicated-profile question is never asked.
+
+### A balancer for Mihomo
+
+With Mihomo things are simpler: hosts from any inbound qualify, no dedicated profile and no hidden clones. The wizard adds a ready group into the default Mihomo template, and it appears in the subscription next to the plain host list. The user switches to it once in the client:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Who will use the balancer?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Xray JSON' },
+  { kind: 'dim', text: '    v2rayN, Happ and other full Xray config clients' },
+  { kind: 'item', num: '2.', text: 'Mihomo', pick: true },
+  { kind: 'dim', text: '    Clash Meta, Stash and the like: an auto-picking group in the subscription' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-2):', answer: '2' },
+  { kind: 'title', text: 'How should the client pick a host?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Always the fastest', pick: true },
+  { kind: 'dim', text: '    the client measures latency and keeps traffic on the two best hosts' },
+  { kind: 'item', num: '2.', text: 'Main with backup' },
+  { kind: 'dim', text: '    traffic uses the main hosts, the first backup takes over when they are unreachable' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+  { kind: 'title', text: 'Main hosts:' },
+  { kind: 'dim', text: ' the selection order is kept in the client config' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Germany / VLESS' },
+  { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Estonia / VLESS' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Host numbers, comma separated (1-2):', answer: '1,2' },
+  { kind: 'input', text: 'Name in the subscription (Enter picks Auto):', answer: 'My Mihomo' },
+  { kind: 'step', text: 'Adding group My Mihomo to the Mihomo template...' },
+  { kind: 'ok', text: 'Done: Mihomo subscriptions now show group My Mihomo' },
+  { kind: 'dim', text: ' The client measures latency itself and keeps traffic on the best host of the group' },
+]} />
+
+The presets turn into native Mihomo groups: "Always the fastest" becomes `url-test`, "Main with backup" becomes `fallback` with your host order. The group re-probes its hosts every 30 seconds. Adding and removing hosts rebuilds the group, teardown removes it from the template and touches nothing else.
+
+## Presets
+
+<Tabs>
+  <TabItem label="Always the fastest">
+
+  One pool, every host equal. The balancer spreads connections across the two best hosts by measured latency (`leastLoad`, `expected: 2`). Fit for a set of similar servers where any of them is a fine choice.
+
+  <PresetDiagram variant="fastest" lang="en" />
+
+  </TabItem>
+  <TabItem label="Main with backup">
+
+  Two groups. Traffic goes through the main hosts; when all of them are unreachable, the client falls back to the first backup host. Fit for a main line abroad plus one entry that survives regional blocks: the backup sits idle until it is actually needed.
+
+  <PresetDiagram variant="reserve" lang="en" />
+
+  Xray balancers cannot chain into each other (`fallbackTag` names an outbound), so the fallback is the first host of the backup group. Reorder by removing and re-adding hosts when a different one should be first.
+
+  Picking every host as a main is not allowed: the wizard keeps at least one host for the reserve and warns when fewer than two eligible hosts leave no room for two groups.
+
+  The client re-probes the pool every 30 seconds, so switching to the reserve fits into one probe. Connections that were already riding the dead host live until their own timeout.
+
+  </TabItem>
+</Tabs>
+
+Hosts that already carry a job of their own are never offered to a balancer: VLESS Route hosts of the server routing module (they are personal exits, and the routing module may rewire them) and wrappers of other balancers.
+
+## Several balancers
+
+There can be as many balancers as you need, each with its own host list, its own Xray JSON template and its own entry in the subscription. Five nodes of Germany gather into a balancer "Germany", five nodes of Finland into another "Finland", and the user sees both entries under different names.
+
+With a cross-inbound build each one gets its own profile: the first takes "Balancer", the second automatically "Balancer 2", and so on. Tearing one down never touches the other, and wrappers of neighbouring balancers never appear in the host picker, so an accidental duplicate record is impossible.
+
+The module menu lists every balancer at once with its mode. Pick a number and its own menu opens with a live status and five actions:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Client balancer' },
+  { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/client-balancer/' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Balancers configured: 2' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Germany • mode: fastest of the pool', pick: true },
+  { kind: 'item', num: '2.', text: 'Finland • mode: main with backup' },
+  { kind: 'item', num: '3.', text: 'Create a balancer' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-3):' },
+]} />
+
+## The balancer and server routing
+
+The modules work together because they answer different questions: the balancer on the client picks the entry point, server routing after the entry decides where traffic goes. Russian domains travel through the bridge to the exit server, everything else leaves the entry node directly.
+
+### A uniform pool
+
+Build a pool of nodes with the same routing and nothing breaks: the nodes stay on their own profiles with their own rules, and the balancer simply picks the fastest among them. No dedicated profile is even created.
+
+<RoutingComboDiagram variant="alike" lang="en" />
+
+### A mixed pool
+
+Do not gather nodes with and without routing "Across inbounds". The dedicated profile inherits the rules of the first picked host, including the reference to the RU list file, and that file is not mounted on every node: a node without it cannot load the config and drops from the panel. Once the balancer is torn down, the node comes back on its own. Personal VLESS Route exits never join a pool at all: server routing may rewire them, so the module never offers them.
+
+<RoutingComboDiagram variant="mixed" lang="en" />
+
+## Managing
+
+The per-balancer menu shows a live status and five actions:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Balancer Germany+Estonia' },
+  { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/client-balancer/' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' hosts: 2 main' },
+  { kind: 'dim', text: ' mode: fastest of the pool' },
+  { kind: 'dim', text: ' wrapper host is in place' },
+  { kind: 'dim', text: ' Xray JSON template is in place' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Show hosts' },
+  { kind: 'dim', text: '    live list from the panel with a check that nothing is lost' },
+  { kind: 'item', num: '2.', text: 'Add hosts' },
+  { kind: 'dim', text: '    a hidden copy of each host joins the config' },
+  { kind: 'item', num: '3.', text: 'Remove a host' },
+  { kind: 'dim', text: '    the hidden copy is deleted, the original stays as is' },
+  { kind: 'item', num: '4.', text: 'Rename' },
+  { kind: 'dim', text: '    clients will see the new name in the subscription' },
+  { kind: 'item', num: '5.', text: 'Remove the balancer' },
+  { kind: 'dim', text: '    wrapper, hidden copies and template are deleted, original hosts stay' },
+  { kind: 'plain' },
+  { kind: 'item', num: '0.', text: 'Exit' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-5):' },
+]} />
+
+**Show hosts** checks the stored list against the panel:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Main:' },
+  { kind: 'strong', text: ' Germany (de-1.example.com)' },
+  { kind: 'strong', text: ' Estonia (ee-1.example.com)' },
+  { kind: 'plain' },
+  { kind: 'dim', text: ' Every host is in place' },
+]} />
+
+**Add hosts** takes candidates from the balancer's own inbound. A balancer built on a dedicated profile answers plainly:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'err', text: 'No eligible hosts left' },
+]} />
+
+A balancer on a real inbound has a list to offer, and every new clone joins the config:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Hosts to add:' },
+  { kind: 'dim', text: ' the selection order is kept in the client config' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Frankfurt (de-3.example.com) — Germany / VLESS' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Host numbers, comma separated (1-1):', answer: '1' },
+  { kind: 'step', text: 'Hiding a copy of host Frankfurt...' },
+  { kind: 'ok', text: 'Copy hidden: Frankfurt' },
+  { kind: 'step', text: 'Refreshing the template config...' },
+  { kind: 'step', text: 'Writing the balancer config into the template...' },
+  { kind: 'ok', text: 'Config written' },
+  { kind: 'ok', text: 'Hosts added: 1' },
+]} />
+
+**Remove a host** deletes the hidden copy and rebuilds the config. The last backup can go, the last main hosts cannot:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'title', text: 'Which host to remove?' },
+  { kind: 'plain' },
+  { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Main', pick: true },
+  { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Main' },
+  { kind: 'plain' },
+  { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+  { kind: 'step', text: 'At least 2 main hosts must stay, tear the whole balancer down instead' },
+  { kind: 'plain' },
+  { kind: 'ok', text: 'Host removed, config refreshed' },
+]} />
+
+**Rename** changes the entry name in the subscription:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: 'New name (Enter keeps Germany+Estonia):', answer: 'Europe' },
+  { kind: 'ok', text: 'Host renamed to Europe' },
+]} />
+
+**Remove the balancer** puts everything back: the wrapper, all hidden copies and the template are deleted, the original hosts were never touched. Nodes borrowed by a dedicated profile return home on their own:
+
+<Terminal title="root@server: ~" lines={[
+  { kind: 'input', text: '[?] Remove balancer Europe? The wrapper host, hidden copies and the template will be deleted, the original hosts stay (y/n): ', answer: 'y' },
+  { kind: 'step', text: 'Tearing down balancer Europe...' },
+  { kind: 'step', text: 'Returning the nodes to their own profiles...' },
+  { kind: 'ok', text: 'The nodes are back on their profiles' },
+  { kind: 'ok', text: 'Balancer removed, original hosts untouched' },
+]} />
+
+## Compatibility notes
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Xray and Mihomo clients
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        An Xray JSON subscription entry for v2rayN and Happ, a group in the Mihomo subscription. base64, Clash, Stash and sing-box clients keep seeing the plain host list.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.16), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Subscription link
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        For Xray JSON the direct address carries the <code style="font-family:var(--sl-font-mono);font-size:.92em">/v2ray-json</code> suffix, and the wizard enables the "Serve JSON at the base subscription path" setting itself, so the full config arrives from the plain link. Mihomo needs no setting: the group arrives in the plain subscription.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        The checker stays quiet
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray Checker monitors the hosts real connections use. The wrapper is excluded from its subscription and the Mihomo group lives only in the Mihomo template: no false down alerts.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Combines with server routing
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        They work together: the balancer picks the entry on the client, routing decides the exit after it. The limits of the combination are described in the section above.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        A familiar config
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The Xray config follows the official Remnawave example: <code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> with a one-second budget, DNS <code style="font-family:var(--sl-font-mono);font-size:.92em">1.1.1.1</code>, SOCKS 10808 and HTTP 10809. Mihomo uses its native <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code> and <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code> groups. Hand edits live until the next list change.
+      </div>
+    </div>
+  </div>
+</div>

@@ -10,47 +10,56 @@ import NodePluginsDiagram from '../../../../components/NodePluginsDiagram.astro'
 
 Модуль `Плагины ноды` настраивает три встроенных плагина Remnawave Node сразу для всех нод панели:
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin:1.2rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Torrent Blocker
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Ловит торрент-трафик пользователей и блокирует их IP на уровне nftables: одного пойманного пакета достаточно.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Бан</span><span>временный, длительность настраивается</span>
-      <span style="opacity:.6;white-space:nowrap">Отчёты</span><span>статистика и Telegram</span>
-      <span style="opacity:.6;white-space:nowrap">Исключения</span><span>белый список IP</span>
-    </div>
-  </div>
-  <div style="border:1px solid rgba(88,166,255,.35);border-left:3px solid #58a6ff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 6px rgba(88,166,255,.6);flex:none"></span>
-      Ingress Filter
-    </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Режет входящие соединения целыми подсетями: сканеры стучатся в порт ноды и не получают ответа.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>RU-сканеры, классические, FOFA</span>
-      <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4 и подсети /8…/32</span>
-      <span style="opacity:.6;white-space:nowrap">Трафик</span><span>входящий, весь сервер ноды</span>
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Torrent Blocker
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Ловит торрент-трафик пользователей и блокирует их IP на уровне nftables: одного пойманного пакета достаточно.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Бан</span><span>временный, длительность настраивается</span>
+        <span style="opacity:.6;white-space:nowrap">Отчёты</span><span>статистика и Telegram</span>
+        <span style="opacity:.6;white-space:nowrap">Исключения</span><span>белый список IP</span>
+      </div>
     </div>
   </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Egress Filter
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Ingress Filter
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Режет входящие соединения целыми подсетями: сканеры стучатся в порт ноды и не получают ответа.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>RU-сканеры, классические, FOFA</span>
+        <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4 и подсети /8…/32</span>
+        <span style="opacity:.6;white-space:nowrap">Трафик</span><span>входящий, весь сервер ноды</span>
+      </div>
     </div>
-    <div style="font-size:.92em;line-height:1.65;opacity:.9">
-      Блокирует исходящий трафик по адресам и портам назначения: взломанная учётная запись не уйдёт в частные сети и не начнёт рассылать спам.
-    </div>
-    <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.55rem">
-      <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>частные диапазоны, почтовые порты</span>
-      <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4/IPv6 и порты 1-65535</span>
-      <span style="opacity:.6;white-space:nowrap">Трафик</span><span>исходящий, весь сервер ноды</span>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Egress Filter
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Блокирует исходящий трафик по адресам и портам назначения: взломанная учётная запись не уйдёт в частные сети и не начнёт рассылать спам.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Пресеты</span><span>частные диапазоны, почтовые порты</span>
+        <span style="opacity:.6;white-space:nowrap">Свои списки</span><span>IPv4/IPv6 и порты 1-65535</span>
+        <span style="opacity:.6;white-space:nowrap">Трафик</span><span>исходящий, весь сервер ноды</span>
+      </div>
     </div>
   </div>
 </div>
@@ -110,22 +119,22 @@ remnawave_reverse
       { kind: 'item', num: '2.', text: 'Переустановить панель и компоненты' },
       { kind: 'item', num: '3.', text: 'Управление панелью и компонентами' },
       { kind: 'plain' },
-      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)', pick: true },
+      { kind: 'item', num: '4.', text: 'Расширения ноды (шаблоны, плагины, ядро)' },
+      { kind: 'item', num: '5.', text: 'Подписки: правила и страница' },
       { kind: 'plain' },
-      { kind: 'item', num: '5.', text: 'Xray Checker: мониторинг подписки' },
-      { kind: 'item', num: '6.', text: 'Кастомные расширения от legiz' },
-      { kind: 'item', num: '7.', text: 'WARP Native' },
-      { kind: 'item', num: '8.', text: 'Backup and Restore' },
+      { kind: 'item', num: '6.', text: 'WARP Native' },
+      { kind: 'item', num: '7.', text: 'Резервные копии и восстановление' },
       { kind: 'plain' },
-      { kind: 'item', num: '9.', text: 'Управление IPv6' },
-      { kind: 'item', num: '10.', text: 'Управление сертификатами домена' },
+      { kind: 'item', num: '8.', text: 'Xray Checker: мониторинг подписки' },
+      { kind: 'item', num: '9.', text: 'NetBird: сеть для нод и панели' },
       { kind: 'plain' },
-      { kind: 'item', num: '11.', text: 'NetBird: сеть для нод и панели' },
+      { kind: 'item', num: '10.', text: 'Управление IPv6' },
+      { kind: 'item', num: '11.', text: 'Управление сертификатами домена' },
+      { kind: 'plain' },
       { kind: 'item', num: '12.', text: 'Проверить обновления скрипта' },
       { kind: 'item', num: '13.', text: 'Удалить скрипт' },
-      { kind: 'plain' },
       { kind: 'item', num: '0.', text: 'Выход' },
-      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse' },
+      { kind: 'dim', text: '- Быстрый запуск: remnawave_reverse (или rr)' },
       { kind: 'plain' },
       { kind: 'input', text: 'Выберите действие (0-13):' },
     ]} />
@@ -135,11 +144,16 @@ remnawave_reverse
     <Terminal title="root@server: ~" lines={[
       { kind: 'title', text: 'Расширения ноды' },
       { kind: 'plain' },
-      { kind: 'item', num: '1.', text: 'Установить шаблон для selfsteal ноды' },
+      { kind: 'item', num: '1.', text: 'Шаблон для selfsteal ноды' },
+      { kind: 'dim', text: '    маскировка ноды под обычный сайт' },
       { kind: 'item', num: '2.', text: 'Плагины ноды', pick: true },
+      { kind: 'dim', text: '    дополнительные функции для ноды' },
       { kind: 'item', num: '3.', text: 'Ядро Xray' },
-      { kind: 'item', num: '4.', text: 'SSH-доступ к удалённому серверу' },
+      { kind: 'dim', text: '    свежее ядро Xray вместо штатного' },
+      { kind: 'item', num: '4.', text: 'SSH-доступ к удалённым серверам' },
+      { kind: 'dim', text: '    сохранённые серверы и запуск команд на них' },
       { kind: 'item', num: '5.', text: 'Серверный роутинг' },
+      { kind: 'dim', text: '    российские домены через мост на сервер выхода, остальное напрямую' },
       { kind: 'plain' },
       { kind: 'item', num: '0.', text: 'Выход' },
       { kind: 'plain' },

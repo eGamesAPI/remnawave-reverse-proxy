@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_VERSION="3.7.2"
+SCRIPT_VERSION="3.8.0"
 UPDATE_AVAILABLE=false
 DIR_REMNAWAVE="/usr/local/remnawave_reverse/"
 LANG_FILE="${DIR_REMNAWAVE}selected_language"
@@ -929,20 +929,21 @@ show_menu() {
     echo -e "${COLOR_YELLOW}3. ${LANG[MENU_3]}${COLOR_RESET}" # Manage panel/node
     echo -e ""
     echo -e "${COLOR_YELLOW}4. ${LANG[MENU_4]}${COLOR_RESET}" # Node extensions hub
+    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_5]}${COLOR_RESET}" # Subscriptions hub (rules + page)
     echo -e ""
-    echo -e "${COLOR_YELLOW}5. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
-    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_5]}${COLOR_RESET}" # Custom Templates legiz
-    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
-    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and Restore
+    echo -e "${COLOR_YELLOW}6. ${LANG[MENU_6]}${COLOR_RESET}" # WARP Native
+    echo -e "${COLOR_YELLOW}7. ${LANG[MENU_7]}${COLOR_RESET}" # Backup and restore
     echo -e ""
-    echo -e "${COLOR_YELLOW}9. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
-    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
-    echo -e ""
+    echo -e "${COLOR_YELLOW}8. ${LANG[MENU_12]}${COLOR_RESET}" # Xray Checker monitoring
     # The whole NetBird entry disappears when the feature is switched off; the
     # dispatcher branch answers "disabled" so the hidden number stays inert.
     if [ -z "${RRP_DISABLE_NETBIRD:-}" ]; then
-        echo -e "${COLOR_YELLOW}11. ${LANG[MENU_13]}${COLOR_RESET}" # NetBird overlay
+        echo -e "${COLOR_YELLOW}9. ${LANG[MENU_13]}${COLOR_RESET}" # NetBird overlay
     fi
+    echo -e ""
+    echo -e "${COLOR_YELLOW}10. ${LANG[MENU_8]}${COLOR_RESET}" # Manage IPv6
+    echo -e "${COLOR_YELLOW}11. ${LANG[MENU_9]}${COLOR_RESET}" # Manage certificates domain
+    echo -e ""
     if [[ "$UPDATE_AVAILABLE" == true ]]; then
         echo -e "${COLOR_YELLOW}12. ${COLOR_RED}${LANG[MENU_10_UPDATE]}${COLOR_RESET}"
     else
@@ -951,7 +952,7 @@ show_menu() {
     echo -e "${COLOR_YELLOW}13. ${LANG[MENU_11]}${COLOR_RESET}" # Remove script
     echo -e ""
     echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
-    echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}}"
+    echo -e "${COLOR_YELLOW}- ${LANG[FAST_START]//remnawave_reverse/${COLOR_GREEN}remnawave_reverse${COLOR_RESET}} ${COLOR_GREEN}${LANG[FAST_START_ALIAS]}${COLOR_RESET}"
     echo -e ""
 }
 
@@ -981,14 +982,17 @@ show_node_extensions_menu() {
     local opt_core="__none__"
     local opt_ssh="__none__"
     local opt_routing="__none__"
+    local opt_balancer="__none__"
 
     echo -e "${COLOR_YELLOW}1. ${LANG[NODE_EXT_SELFSTEAL]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_SELFSTEAL_HINT]}${COLOR_RESET}"
     # Plugins are configured through the panel API, so a node-only box —
     # which has no panel to call — keeps the hub at a single entry.
     if panel_is_installed; then
         last=$((last + 1))
         opt_plugins=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_PLUGINS]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_PLUGINS_HINT]}${COLOR_RESET}"
     fi
     # The Xray core swap works straight on the node compose, no panel needed.
     if { [ -f /opt/remnanode/docker-compose.yml ] && grep -q "^[[:space:]]*remnanode:" /opt/remnanode/docker-compose.yml; } || \
@@ -996,18 +1000,29 @@ show_node_extensions_menu() {
         last=$((last + 1))
         opt_core=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_CORE]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_CORE_HINT]}${COLOR_RESET}"
     fi
     # SSH reach into the operator's other machines (the bridge node first):
     # plain ssh, no panel dependency, so the entry is always applicable.
     last=$((last + 1))
     opt_ssh=$last
     echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_SSH]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_SSH_HINT]}${COLOR_RESET}"
     # Server routing drives the panel API end to end (and remote_exec for
     # the DE box), so it needs a panel on this machine.
     if panel_is_installed; then
         last=$((last + 1))
         opt_routing=$last
         echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_ROUTING]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_ROUTING_HINT]}${COLOR_RESET}"
+    fi
+    # The client balancer lives purely in the panel (XRAY_JSON templates +
+    # hidden host clones), so it also needs a panel on this machine.
+    if panel_is_installed; then
+        last=$((last + 1))
+        opt_balancer=$last
+        echo -e "${COLOR_YELLOW}${last}. ${LANG[NODE_EXT_BALANCER]}${COLOR_RESET}"
+        echo -e "    ${COLOR_GRAY}${LANG[NODE_EXT_BALANCER_HINT]}${COLOR_RESET}"
     fi
 
     echo -e ""
@@ -1047,6 +1062,12 @@ show_node_extensions_menu() {
             sleep 2
             show_node_extensions_menu
             ;;
+        "$opt_balancer")
+            load_client_balancer_module
+            manage_client_balancer
+            sleep 2
+            show_node_extensions_menu
+            ;;
         0)
             remnawave_reverse
             ;;
@@ -1054,6 +1075,52 @@ show_node_extensions_menu() {
             printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" "$last"
             sleep 1
             show_node_extensions_menu
+            ;;
+    esac
+}
+
+# Everything the subscriber sees lives behind this one hub entry: the
+# response rules (which config each client app receives, the device limit)
+# and the custom subscription page template.
+show_subscriptions_menu() {
+    echo -e ""
+    echo -e "${COLOR_GREEN}${LANG[SUBS_HUB_TITLE]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}1. ${LANG[SUBS_HUB_RULES]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[SUBS_HUB_RULES_HINT]}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}2. ${LANG[SUBS_HUB_PAGE]}${COLOR_RESET}"
+    echo -e "    ${COLOR_GRAY}${LANG[SUBS_HUB_PAGE_HINT]}${COLOR_RESET}"
+    echo -e ""
+    echo -e "${COLOR_YELLOW}0. ${LANG[EXIT]}${COLOR_RESET}"
+    echo -e ""
+    reading "$(printf "${LANG[MANAGE_PANEL_NODE_PROMPT]}" 2)" SUBS_OPTION || return 0
+
+    case $SUBS_OPTION in
+        1)
+            if load_subscription_rules_module; then
+                manage_subscription_rules
+            else
+                printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" subscription_rules
+            fi
+            sleep 2
+            show_subscriptions_menu
+            ;;
+        2)
+            if load_legiz_module; then
+                manage_custom_legiz
+            else
+                printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" legiz
+            fi
+            sleep 2
+            show_subscriptions_menu
+            ;;
+        0)
+            remnawave_reverse
+            ;;
+        *)
+            printf "${COLOR_YELLOW}${LANG[MANAGE_PANEL_NODE_INVALID_CHOICE]}${COLOR_RESET}\n" 2
+            sleep 1
+            show_subscriptions_menu
             ;;
     esac
 }
@@ -1795,6 +1862,13 @@ check_domain() {
     local show_warning="${2:-true}"
     local allow_cf_proxy="${3:-true}"
 
+    # An empty input (bare Enter) must die here: the DNS flow would ask for
+    # a token to "fix" a nameless zone, and the base-domain extraction in
+    # the install modules crashes on unique_domains[""] downstream.
+    if [[ "$domain" =~ ^[[:space:]]*$ ]]; then
+        echo -e "${COLOR_RED}${LANG[DOMAIN_EMPTY]}${COLOR_RESET}"
+        return 2
+    fi
     local domain_ip=$(dig +short A "$domain" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
     local server_ip=$(curl -s -4 ifconfig.me || curl -s -4 api.ipify.org || curl -s -4 ipinfo.io/ip)
 
@@ -1984,6 +2058,8 @@ load_dns_records_module() { load_module "dns_records" "modules" "${1:-false}"; }
 load_certificates_module() { load_module "certificates" "modules" "${1:-false}"; }
 load_xray_checker_module() { load_module "xray_checker" "modules" "${1:-false}"; }
 load_netbird_module() { load_module "netbird" "modules" "${1:-false}"; }
+load_client_balancer_module() { load_module "client_balancer" "modules" "${1:-false}"; }
+load_subscription_rules_module() { load_module "subscription_rules" "modules" "${1:-false}"; }
 
 detect_broken_ipv6
 
@@ -2043,24 +2119,9 @@ case $OPTION in
         show_node_extensions_menu
         ;;
     5)
-        if load_xray_checker_module; then
-            manage_xray_checker
-        else
-            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" xray_checker
-        fi
-        sleep 2
-        remnawave_reverse
+        show_subscriptions_menu
         ;;
     6)
-        if load_legiz_module; then
-            manage_custom_legiz
-        else
-            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" legiz
-        fi
-        sleep 2
-        remnawave_reverse
-        ;;
-    7)
         if load_warp_module; then
             manage_warp_native
         else
@@ -2069,8 +2130,14 @@ case $OPTION in
         sleep 2
         remnawave_reverse
         ;;
-    8)
-        if [ -f ~/backup-restore.sh ]; then
+    7)
+        # ~/backup-restore.sh is only a downloaded copy — the installed
+        # command is the symlink at /usr/local/bin/rw-backup, and the
+        # backup script's own uninstall removes it while the copy may
+        # linger. bash caches command lookups, so clear them before
+        # testing or a just-deleted command still resolves this session.
+        hash -r 2>/dev/null
+        if command -v rw-backup >/dev/null 2>&1; then
             rw-backup
         else
             run_backup_restore
@@ -2078,7 +2145,27 @@ case $OPTION in
         sleep 2
         remnawave_reverse
         ;;
+    8)
+        if load_xray_checker_module; then
+            manage_xray_checker
+        else
+            printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" xray_checker
+        fi
+        sleep 2
+        remnawave_reverse
+        ;;
     9)
+        if [ -n "${RRP_DISABLE_NETBIRD:-}" ]; then
+            echo -e "${COLOR_YELLOW}${LANG[NB_DISABLED]}${COLOR_RESET}"
+        elif load_netbird_module; then
+            manage_netbird
+        else
+            echo -e "${COLOR_RED}${LANG[NB_LOAD_FAIL]}${COLOR_RESET}"
+        fi
+        sleep 2
+        remnawave_reverse
+        ;;
+    10)
         if load_ipv6_module; then
             manage_ipv6
         else
@@ -2087,22 +2174,11 @@ case $OPTION in
         sleep 2
         remnawave_reverse
         ;;
-    10)
+    11)
         if load_certificates_module; then
             manage_certificates
         else
             printf "${COLOR_RED}${LANG[MODULE_LOAD_FAILED]}${COLOR_RESET}\n" certificates
-        fi
-        sleep 2
-        remnawave_reverse
-        ;;
-    11)
-        if [ -n "${RRP_DISABLE_NETBIRD:-}" ]; then
-            echo -e "${COLOR_YELLOW}${LANG[NB_DISABLED]}${COLOR_RESET}"
-        elif load_netbird_module; then
-            manage_netbird
-        else
-            echo -e "${COLOR_RED}${LANG[NB_LOAD_FAIL]}${COLOR_RESET}"
         fi
         sleep 2
         remnawave_reverse

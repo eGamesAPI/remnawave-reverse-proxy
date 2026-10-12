@@ -7,27 +7,42 @@ import { Aside, Steps, Tabs, TabItem, FileTree, Code, LinkCard } from '@astrojs/
 
 This guide will help you change the current domain of the Remnawave panel (for example, `olddomain.com`) to a new one (for example, `newdomain.com`): issue an SSL certificate, update the configuration files, and move the addresses inside the panel. If the panel runs together with a node, extra steps wait at the end.
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;margin:1rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      DNS and certificate
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        DNS and certificate
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        An A record for the new domain and an SSL certificate through the script module (menu 11).
+      </div>
     </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">An A record for the new domain and an SSL certificate through the script module (menu 10).</div>
   </div>
-  <div style="border:1px solid rgba(57,197,207,.35);border-left:3px solid #39c5cf;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 6px rgba(57,197,207,.6);flex:none"></span>
-      Configuration files
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Configuration files
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        <code style="font-family:var(--sl-font-mono);font-size:.92em">.env</code>, <code style="font-family:var(--sl-font-mono);font-size:.92em">docker-compose.yml</code>, and <code style="font-family:var(--sl-font-mono);font-size:.92em">nginx.conf</code> in <code style="font-family:var(--sl-font-mono);font-size:.92em">/opt/remnawave</code>.
+      </div>
     </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">`.env`, `docker-compose.yml`, and `nginx.conf` in `/opt/remnawave`.</div>
   </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:0.9rem 1.1rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.5rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Addresses in the panel (panel + node)
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Addresses in the panel (panel + node)
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The node address, host address, and profile serverNames change through the web interface.
+      </div>
     </div>
-    <div style="font-size:.9em;line-height:1.7;opacity:.85">The node address, host address, and profile serverNames change through the web interface.</div>
   </div>
 </div>
 
@@ -49,7 +64,7 @@ To use the new domain, you need to generate a new SSL certificate using the scri
     remnawave_reverse
     ```
 
-2. Select option 10: `Domain certificate management`
+2. Select option 11: `Domain certificate management`
 
 3. In the submenu select option 2: `Generate new certificates for another domain`
 
@@ -193,7 +208,7 @@ To use the new domain, you need to generate a new SSL certificate using the scri
     remnawave_reverse
     ```
 
-2. Select option 10: `Domain certificate management`
+2. Select option 11: `Domain certificate management`
 
 3. In the submenu select option 2: `Generate new certificates for another domain`
 

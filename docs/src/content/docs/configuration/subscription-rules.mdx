@@ -1,0 +1,241 @@
+---
+title: Subscriptions and response rules
+description: "What the panel answers to each subscription request: ready-made rule presets for Happ, INCY and other clients, per-device subscription binding and backup copies before every change"
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { APP_VERSION } from '../../../components/version';
+import Terminal from '../../../components/Terminal.astro';
+import SubscriptionRulesDiagram from '../../../components/SubscriptionRulesDiagram.astro';
+
+Response rules decide what the panel returns for every subscription request. A client app needs its configs, a browser deserves a nice page, and a stranger script walking through stolen links is best served a 404 and nothing else. The module shows the current state on one screen, applies ready-made rule sets and enables per-device subscription binding. Everything changes through the panel API, no configs are edited by hand.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Ready-made rule sets
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        “Clients and browsers” for a regular setup, the strict “Happ and INCY + devices” for selling subscriptions, and “Allow everyone” as a single rule to roll back.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Device binding
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Happ, INCY, FlClashX, Koala Clash and Prizrak-Box report the device identifier to the panel. With the device limit on, a leaked link stops working on stranger phones: they receive a refusal instead of configs.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(167,139,250,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(167,139,250,.14), transparent 55%), rgba(167,139,250,.04);box-shadow:0 12px 32px -20px rgba(167,139,250,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(167,139,250,.9), rgba(167,139,250,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#a78bfa;box-shadow:0 0 8px rgba(167,139,250,.7);flex:none"></span>
+        Backup copies
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Before every rule replacement the current set is saved to a file. The ten latest copies are kept, any of them can be restored from the same menu.
+      </div>
+    </div>
+  </div>
+</div>
+
+## How it works
+
+The panel evaluates every subscription request by its headers: which app sent it and from which device. A rule combines header conditions with a response type. Rules are checked top to bottom, the first match wins, and its response type goes to the client.
+
+<SubscriptionRulesDiagram lang="en" />
+
+Device binding works alongside the rules. Happ and INCY send an `x-hwid` header with the device identifier. When the limit is on, a user's subscription is served to at most N devices, the rest receive a polite message instead of configs. The list of occupied slots is visible in the user's card in the panel, a lost device can be removed there to free its slot. Individual users can have their own limit or none at all, that is done in the panel.
+
+Everything is stored in the panel, the same settings are available in its web UI in the subscriptions section. The module is a convenience wrapper: it changes values through the API, shows the result and keeps copies. If you use the panel's external squads, keep in mind that response rules take priority over their settings.
+
+:::note[Panel 3.4 and newer]
+Recent panel versions answer 403 to subscription requests until rules are configured. If subscriptions suddenly stopped opening after a panel update, apply any rule set from this module and everything comes back.
+:::
+
+## What the panel can return
+
+The response type in a rule decides what exactly the client receives. The module's rule sets use some of the types, custom rules in the panel can be built from the full list.
+
+| Response type | What the client receives |
+|---|---|
+| Xray JSON | The complete Xray config as one file, with routing rules. This is how Happ, INCY and v2rayN work |
+| Base64 | The plain server list Base64-encoded. Every app understands it, a safe default choice |
+| Mihomo, Clash, Stash, Sing-box | A config in the format of that client family |
+| Browser page | The subscription HTML page with the server list and instructions |
+| Block 403, 404, 451 | An empty refusal. For stranger requests 404 looks the most natural: as if nothing ever lived at this address |
+| Socket drop | The panel silently drops the connection, without a status code |
+
+## Setup
+
+<Steps>
+
+1. Open item `5` “Subscriptions: rules and page” of the main menu and pick “Subscriptions and response rules”:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'REMNAWAVE REVERSE-PROXY by eGames' },
+      { kind: 'dim', text: `Version: ${APP_VERSION}` },
+      { kind: 'dim', text: 'Wiki: https://wiki.egam.es/' },
+      { kind: 'plain' },
+      { kind: 'item', num: '5.', text: 'Subscriptions: rules and page', pick: true },
+      { kind: 'plain' },
+      { kind: 'item', num: '6.', text: 'WARP Native' },
+      { kind: 'plain' },
+      { kind: 'item', num: '8.', text: 'Xray Checker — subscription monitoring' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-13):', answer: '5' },
+    ]} />
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Subscriptions: rules and page' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Subscriptions and response rules', pick: true },
+      { kind: 'dim', text: '    which config each client receives, the device limit, JSON and paths' },
+      { kind: 'item', num: '2.', text: 'Subscription page' },
+      { kind: 'dim', text: '    the Orion template and restoring the stock page' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+    ]} />
+
+2. The module shows the state right away: which rules are active, whether the device limit is on, what the base path serves. The actions are below:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Subscriptions and response rules' },
+      { kind: 'dim', text: ' Details in the wiki: https://wiki.egam.es/configuration/subscription-rules/' },
+      { kind: 'plain' },
+      { kind: 'dim', text: ' Response rules: not configured' },
+      { kind: 'dim', text: '   recent panel versions answer 403 to subscription requests until rules are set, apply a preset below' },
+      { kind: 'dim', text: ' ✗ HWID device limit: disabled' },
+      { kind: 'dim', text: ' JSON at the subscription base path: disabled' },
+      { kind: 'dim', text: ' Extra paths /json, /stash, /mihomo: open' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: 'Show rules in detail' },
+      { kind: 'item', num: '2.', text: 'Preset “Clients and browsers”' },
+      { kind: 'dim', text: '    browsers get the subscription page, every app gets Base64 configs' },
+      { kind: 'item', num: '3.', text: 'Preset “Strict: Happ and INCY + devices”' },
+      { kind: 'dim', text: '    configs go only to Happ/INCY with device binding and to known apps, everyone else gets 404' },
+      { kind: 'item', num: '4.', text: 'Allow everyone with a single rule' },
+      { kind: 'item', num: '5.', text: 'HWID device limit: enable' },
+      { kind: 'item', num: '6.', text: 'JSON at base path: enable' },
+      { kind: 'item', num: '7.', text: 'Extra paths /json, /stash, /mihomo: close' },
+      { kind: 'item', num: '8.', text: 'Restore saved rules' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-8):', answer: '2' },
+    ]} />
+
+3. The “Clients and browsers” preset suits most setups: the browser gets the subscription page, every app receives its configs as Base64, the format every client understands:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: '[?] Replace the current rules (0) with preset “Clients and browsers” of 2 rules? The current rules will be saved to a file. (y/n):', answer: 'y' },
+      { kind: 'step', text: 'Current rules saved: rules-20261009-143210.json' },
+      { kind: 'ok', text: 'Preset applied' },
+      { kind: 'dim', text: ' Changes apply immediately. Apps pick them up on the next subscription update.' },
+    ]} />
+
+4. The state screen refreshes. Item 1 shows every rule with its conditions:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Response rules: 2' },
+      { kind: 'dim', text: '   1. ✓ Browsers → browser page' },
+      { kind: 'dim', text: '   2. ✓ Everyone else → Base64' },
+      { kind: 'dim', text: ' ✗ HWID device limit: disabled' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-8):', answer: '1' },
+      { kind: 'plain' },
+      { kind: 'dim', text: ' ✓ 1. Browsers [AND → browser page]' },
+      { kind: 'dim', text: '   user-agent CONTAINS "Mozilla"  (case-insensitive)' },
+      { kind: 'dim', text: ' ✓ 2. Everyone else [AND → Base64]' },
+      { kind: 'dim', text: '   no conditions, the rule matches every request' },
+      { kind: 'plain' },
+      { kind: 'dim', text: 'Press any key to go back…' },
+    ]} />
+
+</Steps>
+
+## Strict preset
+
+The “Strict: Happ and INCY + devices” preset is built for selling subscriptions. It hands configs only to verified requests and returns 404 to everything else. The rule set looks like this:
+
+| Who asks | Condition | What they receive |
+|---|---|---|
+| Happ, INCY and RenoarX | `user-agent` starts with `Happ/`, `INCY/` or `RenoarX/`, a valid `x-hwid` is present | The complete Xray JSON config |
+| Clash clients | `user-agent` starts with `FlClashX/`, `koala-clash/`, `prizrak-box/`, `rabbithole/`, `clash-mi/`, `Flowvy/` or `ClodClash/`, a valid `x-hwid` is present | The Mihomo config for their Clash core |
+| Sing-box clients | `user-agent` starts with `Karing/`, `InHive/`, `Throne/` or `DeskBox/`, a valid `x-hwid` is present | The Sing-box config |
+| Known apps | `user-agent` starts with a name from the list: v2rayN, v2rayNG, v2RayTun, V2Box, Streisand, Shadowrocket, sing-box, Karing, FlClash, Flowvy, prizrak-box, Koala Clash, Clod Clash, RenoarX, Throne, DeskBox, sfa, sfi, sfm, sft, rabbithole | The Base64 list |
+| Browser | `user-agent` contains Mozilla | The subscription page |
+| Everyone else | no conditions | 404 |
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'dim', text: ' Response rules: 6' },
+      { kind: 'dim', text: '   1. ✓ Xray JSON clients with device → Xray JSON' },
+      { kind: 'dim', text: '   2. ✓ Clash clients with device   → Mihomo' },
+      { kind: 'dim', text: '   3. ✓ Sing-box clients with device → Sing-box' },
+      { kind: 'dim', text: '   4. ✓ Known apps                   → Base64' },
+      { kind: 'dim', text: '   5. ✓ Browsers → browser page' },
+      { kind: 'dim', text: '   6. ✓ Everyone else → 404' },
+    ]} />
+
+The strict preset makes sense together with the device limit: a stolen link then stays useless even with a faked app name, because the stranger device will not pass the limit. Clash and Sing-box clients, RenoarX, Happ and INCY report the device identifier to the panel: with the limit on they pass the check and receive the config in their own format.
+
+:::danger[Important]
+After the strict preset, apps outside the list, for example Hiddify, Clash Verge or NekoBox, will receive 404. Check the subscription on your own device right away. Not a fit: switch back to “Clients and browsers” or restore a saved copy.
+:::
+
+## Device limit
+
+Enabled by item 5. The panel asks how many devices per user are allowed and shows a warning:
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'input', text: '[?] Device limit per user (1-20, Enter will keep 3):', answer: '3' },
+      { kind: 'warn', text: 'Clients without the x-hwid header (v2rayN, v2rayNG, FlClash, Stash) will not be able to fetch the subscription. For such users the limit is disabled per user in the panel.' },
+      { kind: 'input', text: '[?] Enable the device limit: up to 3 per user? (y/n):', answer: 'y' },
+      { kind: 'ok', text: 'Device limit enabled: up to 3 per user' },
+      { kind: 'dim', text: ' Changes apply immediately. Apps pick them up on the next subscription update.' },
+    ]} />
+
+What the panel knows about a device:
+
+| Header | What it carries | Example |
+|---|---|---|
+| `x-hwid` | The device identifier, required for the limit | `UE42LJXu4DbiCaBv` |
+| `x-device-os` | The device system | `iOS` or `Android` |
+| `x-ver-os` | The system version | `18.3` |
+| `x-device-model` | The device model | `iPhone 14 Pro Max` |
+
+Happ, INCY, RenoarX, DeskBox, v2RayTun, Flowvy, Clod Clash and the Clash clients send these headers on their own. Throne, Shadowrocket, Clash Mi and Karing support the binding too, but send the header only after it is enabled in the app settings. Left without the header are v2rayN, v2rayNG, FlClash, Stash and the official sing-box apps: with the limit on, their users will not receive the subscription. Such a user gets the limit disabled individually in their panel card, the restriction keeps working for everyone else.
+
+The limit counts distinct devices. When a user changes phones and the old one holds a slot, the extra device is removed from the card list and the new one passes right away.
+
+## Restoring
+
+Before every rule replacement the module stores the current set in `/usr/local/remnawave_reverse/subscription-rules/` with a timestamp. Item 8 lists the copies, the picked one returns to the panel, and the state at restore time is saved as well. The ten latest copies are kept.
+
+    <Terminal title="root@server: ~" lines={[
+      { kind: 'title', text: 'Restoring rules from a copy' },
+      { kind: 'plain' },
+      { kind: 'item', num: '1.', text: '2026-10-09 14:32:10 · rules: 4', pick: true },
+      { kind: 'item', num: '2.', text: '2026-10-09 14:20:03 · rules: 2' },
+      { kind: 'plain' },
+      { kind: 'item', num: '0.', text: 'Exit' },
+      { kind: 'plain' },
+      { kind: 'input', text: 'Select action (0-2):', answer: '1' },
+      { kind: 'plain' },
+      { kind: 'input', text: '[?] Restore rules from rules-20261009-143210.json (4 rules)? (y/n):', answer: 'y' },
+      { kind: 'step', text: 'Current rules saved: rules-20261009-144502.json' },
+      { kind: 'ok', text: 'Rules restored' },
+    ]} />
