@@ -2244,6 +2244,46 @@ sr_host_patch() {
     return 0
 }
 
+# Copy a host. POST /api/hosts/actions/clone exists only since panel 3.4.4;
+# older panels answer it with the route-missing JSON ("Cannot POST ..."), and
+# then the copy is created by hand from a fresh GET of the source — disabled
+# and hidden, mirroring how the clone endpoint leaves its own copies, so the
+# follow-up sr_host_patch converges to the same result on both paths. Echos
+# the new uuid; empty output means failure (the reason is already printed).
+sr_host_duplicate() {
+    local src_uuid="$1" response body
+    response=$(sr_api "POST" "/api/hosts/actions/clone" "$(jq -nc --arg u "$src_uuid" '{cloneFromUuid: $u}')")
+    local new_uuid
+    new_uuid=$(echo "$response" | jq -r '.response.uuid // empty')
+    [ -n "$new_uuid" ] && { echo "$new_uuid"; return 0; }
+    if ! echo "$response" | jq -e '(.message // "") | startswith("Cannot POST")' >/dev/null 2>&1; then
+        err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
+        return 1
+    fi
+    response=$(sr_api "GET" "/api/hosts/$src_uuid")
+    if ! echo "$response" | jq -e '.response.uuid' >/dev/null 2>&1; then
+        err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
+        return 1
+    fi
+    body=$(echo "$response" | jq -c '.response |
+        {remark, address, port, path, sni, host, alpn, fingerprint,
+         isDisabled, securityLayer, xhttpExtraParams, muxParams, sockoptParams,
+         finalMask, serverDescription, tags, isHidden, overrideSniFromAddress,
+         keepSniBlank, vlessRouteId, pinnedPeerCertSha256, verifyPeerCertByName,
+         shuffleHost, mihomoX25519, mihomoIpVersion, xrayJsonTemplateUuid,
+         excludeFromSubscriptionTypes, mapper,
+         inbound: {configProfileUuid: .inbound.configProfileUuid,
+                   configProfileInboundUuid: .inbound.configProfileInboundUuid},
+         nodes} + {isDisabled: true, isHidden: true}')
+    response=$(sr_api "POST" "/api/hosts" "$body")
+    new_uuid=$(echo "$response" | jq -r '.response.uuid // empty')
+    if [ -z "$new_uuid" ]; then
+        err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
+        return 1
+    fi
+    echo "$new_uuid"
+}
+
 # Clone the source host and stamp remark + route number; the clone copies
 # every connection parameter (address, port, SNI, transport). A live host
 # uuid from a previous run is PATCHed in place instead of cloning a second
@@ -2262,12 +2302,7 @@ sr_route_create_host() {
             return 1
         fi
     fi
-    response=$(sr_api "POST" "/api/hosts/actions/clone" "$(jq -nc --arg u "$src_uuid" '{cloneFromUuid: $u}')")
-    new_uuid=$(echo "$response" | jq -r '.response.uuid // empty')
-    if [ -z "$new_uuid" ]; then
-        err_msg "$(printf "${LANG[SR_API_FAIL]}" "$response")"
-        return 1
-    fi
+    new_uuid=$(sr_host_duplicate "$src_uuid") || return 1
     sr_host_patch "$new_uuid" "$remark" "$route_id" false || return 1
     SR_NEW_HOST_UUID="$new_uuid"
     step_ok "$(printf "${LANG[SR_HOST_CREATE_OK]}" "$remark")"

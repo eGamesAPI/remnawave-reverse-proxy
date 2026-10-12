@@ -897,6 +897,44 @@ cb_host_roundtrip_body() {
          nodes} * $ov'
 }
 
+# Copy a host. POST /api/hosts/actions/clone exists only since panel 3.4.4;
+# older panels answer it with the route-missing JSON ("Cannot POST ..."), and
+# then the copy is created by hand from a fresh GET of the source — disabled
+# and hidden, mirroring how the clone endpoint leaves its own copies, so the
+# follow-up PATCH converges to the same result on both paths. Sets CB_NEW_UUID.
+cb_host_duplicate() {
+    local src_uuid="$1" response body
+    response=$(cb_api "POST" "/api/hosts/actions/clone" \
+        "$(jq -nc --arg u "$src_uuid" '{cloneFromUuid: $u}')")
+    CB_NEW_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
+    [ -n "$CB_NEW_UUID" ] && return 0
+    if ! echo "$response" | jq -e '(.message // "") | startswith("Cannot POST")' >/dev/null 2>&1; then
+        err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
+        return 1
+    fi
+    response=$(cb_api "GET" "/api/hosts/$src_uuid")
+    if ! echo "$response" | jq -e '.response.uuid' >/dev/null 2>&1; then
+        err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
+        return 1
+    fi
+    body=$(echo "$response" | jq -c '.response |
+        {remark, address, port, path, sni, host, alpn, fingerprint,
+         isDisabled, securityLayer, xhttpExtraParams, muxParams, sockoptParams,
+         finalMask, serverDescription, tags, isHidden, overrideSniFromAddress,
+         keepSniBlank, vlessRouteId, pinnedPeerCertSha256, verifyPeerCertByName,
+         shuffleHost, mihomoX25519, mihomoIpVersion, xrayJsonTemplateUuid,
+         excludeFromSubscriptionTypes, mapper,
+         inbound: {configProfileUuid: .inbound.configProfileUuid,
+                   configProfileInboundUuid: .inbound.configProfileInboundUuid},
+         nodes} + {isDisabled: true, isHidden: true}')
+    response=$(cb_api "POST" "/api/hosts" "$body")
+    CB_NEW_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
+    if [ -z "$CB_NEW_UUID" ]; then
+        err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
+        return 1
+    fi
+}
+
 # Clone the source host and hide the copy. Live-checked on 3.4.4: the panel
 # rewrites a clone's remark to a unique "#_xxx <remark>" form, does NOT copy
 # the address and creates the copy DISABLED — and disabled hosts are skipped
@@ -914,13 +952,7 @@ cb_clone_hidden_member() {
     src_addr=$(echo "$response" | jq -r '.response.address // ""')
     src_port=$(echo "$response" | jq -r '.response.port')
     step_do "$(printf "${LANG[CB_CLONE_MEMBER]}" "$remark")"
-    response=$(cb_api "POST" "/api/hosts/actions/clone" \
-        "$(jq -nc --arg u "$src_uuid" '{cloneFromUuid: $u}')")
-    CB_NEW_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
-    if [ -z "$CB_NEW_UUID" ]; then
-        err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
-        return 1
-    fi
+    cb_host_duplicate "$src_uuid" || return 1
     local ov=""
     [ -n "$ov_pf" ] && [ -n "$ov_ib" ] && ov=", inbound: {configProfileUuid: \"$ov_pf\", configProfileInboundUuid: \"$ov_ib\"}"
     body=$(cb_host_roundtrip_body "$CB_NEW_UUID" \
@@ -941,13 +973,7 @@ cb_clone_hidden_member() {
 cb_create_vhost() {
     local src_uuid="$1" remark="$2" template_uuid="$3" response body
     step_do "$(printf "${LANG[CB_VHOST_CREATE]}" "$remark")"
-    response=$(cb_api "POST" "/api/hosts/actions/clone" \
-        "$(jq -nc --arg u "$src_uuid" '{cloneFromUuid: $u}')")
-    CB_NEW_UUID=$(echo "$response" | jq -r '.response.uuid // empty')
-    if [ -z "$CB_NEW_UUID" ]; then
-        err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
-        return 1
-    fi
+    cb_host_duplicate "$src_uuid" || return 1
     body=$(cb_host_roundtrip_body "$CB_NEW_UUID" "$(jq -nc \
         --arg remark "$remark" --arg uuid "$template_uuid" --arg desc "${LANG[CB_VHOST_DESC]}" '
         {remark: $remark, isHidden: false, isDisabled: false,
