@@ -10,7 +10,7 @@ import BalancerDiagram from '../../../components/BalancerDiagram.astro';
 import PresetDiagram from '../../../components/PresetDiagram.astro';
 import RoutingComboDiagram from '../../../components/RoutingComboDiagram.astro';
 
-The client balancer gives users one entry in the subscription that always works well. When one of the hosts gets weak or goes down, there is nothing to reconfigure: the client measures the latency of every host and keeps traffic on the two best ones. The panel assembles this config automatically, nothing changes on the nodes, and the original hosts are not deleted. While the balancer lives they are hidden from the subscription: dead entries would only confuse users. Removing the balancer brings back both the nodes and the entries.
+The client balancer gives users one entry in the subscription that always works well. When one of the hosts gets weak or goes down, there is nothing to reconfigure: the client measures the latency of every host and keeps traffic on the two best ones. The panel assembles this config automatically, nothing changes on the nodes, and the original hosts are not deleted: they keep working. While the balancer lives they are hidden from the subscription, so the extra list never gets in the user's way. Removing the balancer puts the entries back, so you can safely try it on a live panel.
 
 <div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0 0">
   <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
@@ -172,30 +172,21 @@ The wizard enables the "Serve JSON at the base subscription path" panel setting 
       { kind: 'input', text: 'Select action (0-2):', answer: '1' },
     ]} />
 
-5. When no inbound offers two fitting hosts (the common picture right after add-node, where every node carries a profile of its own), the wizard offers hosts from all inbounds on its own. When fitting inbounds exist, it lists them as in the subsection below. Pick the main hosts, numbers are entered comma separated:
+5. Pick the main hosts. Hosts of any inbound and profile fit, hidden entries and server-routing bridges included: the list marks them, and the copy in the config keeps its own transport and keys. Numbers are entered comma separated:
 
     <Terminal title="root@server: ~" lines={[
-      { kind: 'dim', text: ' No inbound offers 2 fitting hosts: hosts will be picked across all inbounds and gathered onto a dedicated profile' },
-      { kind: 'plain' },
       { kind: 'title', text: 'Main hosts:' },
-      { kind: 'dim', text: ' the selection order is kept in the client config' },
+      { kind: 'dim', text: ' the selection order is kept in the client config. Hosts of any inbound fit, hidden and bridge ones too' },
       { kind: 'plain' },
-      { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Germany / VLESS' },
-      { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Estonia / VLESS' },
+      { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Germany / VLESS', pick: true },
+      { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Estonia / VLESS', pick: true },
+      { kind: 'item', num: '3.', text: 'RU→EU bridge (ru-1.example.com) — RU entry / VLESS [bridge]' },
+      { kind: 'item', num: '4.', text: 'CDN entry (cdn-1.example.com) — Germany / VLESS XHTTP [hidden]' },
       { kind: 'plain' },
-      { kind: 'input', text: 'Host numbers, comma separated (1-2):', answer: '1,2' },
+      { kind: 'input', text: 'Host numbers, comma separated (1-4):', answer: '1,2' },
     ]} />
 
-6. The hosts sit on different inbounds, so the wizard offers to gather them onto a dedicated profile. The old profiles and hosts stay exactly as they are and wake up once the balancer is removed:
-
-    <Terminal title="root@server: ~" lines={[
-      { kind: 'step', text: 'The picked hosts sit on different inbounds. A dedicated profile will be created for the balancer, the nodes switch to it, and the old profiles and hosts stay exactly as they are: they wake up once a node returns. Removing the balancer sends the nodes home automatically' },
-      { kind: 'input', text: '[?] Proceed with a dedicated profile? (y/n): ', answer: 'y' },
-      { kind: 'step', text: 'Creating a dedicated profile Balancer and moving the nodes onto it...' },
-      { kind: 'ok', text: 'Nodes are on profile Balancer, the old profiles are untouched' },
-    ]} />
-
-7. Enter the name. This is what users see in their subscription, Enter picks "Auto":
+6. Enter the name. This is what users see in their subscription, Enter picks "Auto":
 
     <Terminal title="root@server: ~" lines={[
       { kind: 'input', text: 'Name in the subscription (Enter picks Auto):', answer: 'Germany+Estonia' },
@@ -210,39 +201,19 @@ The wizard enables the "Serve JSON at the base subscription path" panel setting 
       { kind: 'step', text: 'Creating the wrapper host Germany+Estonia...' },
       { kind: 'ok', text: 'Wrapper host ready' },
       { kind: 'plain' },
-      { kind: 'step', text: 'Hiding the sleeping original hosts...' },
+      { kind: 'step', text: 'Hiding the original hosts from the subscription...' },
       { kind: 'ok', text: 'Original hosts hidden: 2. They return to the subscription once the balancer is removed' },
       { kind: 'ok', text: 'Done: subscriptions of type Xray JSON now show host Germany+Estonia with 2 main hosts inside' },
       { kind: 'dim', text: ' Regular subscriptions and Xray Checker never see it, that is by design' },
-      { kind: 'dim', text: ' The original hosts sleep hidden from the subscription while their nodes serve the balancer: remove it and both the nodes and the entries come back on their own' },
     ]} />
 
 </Steps>
 
-### When the hosts already share one inbound
-
-A balancer needs no dedicated profile when its hosts live on one inbound: it takes the existing one and the nodes are never touched. The wizard lists the fitting inbounds, the "Across inbounds" option gathers the hosts onto a dedicated profile instead:
-
-<Terminal title="root@server: ~" lines={[
-  { kind: 'dim', text: ' Every eligible host already sits on one inbound: Germany / VLESS' },
-  { kind: 'plain' },
-  { kind: 'title', text: 'Inbound for the balancer:' },
-  { kind: 'dim', text: ' hosts must live on one inbound, and it must be in the squads of the users who should get the balancer' },
-  { kind: 'plain' },
-  { kind: 'item', num: '1.', text: 'Germany / VLESS — eligible hosts: 3', pick: true },
-  { kind: 'item', num: '2.', text: 'Across inbounds' },
-  { kind: 'dim', text: '    the hosts are gathered onto a dedicated profile the nodes switch to' },
-  { kind: 'plain' },
-  { kind: 'item', num: '0.', text: 'Exit' },
-  { kind: 'plain' },
-  { kind: 'input', text: 'Select action (0-2):', answer: '1' },
-]} />
-
-From there the host picker shows only that inbound, and the dedicated-profile question is never asked.
+The config builds on your Default template: routing rules, DNS and local inbounds are carried over from the panel, and the default rule gives way to the balancer. When the Default carries custom rules, the wizard prints how many of them were carried over.
 
 ### A balancer for Mihomo
 
-With Mihomo things are simpler: hosts from any inbound qualify, no dedicated profile and no hidden clones. The wizard adds a ready group into the default Mihomo template, and it appears in the subscription next to the plain host list. The user switches to it once in the client:
+With Mihomo things are simpler: hosts from any inbound qualify, and the pool is the visible hosts themselves. The wizard adds a ready group into the default Mihomo template, and it appears in the subscription next to the plain host list. The user switches to it once in the client:
 
 <Terminal title="root@server: ~" lines={[
   { kind: 'title', text: 'Who will use the balancer?' },
@@ -292,7 +263,7 @@ The presets turn into native Mihomo groups: "Always the fastest" becomes `url-te
   </TabItem>
   <TabItem label="Main with backup">
 
-  Two groups. Traffic goes through the main hosts; when all of them are unreachable, the client falls back to the first backup host. Fit for a main line abroad plus one entry that survives regional blocks: the backup sits idle until it is actually needed.
+  Two groups. Traffic goes through the main hosts; when all of them are unreachable, the client falls back to the first backup host. Fit for a main line abroad plus a spare entry on another territory: the backup sits idle until it is actually needed.
 
   <PresetDiagram variant="reserve" lang="en" />
 
@@ -305,13 +276,13 @@ The presets turn into native Mihomo groups: "Always the fastest" becomes `url-te
   </TabItem>
 </Tabs>
 
-Hosts that already carry a job of their own are never offered to a balancer: VLESS Route hosts of the server routing module (they are personal exits, and the routing module may rewire them) and wrappers of other balancers.
+Only copies and wrappers of other balancers stay out of the list: the module hides them on its own. Hosts with a personal VLESS Route (bridges) can be picked freely: the copy keeps the route, and the connection goes through the bridge entry as usual. Disabled hosts are never offered, hidden ones are marked in the list.
 
 ## Several balancers
 
 There can be as many balancers as you need, each with its own host list, its own Xray JSON template and its own entry in the subscription. Five nodes of Germany gather into a balancer "Germany", five nodes of Finland into another "Finland", and the user sees both entries under different names.
 
-With a cross-inbound build each one gets its own profile: the first takes "Balancer", the second automatically "Balancer 2", and so on. Tearing one down never touches the other, and wrappers of neighbouring balancers never appear in the host picker, so an accidental duplicate record is impossible.
+Tearing one down never touches the other, and copies and wrappers of neighbouring balancers never appear in the host picker, so an accidental duplicate record is impossible.
 
 The module menu lists every balancer at once with its mode. Pick a number and its own menu opens with a live status and five actions:
 
@@ -334,17 +305,14 @@ The module menu lists every balancer at once with its mode. Pick a number and it
 
 The modules work together because they answer different questions: the balancer on the client picks the entry point, server routing after the entry decides where traffic goes. Russian domains travel through the bridge to the exit server, everything else leaves the entry node directly.
 
-### A uniform pool
-
-Build a pool of nodes with the same routing and nothing breaks: the nodes stay on their own profiles with their own rules, and the balancer simply picks the fastest among them. No dedicated profile is even created.
-
 <RoutingComboDiagram variant="alike" lang="en" />
 
-### A mixed pool
+Every hidden copy in the config points at its own node and its rules keep working as configured, so a pool may mix anything: nodes with and without routing, direct entries and bridges, different transports. No shared profile is created, the rules of one node are never carried anywhere, and nodes are never switched. A bridge host (a VLESS Route record) joins the pool with its route intact: the client connects to the bridge entry, and traffic then travels through the exit server as usual.
 
-Do not gather nodes with and without routing "Across inbounds". The dedicated profile inherits the rules of the first picked host, including the reference to the RU list file, and that file is not mounted on every node: a node without it cannot load the config and drops from the panel. Once the balancer is torn down, the node comes back on its own. Personal VLESS Route exits never join a pool at all: server routing may rewire them, so the module never offers them.
+:::note[Verified on a live panel]
+The scheme with a direct entry, a VLESS Route bridge and an XHTTP entry on its own inbound was run end to end: the pool was built from all three, the backup carried the XHTTP transport with its own keys and port, the bridge kept its route in the config (the marker inside the user id), and the teardown left nothing behind: nodes, profiles, user squads and hosts returned to their original shape.
+:::
 
-<RoutingComboDiagram variant="mixed" lang="en" />
 
 ## Managing
 
@@ -385,23 +353,19 @@ The per-balancer menu shows a live status and five actions:
   { kind: 'dim', text: ' Every host is in place' },
 ]} />
 
-**Add hosts** takes candidates from the balancer's own inbound. A balancer built on a dedicated profile answers plainly:
-
-<Terminal title="root@server: ~" lines={[
-  { kind: 'err', text: 'No eligible hosts left' },
-]} />
-
-A balancer on a real inbound has a list to offer, and every new clone joins the config:
+**Add hosts** offers every eligible host of the panel from any inbound. Copies and originals of this balancer never join the list, so a duplicate is impossible:
 
 <Terminal title="root@server: ~" lines={[
   { kind: 'title', text: 'Hosts to add:' },
-  { kind: 'dim', text: ' the selection order is kept in the client config' },
+  { kind: 'dim', text: ' the selection order is kept in the client config. Hosts of any inbound fit, hidden and bridge ones too' },
   { kind: 'plain' },
   { kind: 'item', num: '1.', text: 'Frankfurt (de-3.example.com) — Germany / VLESS' },
   { kind: 'plain' },
   { kind: 'input', text: 'Host numbers, comma separated (1-1):', answer: '1' },
   { kind: 'step', text: 'Hiding a copy of host Frankfurt...' },
   { kind: 'ok', text: 'Copy hidden: Frankfurt' },
+  { kind: 'step', text: 'Hiding the original hosts from the subscription...' },
+  { kind: 'ok', text: 'Original hosts hidden: 1. They return to the subscription once the balancer is removed' },
   { kind: 'step', text: 'Refreshing the template config...' },
   { kind: 'step', text: 'Writing the balancer config into the template...' },
   { kind: 'ok', text: 'Config written' },
@@ -429,13 +393,13 @@ A balancer on a real inbound has a list to offer, and every new clone joins the 
   { kind: 'ok', text: 'Host renamed to Europe' },
 ]} />
 
-**Remove the balancer** puts everything back: the wrapper, all hidden copies and the template are deleted, the original hosts were never touched. Nodes borrowed by a dedicated profile return home on their own:
+**Remove the balancer** puts everything back: the wrapper, all hidden copies and the template are deleted, the original hosts return to the subscription:
 
 <Terminal title="root@server: ~" lines={[
   { kind: 'input', text: '[?] Remove balancer Europe? The wrapper host, hidden copies and the template will be deleted, the original hosts stay (y/n): ', answer: 'y' },
   { kind: 'step', text: 'Tearing down balancer Europe...' },
-  { kind: 'step', text: 'Returning the nodes to their own profiles...' },
-  { kind: 'ok', text: 'The nodes are back on their profiles' },
+  { kind: 'step', text: 'Restoring the visibility of the original hosts...' },
+  { kind: 'ok', text: 'Original hosts are back in the subscription: 2' },
   { kind: 'ok', text: 'Balancer removed, original hosts untouched' },
 ]} />
 
@@ -498,7 +462,7 @@ A balancer on a real inbound has a list to offer, and every new clone joins the 
         A familiar config
       </div>
       <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
-        The Xray config follows the official Remnawave example: <code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> with a one-second budget, DNS <code style="font-family:var(--sl-font-mono);font-size:.92em">1.1.1.1</code>, SOCKS 10808 and HTTP 10809. Mihomo uses its native <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code> and <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code> groups. Hand edits live until the next list change.
+        The Xray config builds on top of your Default template: custom rules, DNS and inbounds from the panel are carried into the config automatically, <code style="font-family:var(--sl-font-mono);font-size:.92em">leastLoad</code> gets a one-second budget, SOCKS 10808 and HTTP 10809. Mihomo uses its native <code style="font-family:var(--sl-font-mono);font-size:.92em">url-test</code> and <code style="font-family:var(--sl-font-mono);font-size:.92em">fallback</code> groups. Hand edits of the config live until the next list change, edits of the Default are picked up on every rebuild.
       </div>
     </div>
   </div>
