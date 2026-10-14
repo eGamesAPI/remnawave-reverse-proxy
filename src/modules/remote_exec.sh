@@ -160,10 +160,13 @@ re_reset_changed_host_key() {
         *) return 1 ;;
     esac
     type=$(printf '%s\n' "$out" | sed -n 's/^The fingerprint for the \([A-Z0-9]*\) key sent by the remote host is.*/\1/p' | head -n1)
-    fp=$(printf '%s\n' "$out" | grep -o 'SHA256:[A-Za-z0-9+/]*' | head -n1)
+    # Base64 fingerprints of host keys ALWAYS end in padding '=' (32 raw
+    # bytes map to 43 chars + one '='); without it in the class the shown
+    # fingerprint is silently truncated exactly where the operator compares it.
+    fp=$(printf '%s\n' "$out" | grep -o 'SHA256:[A-Za-z0-9+/=]*' | head -n1)
     echo -e "${COLOR_YELLOW}$(printf "${LANG[RE_HOSTKEY_CHANGED]}" "$host" "$port")${COLOR_RESET}"
     echo -e "${COLOR_GRAY}$(printf "${LANG[RE_HOSTKEY_FP]}" "$type" "$fp")${COLOR_RESET}"
-    echo -e "${COLOR_WHITE}ssh-keygen -lf /etc/ssh/ssh_host_${type,,}_key.pub${COLOR_RESET}"
+    [ -n "$type" ] && echo -e "${COLOR_WHITE}ssh-keygen -lf /etc/ssh/ssh_host_${type,,}_key.pub${COLOR_RESET}"
     reading_yn "${LANG[RE_HOSTKEY_FORGET]}" confirm_forget || return 1
     re_forget_host_key "$host" "$port"
 }
@@ -226,11 +229,18 @@ re_generate_key() {
 }
 
 re_pubkey() {
+    local pub
     if [ -s "$RE_KEY_FILE.pub" ]; then
-        cat "$RE_KEY_FILE.pub"
+        pub=$(cat "$RE_KEY_FILE.pub")
     else
-        echo "$(ssh-keygen -y -f "$RE_KEY_FILE" 2>/dev/null) $(re_key_comment)"
+        pub="$(ssh-keygen -y -f "$RE_KEY_FILE" 2>/dev/null) $(re_key_comment)"
     fi
+    # A corrupt key file must fail HERE, not install a comment-only line
+    # into authorized_keys and confuse the verify step downstream.
+    case "$pub" in
+        ssh-*|ecdsa-*) printf '%s\n' "$pub"; return 0 ;;
+    esac
+    return 1
 }
 
 # Silent publickey probe: BatchMode keeps it from ever waiting on a prompt.
