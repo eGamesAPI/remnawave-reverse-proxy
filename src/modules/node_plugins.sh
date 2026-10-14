@@ -475,7 +475,9 @@ np_settings() {
     local duration_input
     reading "$(printf "${LANG[NP_DURATION_PROMPT]}" "$duration")" duration_input || return 0
     if [ -n "$duration_input" ]; then
-        if ! [[ "$duration_input" =~ ^[0-9]+$ ]] || [ "$duration_input" -le 0 ]; then
+        # No leading zeros: jq's JSON parser rejects "007" as a number and
+        # the whole PATCH would die with a cryptic update-failed message.
+        if ! [[ "$duration_input" =~ ^[1-9][0-9]*$ ]]; then
             echo -e "${COLOR_RED}${LANG[NP_INVALID_DURATION]}${COLOR_RESET}"
             return 1
         fi
