@@ -51,7 +51,7 @@ import CertwardenDiagram from '../../../../components/CertwardenDiagram.astro';
 
 <CertwardenDiagram lang="ru" />
 
-Cert Warden заказывает сертификаты у Let's Encrypt и доказывает владение доменом DNS-01-записью у DNS-провайдера. Готовые сертификаты он хранит у себя и раздаёт клиентам по API-ключам: клиент на каждом сервере скачивает pem-файлы, кладёт их на диск и перезапускает свой веб-сервер. Панели за Caddy файловые сертификаты не нужны: Caddy получает их сам.
+Cert Warden заказывает сертификаты у Let's Encrypt и доказывает владение доменом DNS-01-записью у DNS-провайдера. Готовые сертификаты он хранит у себя и раздаёт клиентам по API-ключам: клиент на каждом сервере сам раз в несколько часов опрашивает Cert Warden, при обновлении скачивает pem-файлы, кладёт их на диск и перезапускает свой веб-сервер. Панели за Caddy файловые сертификаты не нужны: Caddy получает их сам.
 
 ## Установка Cert Warden
 
@@ -383,15 +383,38 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
 Клиент Cert Warden работает как Docker-контейнер: забирает сертификаты с сервера по API-ключам, сохраняет файлы на диск и перезапускает указанные контейнеры, чтобы сервисы подхватили обновление.
 
+Используем форк [mishkatik/certwarden-client](https://github.com/mishkatik/certwarden-client). В [оригинальном клиенте](https://github.com/gregtwallace/certwarden-client) сертификат клиенту отправляет сам сервер, поэтому клиент держит открытый порт и расшифровывает данные AES-ключом. В форке клиент сам опрашивает сервер: портов он не открывает, AES-ключ не нужен.
+
+- При запуске и затем раз в `CW_CLIENT_POLL_INTERVAL` (по умолчанию 6 часов) клиент делает один запрос к Cert Warden. Если сертификат не менялся, сервер отвечает пустым `304`, и ничего не скачивается.
+- При первом запуске клиент сразу записывает файлы и перезапускает контейнеры.
+- Продлённый сертификат клиент записывает в заданное окно времени (в примере ниже с 02:00 до 03:00) и после этого перезапускает контейнеры.
+- Если сервер недоступен или API-ключ неверный, клиент не останавливается: пишет ошибку в лог и повторяет попытку через 15 минут, удваивая паузу после каждой неудачи, пока она не сравняется с интервалом опроса.
+
+:::note
+Форку нужен сервер Cert Warden версии 0.18.2 или новее. Образ `ghcr.io/gregtwallace/certwarden:latest` из инструкции выше подходит.
+:::
+
 :::tip[Панель за Caddy]
 Если панель стоит за Caddy, отдельные файлы сертификатов ей не нужны: Caddy получает и продлевает их сам. Клиент Cert Warden тогда нужен остальным сервисам с файловыми сертификатами, например nginx нод.
+:::
+
+:::caution[Переход со старого клиента]
+Если клиент уже стоит по прежней версии этой инструкции (образ `ghcr.io/gregtwallace/certwarden-client`):
+
+1. В Cert Warden у сертификата в `Certificates` → `Post Processing` → `Client` очистите адрес клиента и `Client AES Key`.
+2. В `/opt/certwardenclient/docker-compose.yml` смените образ на `ghcr.io/mishkatik/certwarden-client:latest`, удалите `ports` и переменные `CW_CLIENT_AES_KEY_BASE64` и `CW_CLIENT_KEY_NAME`.
+3. Пересоздайте контейнер: `cd /opt/certwardenclient && docker compose up -d`.
+
+Переменные без индекса (`CW_CLIENT_CERT_NAME` и другие) форк понимает, переписывать их на `CW_CLIENT_0_*` не обязательно.
 :::
 
 ## Клиент на сервере панели Remnawave
 
 <Steps>
 
-1. Создаём директорию для клиента:
+1. Проверяем настройки сертификата в Cert Warden: в разделе `Certificates` → `Post Processing` → `Client` адрес клиента и `Client AES Key` должны быть пустыми. Клиент сам забирает сертификат, отправлять его некуда. Если там что-то заполнено, сервер будет писать ошибку при каждом продлении.
+
+2. Создаём директорию для клиента:
 
     ```bash
     mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
@@ -399,68 +422,47 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
     Вставляем следующее содержимое:
 
-    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    ```yaml title="docker-compose.yml" "https://certwarden.example.com" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
     services:
         certwardenclient:
-          image: ghcr.io/gregtwallace/certwarden-client:latest
+          image: ghcr.io/mishkatik/certwarden-client:latest
           container_name: certwardenclient
           restart: unless-stopped
-          ports:
-            - '127.0.0.1:5055:5055'
           volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - /opt/certwardenclient/certs:/opt/certwarden/certs
           environment:
             TZ: "Europe/Moscow"
-            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
-            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
-            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
-            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
-            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
             CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
-            CW_CLIENT_KEY_NAME: "example.com"
-            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
-            CW_CLIENT_CERT_NAME: "example.com"
-            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
-            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
-            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
-            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
-          networks:
-            - remnawave-network
+            CW_CLIENT_POLL_INTERVAL: "6h"
+            CW_CLIENT_0_CERT_NAME: "example.com"
+            CW_CLIENT_0_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_0_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_0_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_0_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_0_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_0_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_0_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_0_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_0_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
           logging:
             driver: 'json-file'
             options:
               max-size: '30m'
               max-file: '5'
-
-    networks:
-        remnawave-network:
-          name: remnawave-network
-          driver: bridge
-          external: true
     ```
 
-    В `CW_CLIENT_RESTART_DOCKER_CONTAINER0` указан `remnawave-nginx`. Для панели за Caddy это `remnawave-caddy`.
+    В `CW_CLIENT_0_RESTART_DOCKER_CONTAINER0` указан `remnawave-nginx`. Для панели за Caddy это `remnawave-caddy`.
 
-2. `CW_CLIENT_AES_KEY_BASE64` это ключ из раздела `Certificates` → `Post Processing` → `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить его.
+3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden, например `https://certwarden.example.com`. Адрес должен начинаться с `https://`, иначе клиент не запустится.
 
-    <div style={{ display: 'flex', justifyContent: 'center' }}>
-      <img
-        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png"
-        alt="Cert Warden AES Key"
-        style={{ maxWidth: '50%' }}
-      />
-    </div>
+4. `CW_CLIENT_POLL_INTERVAL` задаёт, как часто опрашивать сервер: `30m`, `6h`, `12h` и т. п., но не чаще раза в минуту. Сервер пишет в лог каждый запрос, поэтому слишком короткий интервал его засоряет.
 
-3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden (например, `https://certwarden.example.com`).
+5. `CW_CLIENT_0_CERT_NAME` и `CW_CLIENT_0_CERT_APIKEY` это название и API-ключ сертификата из раздела `Certificates`.
 
-4. `CW_CLIENT_KEY_NAME` это название ключа из раздела `Private Keys`.
+6. `CW_CLIENT_0_KEY_APIKEY` это API-ключ приватного ключа, который использует сертификат (раздел `Private Keys`). Если на сервере переключить сертификат на другой ключ, обновите эту переменную и перезапустите клиент.
 
-5. `CW_CLIENT_KEY_APIKEY` это API-ключ из раздела `Private Keys`.
-
-6. `CW_CLIENT_CERT_NAME` это название сертификата из раздела `Certificates`.
-
-7. `CW_CLIENT_CERT_APIKEY` это API-ключ из раздела `Certificates`.
+7. `CW_CLIENT_0_FILE_UPDATE_TIME_START`, `CW_CLIENT_0_FILE_UPDATE_TIME_END` и `CW_CLIENT_0_FILE_UPDATE_DAYS_OF_WEEK` задают окно, в которое клиент записывает продлённый сертификат и перезапускает контейнеры. Время считается по часовому поясу из `TZ`, без него по UTC.
 
 8. Запускаем клиент:
 
@@ -492,10 +494,14 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
 </Steps>
 
+:::tip[Несколько сертификатов и контейнеров]
+Ещё один сертификат добавляется блоком переменных с индексом `1`: `CW_CLIENT_1_CERT_NAME`, `CW_CLIENT_1_CERT_APIKEY`, `CW_CLIENT_1_KEY_APIKEY` и так далее. Задайте ему свои имена файлов (`CW_CLIENT_1_KEY_PEM_FILENAME`, `CW_CLIENT_1_CERTCHAIN_PEM_FILENAME`), чтобы сертификаты не перезаписали друг друга. Дополнительные контейнеры для перезапуска указываются в `CW_CLIENT_0_RESTART_DOCKER_CONTAINER1`, `CW_CLIENT_0_RESTART_DOCKER_CONTAINER2` и так далее, нумерация без пропусков.
+:::
+
 ## Клиент на сервере ноды Remnawave
 
 :::note
-Аналогично ставится и на другие ноды, которые будут получать сертификаты от Cert Warden. Обойтись без клиента можно: на сервере ноды сертификаты умеет выпускать и продлевать сам скрипт (пункт `10`, «Обновить текущие сертификаты»), а при добавлении ноды через меню сертификаты разворачиваются автоматически. Клиент Cert Warden нужен, только если вы хотите раздавать все сертификаты из одного места.
+Аналогично ставится и на другие ноды, которые будут получать сертификаты от Cert Warden. Обойтись без клиента можно: на сервере ноды сертификаты умеет выпускать и продлевать сам скрипт (пункт `11` «Управление сертификатами домена» → «Обновить текущие сертификаты»), а при добавлении ноды через меню сертификаты разворачиваются автоматически. Клиент Cert Warden нужен, только если вы хотите раздавать все сертификаты из одного места.
 :::
 
 <Steps>
@@ -508,32 +514,29 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
     Вставляем следующее содержимое:
 
-    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    ```yaml title="docker-compose.yml" "https://certwarden.example.com" "example.com" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
     services:
         certwardenclient:
-          image: ghcr.io/gregtwallace/certwarden-client:latest
+          image: ghcr.io/mishkatik/certwarden-client:latest
           container_name: certwardenclient
           restart: unless-stopped
-          ports:
-            - '127.0.0.1:5055:5055'
           volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - /opt/certwardenclient/certs:/opt/certwarden/certs
           environment:
             TZ: "Europe/Moscow"
-            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
-            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
-            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
-            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
-            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
             CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
-            CW_CLIENT_KEY_NAME: "example.com"
-            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
-            CW_CLIENT_CERT_NAME: "example.com"
-            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
-            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
-            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
-            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+            CW_CLIENT_POLL_INTERVAL: "6h"
+            CW_CLIENT_0_CERT_NAME: "example.com"
+            CW_CLIENT_0_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_0_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_0_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_0_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_0_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_0_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_0_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_0_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_0_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
           logging:
             driver: 'json-file'
             options:
@@ -541,23 +544,17 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
               max-file: '5'
     ```
 
-2. `CW_CLIENT_AES_KEY_BASE64` это ключ из раздела `Certificates` → `Post Processing` → `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить его.
+2. Переменные заполняем так же, как на сервере панели: `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden, `CW_CLIENT_0_CERT_NAME` и `CW_CLIENT_0_CERT_APIKEY` берём из раздела `Certificates`, `CW_CLIENT_0_KEY_APIKEY` из раздела `Private Keys`. Если нода получает другой сертификат, у него в `Post Processing` → `Client` тоже должно быть пусто.
 
-3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden.
-
-4. `CW_CLIENT_KEY_NAME` и `CW_CLIENT_KEY_APIKEY` это название и API-ключ из раздела `Private Keys`.
-
-5. `CW_CLIENT_CERT_NAME` и `CW_CLIENT_CERT_APIKEY` это название и API-ключ из раздела `Certificates`.
-
-6. Запускаем клиент:
+3. Запускаем клиент:
 
     ```bash
     cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
     ```
 
-7. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`.
+4. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`.
 
-8. Монтируем их в `docker-compose.yml` ноды (её веб-сервер тоже называется `remnawave-nginx`):
+5. Монтируем их в `docker-compose.yml` ноды (её веб-сервер тоже называется `remnawave-nginx`):
 
     ```bash
     cd /opt/remnanode && nano docker-compose.yml
@@ -569,7 +566,7 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
       - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
     ```
 
-9. Перезапускаем nginx ноды:
+6. Перезапускаем nginx ноды:
 
     ```bash
     cd /opt/remnanode && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
@@ -594,3 +591,7 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 3. Теперь, чтобы попасть на страницу Cert Warden, нужно подключиться к вашей сети NetBird через [приложение](https://docs.netbird.io/how-to/installation).
 
 </Steps>
+
+:::caution[Клиенты тоже должны быть в сети NetBird]
+Клиент Cert Warden сам обращается к серверу по домену `certwarden.yourdomain.com`. Когда домен указывает на IP в сети NetBird, каждый сервер с клиентом тоже должен быть подключён к NetBird, иначе клиент не сможет забрать сертификат.
+:::
