@@ -1192,6 +1192,7 @@ LANG[SR_EXIT_REUSE_OK]="Линия через выход «%s»: %s:%s, свой
 LANG[SR_EXIT_REUSE_STATE_BAD]="Мост «%s» настроен не полностью, выберите другой сервер"
 LANG[SR_PROFILE_NO_VLESS]="В профиле нет VLESS-инбаунда: номер маршрута зашит в UUID ссылки и работает только для VLESS"
 LANG[SR_HOST_NO_SOURCE]="У профиля нет включённого хоста без маршрута: сначала создайте обычный хост в панели"
+LANG[SR_HOST_HIDDEN_MARK]="скрытый"
 LANG[SR_HOST_PICK_TITLE]="Какой хост взять за основу?"
 LANG[SR_HOST_PICK_HINT]="Параметры подключения скопируются, отличий два: название и номер маршрута"
 LANG[SR_ROUTE_NO_PROMPT]="Номер маршрута (Enter подставит %s):"

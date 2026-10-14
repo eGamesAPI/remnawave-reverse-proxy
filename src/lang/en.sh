@@ -1192,6 +1192,7 @@ LANG[SR_EXIT_REUSE_OK]="Line via the exit of '%s': %s:%s, own service user and o
 LANG[SR_EXIT_REUSE_STATE_BAD]="Bridge '%s' is not fully configured, pick another machine"
 LANG[SR_PROFILE_NO_VLESS]="The profile has no VLESS inbound: the route number lives in the UUID tail of the link and only works for VLESS"
 LANG[SR_HOST_NO_SOURCE]="The profile has no enabled host without a route: create a plain host in the panel first"
+LANG[SR_HOST_HIDDEN_MARK]="hidden"
 LANG[SR_HOST_PICK_TITLE]="Which host to use as the base?"
 LANG[SR_HOST_PICK_HINT]="Connection parameters are copied; only two things differ: the name and the route number"
 LANG[SR_ROUTE_NO_PROMPT]="Route number (Enter picks %s):"

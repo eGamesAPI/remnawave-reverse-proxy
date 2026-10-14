@@ -624,7 +624,15 @@ sr_unpatch_public_profile() {
             ((.domain // []) == [$ext]);
         . as $cfg
         | (($cfg.outbounds // []) | map(select(.tag != $ob))) as $obs
-        | (($cfg.routing.rules // []) | map(select((.outboundTag // "") != $ob and (sr_ours | not))) + $saved) as $rules
+        # A rule of our shape pointing at an outbound of the admin'"'"'s own is
+        # NOT ours: it survives the strip in place. Only ob- and DIRECT-target
+        # ours-shapes are removed (both modes of ours), and the captured
+        # copies come back de-duplicated — a second teardown used to strip
+        # the restored admin rule with an already-cleared capture.
+        | (($cfg.routing.rules // [])
+            | map(select(((.outboundTag // "") != $ob)
+                         and (((sr_ours) and (.outboundTag // "") == "DIRECT") | not)))) as $keep
+        | ($keep + [$saved[] | select(. as $s | ($keep | index($s)) | not)]) as $rules
         | $cfg + { outbounds: $obs, routing: (($cfg.routing // {}) + { rules: $rules }) }')
     sr_patch_profile_config "$profile_uuid" "$merged" || return 1
     sr_state_set "admin_rules_${profile_uuid}" ""
@@ -2168,15 +2176,15 @@ sr_pick_source_host() {
         | select((($h.inbound.configProfileUuid // "") == $p) and (($h.inbound.configProfileInboundUuid // "") as $iu | ($vless | index($iu)) != null))
         | select(.isDisabled != true)
         | select(.vlessRouteId == null)
-        | "\(.uuid)\t\(.remark)"')
+        | "\(.uuid)\t\(.remark)\t\(if .isHidden then "hidden" else "" end)"')
 
     if [ "${#entries[@]}" -eq 0 ]; then
         echo -e "${COLOR_RED}${LANG[SR_HOST_NO_SOURCE]}${COLOR_RESET}"
         return 1
     fi
     if [ "${#entries[@]}" -eq 1 ]; then
-        SR_SOURCE_HOST_UUID="${entries[0]%%$'\t'*}"
-        SR_SOURCE_HOST_REMARK="${entries[0]#*$'\t'}"
+        SR_SOURCE_HOST_UUID=$(echo "${entries[0]}" | cut -f1)
+        SR_SOURCE_HOST_REMARK=$(echo "${entries[0]}" | cut -f2)
         return 0
     fi
 
@@ -2186,8 +2194,14 @@ sr_pick_source_host() {
     echo -e ""
     i=1
     for entry in "${entries[@]}"; do
-        remark="${entry#*$'\t'}"
-        echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${remark}${COLOR_RESET}"
+        remark=$(echo "$entry" | cut -f2)
+        # A hidden host (the balancer hides its pool) is a legal source, but
+        # the operator must see what they are building a route line on.
+        if [ "$(echo "$entry" | cut -f3)" = "hidden" ]; then
+            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${remark}${COLOR_RESET} ${COLOR_GRAY}[${LANG[SR_HOST_HIDDEN_MARK]}]${COLOR_RESET}"
+        else
+            echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${remark}${COLOR_RESET}"
+        fi
         i=$((i + 1))
     done
     echo -e ""
