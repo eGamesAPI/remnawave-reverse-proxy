@@ -141,7 +141,7 @@ import SubscriptionRulesDiagram from '../../../../components/SubscriptionRulesDi
 3. Пресет «Клиенты и браузеры» подходит большинству установок: браузер получает страницу подписки, все приложения получают конфиги в формате Base64, который понимает каждый клиент:
 
     <Terminal title="root@server: ~" lines={[
-      { kind: 'input', text: '[?] Заменить текущие правила (0 шт.) на пресет «Клиенты и браузеры» из 2 правил? Текущие правила будут сохранены в файл. (y/n):', answer: 'y' },
+      { kind: 'input', text: '[?] Заменить текущие правила (0 шт.) на пресет «Клиенты и браузеры» из 4 правил? Текущие правила будут сохранены в файл. (y/n):', answer: 'y' },
       { kind: 'step', text: 'Текущие правила сохранены: rules-20261009-143210.json' },
       { kind: 'ok', text: 'Пресет применён' },
       { kind: 'dim', text: ' Изменения вступают в силу сразу, приложения увидят их при следующем обновлении подписки.' },
@@ -150,16 +150,26 @@ import SubscriptionRulesDiagram from '../../../../components/SubscriptionRulesDi
 4. Экран состояния обновился. Пункт 1 показывает каждое правило с условиями:
 
     <Terminal title="root@server: ~" lines={[
-      { kind: 'dim', text: ' Правила ответов: 2' },
-      { kind: 'dim', text: '   1. ✓ Браузеры → страница в браузере' },
-      { kind: 'dim', text: '   2. ✓ Все остальные → Base64' },
+      { kind: 'dim', text: ' Правила ответов: 4' },
+      { kind: 'dim', text: '   1. ✓ Открытие в браузере → страница в браузере' },
+      { kind: 'dim', text: '   2. ✓ Встроенные браузеры → страница в браузере' },
+      { kind: 'dim', text: '   3. ✓ Браузеры → страница в браузере' },
+      { kind: 'dim', text: '   4. ✓ Все остальные → Base64' },
       { kind: 'dim', text: ' ✗ Лимит устройств (HWID): выключен' },
       { kind: 'plain' },
       { kind: 'input', text: 'Выберите действие (0-8):', answer: '1' },
       { kind: 'plain' },
-      { kind: 'dim', text: ' ✓ 1. Браузеры [AND → страница в браузере]' },
+      { kind: 'dim', text: ' ✓ 1. Открытие в браузере [AND → страница в браузере]' },
+      { kind: 'dim', text: '   accept CONTAINS "text/html"  (без учёта регистра)' },
+      { kind: 'dim', text: ' ✓ 2. Встроенные браузеры [OR → страница в браузере]' },
+      { kind: 'dim', text: '   user-agent CONTAINS "YaSearchBrowser"  (без учёта регистра)' },
+      { kind: 'dim', text: '   user-agent CONTAINS "HuaweiBrowser"  (без учёта регистра)' },
+      { kind: 'dim', text: '   …' },
+      { kind: 'dim', text: ' ✓ 3. Браузеры [OR → страница в браузере]' },
       { kind: 'dim', text: '   user-agent CONTAINS "Mozilla"  (без учёта регистра)' },
-      { kind: 'dim', text: ' ✓ 2. Все остальные [AND → Base64]' },
+      { kind: 'dim', text: '   user-agent CONTAINS "Chrome"  (без учёта регистра)' },
+      { kind: 'dim', text: '   …' },
+      { kind: 'dim', text: ' ✓ 4. Все остальные [AND → Base64]' },
       { kind: 'dim', text: '   условий нет, правило подходит любому запросу' },
       { kind: 'plain' },
       { kind: 'dim', text: 'Нажмите любую клавишу, чтобы вернуться…' },
@@ -177,17 +187,23 @@ import SubscriptionRulesDiagram from '../../../../components/SubscriptionRulesDi
 | Клиенты Clash | `user-agent` начинается с `FlClashX/`, `koala-clash/`, `prizrak-box/`, `rabbithole/`, `clash-mi/` или `ClodClash/`, есть корректный `x-hwid` | Конфиг Mihomo под ядро Clash |
 | Karing и InHive | `user-agent` начинается с `Karing/` или `InHive/`, есть корректный `x-hwid` | Конфиг Sing-box |
 | Известные приложения | `user-agent` начинается с названия из списка: v2rayN, v2rayNG, V2Box, Streisand, sing-box, Karing, FlClash, Flowvy, prizrak-box, Koala Clash, Clod Clash, sfa, sfi, sfm, sft, rabbithole | Список Base64 |
-| Браузер | `user-agent` содержит Mozilla | Страницу подписки |
+| Открытие в браузере | заголовок `accept` содержит `text/html` | Страницу подписки |
+| Встроенный браузер | `user-agent` содержит YaSearchBrowser, HuaweiBrowser, SamsungBrowser, MiuiBrowser, UCBrowser, QQBrowser, Quark | Страницу подписки |
+| Браузер | `user-agent` содержит Mozilla, AppleWebKit, Gecko, Chrome, Chromium, Safari, Firefox, CriOS, FxiOS, Edg, OPR, YaBrowser, Vivaldi и другие движки | Страницу подписки |
 | Все остальные | условий нет | 404 |
 
+Первое браузерное правило смотрит не на User-Agent, а на сам запрос: когда браузер переходит по ссылке подписки, он просит HTML-страницу. Так страница открывается даже в браузерах с сокращённым или подменённым User-Agent, включая встроенные браузеры Яндекс, Huawei, Samsung и Xiaomi, а два правила по User-Agent страхуют остальные случаи.
+
     <Terminal title="root@server: ~" lines={[
-      { kind: 'dim', text: ' Правила ответов: 6' },
+      { kind: 'dim', text: ' Правила ответов: 8' },
       { kind: 'dim', text: '   1. ✓ Клиенты Xray JSON с устройством → Xray JSON' },
       { kind: 'dim', text: '   2. ✓ Клиенты Clash с устройством   → Mihomo' },
       { kind: 'dim', text: '   3. ✓ Karing и InHive с устройством → Sing-box' },
       { kind: 'dim', text: '   4. ✓ Известные приложения          → Base64' },
-      { kind: 'dim', text: '   5. ✓ Браузеры → страница в браузере' },
-      { kind: 'dim', text: '   6. ✓ Все остальные → 404' },
+      { kind: 'dim', text: '   5. ✓ Открытие в браузере → страница в браузере' },
+      { kind: 'dim', text: '   6. ✓ Встроенные браузеры → страница в браузере' },
+      { kind: 'dim', text: '   7. ✓ Браузеры → страница в браузере' },
+      { kind: 'dim', text: '   8. ✓ Все остальные → 404' },
     ]} />
 
 Строгий пресет имеет смысл включать вместе с лимитом устройств: тогда украденная ссылка бесполезна даже с подменённым названием приложения, потому что чужое устройство не пройдёт лимит. Клиенты Clash и Sing-box, RenoarX, Happ и INCY сообщают панели идентификатор устройства: со включённым лимитом они проходят проверку и получают конфиг в своём формате.

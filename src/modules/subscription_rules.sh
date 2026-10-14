@@ -159,7 +159,7 @@ srr_rules_detail() {
 
 # --- presets --------------------------------------------------------------------------
 
-# The browser rule and the catch-all ride in every preset, only the client
+# The browser rules and the catch-all ride in every preset, only the client
 # tiers differ (allow_all is the bare catch-all — the honest "rules off").
 # disableSubscriptionAccessByPath is the user's own setting — presets never
 # touch it (read back from the current config).
@@ -168,6 +168,14 @@ srr_build_preset() { # $1 = strict|standard|allow_all
     local paths_flag
     paths_flag=$(srr_setting '.responseRules.settings.disableSubscriptionAccessByPath')
     [ "$paths_flag" = "true" ] || paths_flag="false"
+
+    # Browser tiers. An accept: text/html request is the link followed in a
+    # browser, whatever the user-agent says (spoofed or stripped included).
+    # The UA tiers mirror the classic community split: vendor in-app
+    # browsers and desktop engines. In-app browsers are webviews and carry
+    # Mozilla anyway; the tokens keep them matched when the UA is shortened.
+    local webview_tokens="YaSearchBrowser YaSearchApp HuaweiBrowser SamsungBrowser MiuiBrowser MiBrowser UCBrowser QQBrowser Quark HeyTapBrowser VivoBrowser"
+    local engine_tokens="Mozilla AppleWebKit Gecko Chrome Chromium CriOS Safari Firefox FxiOS Edg OPR Opera YaBrowser Vivaldi DuckDuckGo Whale Puffin"
 
     local strict_tier="" allow_all="false"
     if [ "$mode" = "strict" ]; then
@@ -218,6 +226,12 @@ srr_build_preset() { # $1 = strict|standard|allow_all
         --arg paths "$paths_flag" \
         --arg allow_all "$allow_all" \
         --argjson strict "${strict_tier:-[]}" \
+        --arg obn "${LANG[SRR_PRESET_BROWSER_OPEN_NAME]}" \
+        --arg obd "${LANG[SRR_PRESET_BROWSER_OPEN_DESC]}" \
+        --arg wvn "${LANG[SRR_PRESET_WEBVIEW_NAME]}" \
+        --arg wvd "${LANG[SRR_PRESET_WEBVIEW_DESC]}" \
+        --arg wt "$webview_tokens" \
+        --arg et "$engine_tokens" \
         --arg bn "${LANG[SRR_PRESET_BROWSER_NAME]}" \
         --arg bd "${LANG[SRR_PRESET_BROWSER_DESC]}" \
         --arg fn "${LANG[SRR_PRESET_FALLBACK_NAME]}" \
@@ -227,8 +241,14 @@ srr_build_preset() { # $1 = strict|standard|allow_all
           settings: {disableSubscriptionAccessByPath: ($paths == "true")},
           rules: ($strict +
             (if $allow_all == "true" then [] else [
-              {name: $bn, description: $bd, enabled: true, operator: "AND",
-               conditions: [{headerName: "user-agent", operator: "CONTAINS", value: "Mozilla", caseSensitive: false}],
+              {name: $obn, description: $obd, enabled: true, operator: "AND",
+               conditions: [{headerName: "accept", operator: "CONTAINS", value: "text/html", caseSensitive: false}],
+               responseType: "BROWSER"},
+              {name: $wvn, description: $wvd, enabled: true, operator: "OR",
+               conditions: ($wt | split(" ") | map(select(. != "")) | map({headerName: "user-agent", operator: "CONTAINS", value: ., caseSensitive: false})),
+               responseType: "BROWSER"},
+              {name: $bn, description: $bd, enabled: true, operator: "OR",
+               conditions: ($et | split(" ") | map(select(. != "")) | map({headerName: "user-agent", operator: "CONTAINS", value: ., caseSensitive: false})),
                responseType: "BROWSER"}
             ] end) +
             [

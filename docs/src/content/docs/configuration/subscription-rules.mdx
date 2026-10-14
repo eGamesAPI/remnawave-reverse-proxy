@@ -141,7 +141,7 @@ The response type in a rule decides what exactly the client receives. The module
 3. The “Clients and browsers” preset suits most setups: the browser gets the subscription page, every app receives its configs as Base64, the format every client understands:
 
     <Terminal title="root@server: ~" lines={[
-      { kind: 'input', text: '[?] Replace the current rules (0) with preset “Clients and browsers” of 2 rules? The current rules will be saved to a file. (y/n):', answer: 'y' },
+      { kind: 'input', text: '[?] Replace the current rules (0) with preset “Clients and browsers” of 4 rules? The current rules will be saved to a file. (y/n):', answer: 'y' },
       { kind: 'step', text: 'Current rules saved: rules-20261009-143210.json' },
       { kind: 'ok', text: 'Preset applied' },
       { kind: 'dim', text: ' Changes apply immediately. Apps pick them up on the next subscription update.' },
@@ -150,16 +150,26 @@ The response type in a rule decides what exactly the client receives. The module
 4. The state screen refreshes. Item 1 shows every rule with its conditions:
 
     <Terminal title="root@server: ~" lines={[
-      { kind: 'dim', text: ' Response rules: 2' },
-      { kind: 'dim', text: '   1. ✓ Browsers → browser page' },
-      { kind: 'dim', text: '   2. ✓ Everyone else → Base64' },
+      { kind: 'dim', text: ' Response rules: 4' },
+      { kind: 'dim', text: '   1. ✓ Opened in a browser → browser page' },
+      { kind: 'dim', text: '   2. ✓ Built-in browsers → browser page' },
+      { kind: 'dim', text: '   3. ✓ Browsers → browser page' },
+      { kind: 'dim', text: '   4. ✓ Everyone else → Base64' },
       { kind: 'dim', text: ' ✗ HWID device limit: disabled' },
       { kind: 'plain' },
       { kind: 'input', text: 'Select action (0-8):', answer: '1' },
       { kind: 'plain' },
-      { kind: 'dim', text: ' ✓ 1. Browsers [AND → browser page]' },
+      { kind: 'dim', text: ' ✓ 1. Opened in a browser [AND → browser page]' },
+      { kind: 'dim', text: '   accept CONTAINS "text/html"  (case-insensitive)' },
+      { kind: 'dim', text: ' ✓ 2. Built-in browsers [OR → browser page]' },
+      { kind: 'dim', text: '   user-agent CONTAINS "YaSearchBrowser"  (case-insensitive)' },
+      { kind: 'dim', text: '   user-agent CONTAINS "HuaweiBrowser"  (case-insensitive)' },
+      { kind: 'dim', text: '   …' },
+      { kind: 'dim', text: ' ✓ 3. Browsers [OR → browser page]' },
       { kind: 'dim', text: '   user-agent CONTAINS "Mozilla"  (case-insensitive)' },
-      { kind: 'dim', text: ' ✓ 2. Everyone else [AND → Base64]' },
+      { kind: 'dim', text: '   user-agent CONTAINS "Chrome"  (case-insensitive)' },
+      { kind: 'dim', text: '   …' },
+      { kind: 'dim', text: ' ✓ 4. Everyone else [AND → Base64]' },
       { kind: 'dim', text: '   no conditions, the rule matches every request' },
       { kind: 'plain' },
       { kind: 'dim', text: 'Press any key to go back…' },
@@ -177,17 +187,23 @@ The “Strict: Happ and INCY + devices” preset is built for selling subscripti
 | Clash clients | `user-agent` starts with `FlClashX/`, `koala-clash/`, `prizrak-box/`, `rabbithole/`, `clash-mi/`, `Flowvy/` or `ClodClash/`, a valid `x-hwid` is present | The Mihomo config for their Clash core |
 | Sing-box clients | `user-agent` starts with `Karing/`, `InHive/`, `Throne/` or `DeskBox/`, a valid `x-hwid` is present | The Sing-box config |
 | Known apps | `user-agent` starts with a name from the list: v2rayN, v2rayNG, v2RayTun, V2Box, Streisand, Shadowrocket, sing-box, Karing, FlClash, Flowvy, prizrak-box, Koala Clash, Clod Clash, RenoarX, Throne, DeskBox, sfa, sfi, sfm, sft, rabbithole | The Base64 list |
-| Browser | `user-agent` contains Mozilla | The subscription page |
+| Opened in a browser | the `accept` header contains `text/html` | The subscription page |
+| Built-in browser | `user-agent` contains YaSearchBrowser, HuaweiBrowser, SamsungBrowser, MiuiBrowser, UCBrowser, QQBrowser, Quark | The subscription page |
+| Browser | `user-agent` contains Mozilla, AppleWebKit, Gecko, Chrome, Chromium, Safari, Firefox, CriOS, FxiOS, Edg, OPR, YaBrowser, Vivaldi and other engines | The subscription page |
 | Everyone else | no conditions | 404 |
 
+The first browser rule looks at the request itself rather than the user agent: when a browser follows the subscription link, it asks for an HTML page. That way the page opens even in browsers with a shortened or spoofed user agent, including the built-in browsers of Yandex, Huawei, Samsung and Xiaomi, while the two user-agent rules cover the remaining cases.
+
     <Terminal title="root@server: ~" lines={[
-      { kind: 'dim', text: ' Response rules: 6' },
+      { kind: 'dim', text: ' Response rules: 8' },
       { kind: 'dim', text: '   1. ✓ Xray JSON clients with device → Xray JSON' },
       { kind: 'dim', text: '   2. ✓ Clash clients with device   → Mihomo' },
       { kind: 'dim', text: '   3. ✓ Sing-box clients with device → Sing-box' },
       { kind: 'dim', text: '   4. ✓ Known apps                   → Base64' },
-      { kind: 'dim', text: '   5. ✓ Browsers → browser page' },
-      { kind: 'dim', text: '   6. ✓ Everyone else → 404' },
+      { kind: 'dim', text: '   5. ✓ Opened in a browser → browser page' },
+      { kind: 'dim', text: '   6. ✓ Built-in browsers → browser page' },
+      { kind: 'dim', text: '   7. ✓ Browsers → browser page' },
+      { kind: 'dim', text: '   8. ✓ Everyone else → 404' },
     ]} />
 
 The strict preset makes sense together with the device limit: a stolen link then stays useless even with a faked app name, because the stranger device will not pass the limit. Clash and Sing-box clients, RenoarX, Happ and INCY report the device identifier to the panel: with the limit on they pass the check and receive the config in their own format.
