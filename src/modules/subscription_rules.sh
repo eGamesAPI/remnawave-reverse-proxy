@@ -425,6 +425,12 @@ srr_restore() {
         return 1
     fi
     file="${backups[$((pick - 1))]}"
+    # A hand-edited or truncated copy would only blow up as an empty PATCH
+    # body the panel rejects — refuse it here with a readable reason.
+    if ! jq -e '.rules' "$file" >/dev/null 2>&1; then
+        echo -e "${COLOR_RED}$(printf "${LANG[SRR_RESTORE_BROKEN]}" "$(basename "$file")")${COLOR_RESET}"
+        return 1
+    fi
     count=$(jq -r '.rules | length' "$file" 2>/dev/null)
 
     if ! reading_yn "$(printf "${LANG[SRR_RESTORE_CONFIRM]}" "$(basename "$file")" "$count")" confirm; then
