@@ -352,12 +352,76 @@ We will use the **dns-01 Cloudflare** method, but you can use other methods.
 
 The Cert Warden client runs as a Docker container: it fetches certificates from the server using API keys, saves the files to disk and restarts the specified containers so the services pick up the update.
 
-We use the [mishkatik/certwarden-client](https://github.com/mishkatik/certwarden-client) fork. With the [original client](https://github.com/gregtwallace/certwarden-client) the server pushes the certificate to the client, so the client keeps a port open and decrypts the payload with an AES key. In the fork the client polls the server itself: it opens no ports and needs no AES key.
+The guide covers both versions of the client. The [official client](https://github.com/gregtwallace/certwarden-client) is the primary option here: the server pushes the certificate to the client, so the client keeps a port open and decrypts the payload with an AES key. The alternative, the [mishkatik/certwarden-client fork](https://github.com/mishkatik/certwarden-client), flips the scheme: the client polls the server itself, opens no ports and needs no AES key.
 
-- At startup and then every `CW_CLIENT_POLL_INTERVAL` (6 hours by default) the client makes one request to Cert Warden. If the certificate has not changed, the server answers with an empty `304` and nothing is downloaded.
-- On the first start the client writes the files right away and restarts the containers.
-- A renewed certificate is written within the configured time window (02:00 to 03:00 in the example below), and then the containers are restarted.
-- If the server is unreachable or an API key is wrong, the client keeps running: it logs an error and retries after 15 minutes, doubling the pause after each failure until it reaches the poll interval.
+How the fork behaves:
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Polling on a schedule
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        At startup and then once per configured interval the client makes a single request to Cert Warden. If the certificate has not changed, the server answers with an empty <code style="font-family:var(--sl-font-mono)">304</code> and nothing is downloaded.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Interval</span><span><code style="font-family:var(--sl-font-mono)">CW_CLIENT_POLL_INTERVAL</code>, 6 hours by default</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        First start
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        On the first start the client does not wait for the renewal window: it downloads the certificate right away, writes the files and restarts the containers.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Files</span><span><code style="font-family:var(--sl-font-mono)">fullchain.pem</code> and <code style="font-family:var(--sl-font-mono)">privkey.pem</code></span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Renewal window
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        A renewed certificate is written within the configured time window, 02:00 to 03:00 in the example below, and the containers are restarted afterwards.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Window</span><span><code style="font-family:var(--sl-font-mono)">FILE_UPDATE_TIME_START</code> / <code style="font-family:var(--sl-font-mono)">FILE_UPDATE_TIME_END</code></span>
+        <span style="opacity:.6;white-space:nowrap">Days</span><span><code style="font-family:var(--sl-font-mono)">FILE_UPDATE_DAYS_OF_WEEK</code></span>
+        <span style="opacity:.6;white-space:nowrap">Time zone</span><span>from the <code style="font-family:var(--sl-font-mono)">TZ</code> variable, UTC without it</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Retry on failure
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        If the server is unreachable or an API key is wrong, the client keeps running: it logs an error and retries.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">First pause</span><span>15 minutes</span>
+        <span style="opacity:.6;white-space:nowrap">Backoff</span><span>the pause doubles after each failure</span>
+        <span style="opacity:.6;white-space:nowrap">Limit</span><span>the poll interval</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 :::note
 The fork needs Cert Warden server 0.18.2 or newer. The `ghcr.io/gregtwallace/certwarden:latest` image from the guide above qualifies.
@@ -367,17 +431,112 @@ The fork needs Cert Warden server 0.18.2 or newer. The `ghcr.io/gregtwallace/cer
 If the panel runs behind Caddy, it needs no separate certificate files: Caddy obtains and renews them on its own. The Cert Warden client is then needed for the other services with file certificates, such as the nginx on nodes.
 :::
 
-:::caution[Moving from the old client]
-If the client is already installed by the previous version of this guide (the `ghcr.io/gregtwallace/certwarden-client` image):
-
-1. In Cert Warden, clear the client address and the `Client AES Key` under `Certificates` → `Post Processing` → `Client` of the certificate.
-2. In `/opt/certwardenclient/docker-compose.yml`, change the image to `ghcr.io/mishkatik/certwarden-client:latest`, remove `ports` and the `CW_CLIENT_AES_KEY_BASE64` and `CW_CLIENT_KEY_NAME` variables.
-3. Recreate the container: `cd /opt/certwardenclient && docker compose up -d`.
-
-The fork understands the variables without an index (`CW_CLIENT_CERT_NAME` and the rest), so rewriting them to `CW_CLIENT_0_*` is optional.
-:::
-
 ## Client on the Remnawave panel server
+
+<Tabs>
+<TabItem label="Official client">
+
+<Steps>
+
+1. Create a directory for the client:
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+
+    Insert the following content:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          networks:
+            - remnawave-network
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+
+    networks:
+        remnawave-network:
+          name: remnawave-network
+          driver: bridge
+          external: true
+    ```
+
+    `CW_CLIENT_RESTART_DOCKER_CONTAINER0` is set to `remnawave-nginx`. For a panel behind Caddy, use `remnawave-caddy`.
+
+2. `CW_CLIENT_AES_KEY_BASE64` is the key from the `Certificates` → `Post Processing` → `Client AES Key` section. Click `GENERATE` to obtain it.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png"
+        alt="Cert Warden AES Key"
+        style={{ maxWidth: '50%' }}
+      />
+    </div>
+
+3. `CW_CLIENT_SERVER_ADDRESS` is the address of the Cert Warden server, for example `https://certwarden.example.com`.
+
+4. `CW_CLIENT_KEY_NAME` and `CW_CLIENT_KEY_APIKEY` are the name and the API key of the private key from the `Private Keys` section.
+
+5. `CW_CLIENT_CERT_NAME` and `CW_CLIENT_CERT_APIKEY` are the name and the API key of the certificate from the `Certificates` section.
+
+6. Run the client:
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+7. The `fullchain.pem` and `privkey.pem` files should appear in the `/opt/certwardenclient/certs` folder.
+
+8. Mount them in the panel's `docker-compose.yml`:
+
+    ```bash
+    cd /opt/remnawave && nano docker-compose.yml
+    ```
+
+    Add to volumes, do not forget to specify your domain:
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+9. Restart nginx:
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Fork">
 
 <Steps>
 
@@ -463,15 +622,113 @@ The fork understands the variables without an index (`CW_CLIENT_CERT_NAME` and t
 
 </Steps>
 
+:::caution[Moving from the official client]
+If the client is already running the official variant (the `ghcr.io/gregtwallace/certwarden-client` image):
+
+1. In Cert Warden, clear the client address and the `Client AES Key` under `Certificates` → `Post Processing` → `Client` of the certificate.
+2. In `/opt/certwardenclient/docker-compose.yml`, change the image to `ghcr.io/mishkatik/certwarden-client:latest`, remove `ports` and the `CW_CLIENT_AES_KEY_BASE64` and `CW_CLIENT_KEY_NAME` variables.
+3. Recreate the container: `cd /opt/certwardenclient && docker compose up -d`.
+
+The fork understands the variables without an index (`CW_CLIENT_CERT_NAME` and the rest), so rewriting them to `CW_CLIENT_0_*` is optional.
+:::
+
 :::tip[Several certificates and containers]
 Another certificate is added with a block of variables with index `1`: `CW_CLIENT_1_CERT_NAME`, `CW_CLIENT_1_CERT_APIKEY`, `CW_CLIENT_1_KEY_APIKEY` and so on. Give it its own file names (`CW_CLIENT_1_KEY_PEM_FILENAME`, `CW_CLIENT_1_CERTCHAIN_PEM_FILENAME`) so the certificates do not overwrite each other. Extra containers to restart go into `CW_CLIENT_0_RESTART_DOCKER_CONTAINER1`, `CW_CLIENT_0_RESTART_DOCKER_CONTAINER2` and so on, numbered without gaps.
 :::
+
+</TabItem>
+</Tabs>
 
 ## Client on the Remnawave node server
 
 :::note
 The client is installed the same way on other nodes that will receive certificates from Cert Warden. You can do without it: on a node server the script itself can issue and renew certificates (item `11` "Manage certificates domain" → "Update current certificates"), and when a node is added through the menu, its certificates are deployed automatically. The Cert Warden client is only needed if you want to distribute all certificates from one place.
 :::
+
+<Tabs>
+<TabItem label="Official client">
+
+<Steps>
+
+1. Create a directory for the client:
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+
+    Insert the following content:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+    ```
+
+2. `CW_CLIENT_AES_KEY_BASE64` is the key from the `Certificates` → `Post Processing` → `Client AES Key` section. Click `GENERATE` to obtain it.
+
+3. `CW_CLIENT_SERVER_ADDRESS` is the address of the Cert Warden server.
+
+4. `CW_CLIENT_KEY_NAME` and `CW_CLIENT_KEY_APIKEY` are the name and the API key from the `Private Keys` section.
+
+5. `CW_CLIENT_CERT_NAME` and `CW_CLIENT_CERT_APIKEY` are the name and the API key from the `Certificates` section.
+
+6. Run the client:
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+7. The `fullchain.pem` and `privkey.pem` files should appear in the `/opt/certwardenclient/certs` folder.
+
+8. Mount them in the node's `docker-compose.yml` (its web server is also called `remnawave-nginx`):
+
+    ```bash
+    cd /opt/remnanode && nano docker-compose.yml
+    ```
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+9. Restart the node's nginx:
+
+    ```bash
+    cd /opt/remnanode && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Fork">
 
 <Steps>
 
@@ -542,6 +799,9 @@ The client is installed the same way on other nodes that will receive certificat
     ```
 
 </Steps>
+
+</TabItem>
+</Tabs>
 
 ## Closing access to Certwarden with Netbird
 

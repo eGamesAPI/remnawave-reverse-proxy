@@ -383,12 +383,76 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
 Клиент Cert Warden работает как Docker-контейнер: забирает сертификаты с сервера по API-ключам, сохраняет файлы на диск и перезапускает указанные контейнеры, чтобы сервисы подхватили обновление.
 
-Используем форк [mishkatik/certwarden-client](https://github.com/mishkatik/certwarden-client). В [оригинальном клиенте](https://github.com/gregtwallace/certwarden-client) сертификат клиенту отправляет сам сервер, поэтому клиент держит открытый порт и расшифровывает данные AES-ключом. В форке клиент сам опрашивает сервер: портов он не открывает, AES-ключ не нужен.
+Гайд покрывает обе версии клиента. [Официальный клиент](https://github.com/gregtwallace/certwarden-client) здесь основной: сертификат клиенту отправляет сам сервер, поэтому клиент держит открытый порт и расшифровывает данные AES-ключом. Альтернатива, [форк mishkatik/certwarden-client](https://github.com/mishkatik/certwarden-client), переворачивает схему: клиент сам опрашивает сервер, портов не открывает, AES-ключ не нужен.
 
-- При запуске и затем раз в `CW_CLIENT_POLL_INTERVAL` (по умолчанию 6 часов) клиент делает один запрос к Cert Warden. Если сертификат не менялся, сервер отвечает пустым `304`, и ничего не скачивается.
-- При первом запуске клиент сразу записывает файлы и перезапускает контейнеры.
-- Продлённый сертификат клиент записывает в заданное окно времени (в примере ниже с 02:00 до 03:00) и после этого перезапускает контейнеры.
-- Если сервер недоступен или API-ключ неверный, клиент не останавливается: пишет ошибку в лог и повторяет попытку через 15 минут, удваивая паузу после каждой неудачи, пока она не сравняется с интервалом опроса.
+Как ведёт себя форк:
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Опрос по расписанию
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        При запуске и затем раз в заданный интервал клиент делает один запрос к Cert Warden. Если сертификат не менялся, сервер отвечает пустым <code style="font-family:var(--sl-font-mono)">304</code>, и ничего не скачивается.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Интервал</span><span><code style="font-family:var(--sl-font-mono)">CW_CLIENT_POLL_INTERVAL</code>, по умолчанию 6 часов</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Первый запуск
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        При первом запуске клиент не ждёт окна продления: сразу скачивает сертификат, записывает файлы и перезапускает контейнеры.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Файлы</span><span><code style="font-family:var(--sl-font-mono)">fullchain.pem</code> и <code style="font-family:var(--sl-font-mono)">privkey.pem</code></span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Окно продления
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Продлённый сертификат клиент записывает в заданное окно времени, в примере ниже это с 02:00 до 03:00, и после этого перезапускает контейнеры.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Окно</span><span><code style="font-family:var(--sl-font-mono)">FILE_UPDATE_TIME_START</code> / <code style="font-family:var(--sl-font-mono)">FILE_UPDATE_TIME_END</code></span>
+        <span style="opacity:.6;white-space:nowrap">Дни</span><span><code style="font-family:var(--sl-font-mono)">FILE_UPDATE_DAYS_OF_WEEK</code></span>
+        <span style="opacity:.6;white-space:nowrap">Часовой пояс</span><span>из переменной <code style="font-family:var(--sl-font-mono)">TZ</code>, без неё UTC</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Повтор при сбое
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Если сервер недоступен или API-ключ неверный, клиент не останавливается: пишет ошибку в лог и повторяет попытку.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Первая пауза</span><span>15 минут</span>
+        <span style="opacity:.6;white-space:nowrap">Рост</span><span>пауза удваивается после каждой неудачи</span>
+        <span style="opacity:.6;white-space:nowrap">Предел</span><span>интервал опроса</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 :::note
 Форку нужен сервер Cert Warden версии 0.18.2 или новее. Образ `ghcr.io/gregtwallace/certwarden:latest` из инструкции выше подходит.
@@ -398,17 +462,112 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 Если панель стоит за Caddy, отдельные файлы сертификатов ей не нужны: Caddy получает и продлевает их сам. Клиент Cert Warden тогда нужен остальным сервисам с файловыми сертификатами, например nginx нод.
 :::
 
-:::caution[Переход со старого клиента]
-Если клиент уже стоит по прежней версии этой инструкции (образ `ghcr.io/gregtwallace/certwarden-client`):
-
-1. В Cert Warden у сертификата в `Certificates` → `Post Processing` → `Client` очистите адрес клиента и `Client AES Key`.
-2. В `/opt/certwardenclient/docker-compose.yml` смените образ на `ghcr.io/mishkatik/certwarden-client:latest`, удалите `ports` и переменные `CW_CLIENT_AES_KEY_BASE64` и `CW_CLIENT_KEY_NAME`.
-3. Пересоздайте контейнер: `cd /opt/certwardenclient && docker compose up -d`.
-
-Переменные без индекса (`CW_CLIENT_CERT_NAME` и другие) форк понимает, переписывать их на `CW_CLIENT_0_*` не обязательно.
-:::
-
 ## Клиент на сервере панели Remnawave
+
+<Tabs>
+<TabItem label="Официальный клиент">
+
+<Steps>
+
+1. Создаём директорию для клиента:
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+
+    Вставляем следующее содержимое:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          networks:
+            - remnawave-network
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+
+    networks:
+        remnawave-network:
+          name: remnawave-network
+          driver: bridge
+          external: true
+    ```
+
+    В `CW_CLIENT_RESTART_DOCKER_CONTAINER0` указан `remnawave-nginx`. Для панели за Caddy это `remnawave-caddy`.
+
+2. `CW_CLIENT_AES_KEY_BASE64` это ключ из раздела `Certificates` → `Post Processing` → `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить его.
+
+    <div style={{ display: 'flex', justifyContent: 'center' }}>
+      <img
+        src="https://raw.githubusercontent.com/eGamesAPI/remnawave-reverse-proxy/refs/heads/main/docs/src/assets/en/certwarden/certwarden_aes_key.png"
+        alt="Cert Warden AES Key"
+        style={{ maxWidth: '50%' }}
+      />
+    </div>
+
+3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden, например `https://certwarden.example.com`.
+
+4. `CW_CLIENT_KEY_NAME` и `CW_CLIENT_KEY_APIKEY` это название и API-ключ приватного ключа из раздела `Private Keys`.
+
+5. `CW_CLIENT_CERT_NAME` и `CW_CLIENT_CERT_APIKEY` это название и API-ключ сертификата из раздела `Certificates`.
+
+6. Запускаем клиент:
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+7. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`.
+
+8. Монтируем их в `docker-compose.yml` панели:
+
+    ```bash
+    cd /opt/remnawave && nano docker-compose.yml
+    ```
+
+    Добавляем в volumes, не забудьте указать ваш домен:
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+9. Перезапускаем nginx:
+
+    ```bash
+    cd /opt/remnawave && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Форк">
 
 <Steps>
 
@@ -494,15 +653,113 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
 </Steps>
 
+:::caution[Переход с официального клиента]
+Если клиент уже стоит в официальном варианте (образ `ghcr.io/gregtwallace/certwarden-client`):
+
+1. В Cert Warden у сертификата в `Certificates` → `Post Processing` → `Client` очистите адрес клиента и `Client AES Key`.
+2. В `/opt/certwardenclient/docker-compose.yml` смените образ на `ghcr.io/mishkatik/certwarden-client:latest`, удалите `ports` и переменные `CW_CLIENT_AES_KEY_BASE64` и `CW_CLIENT_KEY_NAME`.
+3. Пересоздайте контейнер: `cd /opt/certwardenclient && docker compose up -d`.
+
+Переменные без индекса (`CW_CLIENT_CERT_NAME` и другие) форк понимает, переписывать их на `CW_CLIENT_0_*` не обязательно.
+:::
+
 :::tip[Несколько сертификатов и контейнеров]
 Ещё один сертификат добавляется блоком переменных с индексом `1`: `CW_CLIENT_1_CERT_NAME`, `CW_CLIENT_1_CERT_APIKEY`, `CW_CLIENT_1_KEY_APIKEY` и так далее. Задайте ему свои имена файлов (`CW_CLIENT_1_KEY_PEM_FILENAME`, `CW_CLIENT_1_CERTCHAIN_PEM_FILENAME`), чтобы сертификаты не перезаписали друг друга. Дополнительные контейнеры для перезапуска указываются в `CW_CLIENT_0_RESTART_DOCKER_CONTAINER1`, `CW_CLIENT_0_RESTART_DOCKER_CONTAINER2` и так далее, нумерация без пропусков.
 :::
+
+</TabItem>
+</Tabs>
 
 ## Клиент на сервере ноды Remnawave
 
 :::note
 Аналогично ставится и на другие ноды, которые будут получать сертификаты от Cert Warden. Обойтись без клиента можно: на сервере ноды сертификаты умеет выпускать и продлевать сам скрипт (пункт `11` «Управление сертификатами домена» → «Обновить текущие сертификаты»), а при добавлении ноды через меню сертификаты разворачиваются автоматически. Клиент Cert Warden нужен, только если вы хотите раздавать все сертификаты из одного места.
 :::
+
+<Tabs>
+<TabItem label="Официальный клиент">
+
+<Steps>
+
+1. Создаём директорию для клиента:
+
+    ```bash
+    mkdir -p /opt/certwardenclient/certs && cd /opt/certwardenclient && nano docker-compose.yml
+    ```
+
+    Вставляем следующее содержимое:
+
+    ```yaml title="docker-compose.yml" "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g" "https://certwarden.example.com" "example.com" "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo" "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+    services:
+        certwardenclient:
+          image: ghcr.io/gregtwallace/certwarden-client:latest
+          container_name: certwardenclient
+          restart: unless-stopped
+          ports:
+            - '127.0.0.1:5055:5055'
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /opt/certwardenclient/certs:/opt/certwarden/certs
+          environment:
+            TZ: "Europe/Moscow"
+            CW_CLIENT_FILE_UPDATE_TIME_START: "02:00"
+            CW_CLIENT_FILE_UPDATE_TIME_END: "03:00"
+            CW_CLIENT_FILE_UPDATE_DAYS_OF_WEEK: "Mon Tue Wed Thu Fri Sat Sun"
+            CW_CLIENT_RESTART_DOCKER_CONTAINER0: "remnawave-nginx"
+            CW_CLIENT_AES_KEY_BASE64: "pLZEc_QvSka8syfQtuTfArblalMKU6C6Ke1uIji0E5g"
+            CW_CLIENT_SERVER_ADDRESS: "https://certwarden.example.com"
+            CW_CLIENT_KEY_NAME: "example.com"
+            CW_CLIENT_KEY_APIKEY: "0UkmZEZK7oieQ6hmz9Fta2obMMZRjAuo"
+            CW_CLIENT_CERT_NAME: "example.com"
+            CW_CLIENT_CERT_APIKEY: "MkYMf7eXO8aB9xiNKqwvNVcDGKJ0Dg6v"
+            CW_CLIENT_CERT_PATH: "/opt/certwarden/certs"
+            CW_CLIENT_KEY_PEM_FILENAME: "privkey.pem"
+            CW_CLIENT_CERTCHAIN_PEM_FILENAME: "fullchain.pem"
+          logging:
+            driver: 'json-file'
+            options:
+              max-size: '30m'
+              max-file: '5'
+    ```
+
+2. `CW_CLIENT_AES_KEY_BASE64` это ключ из раздела `Certificates` → `Post Processing` → `Client AES Key`. Нажмите кнопку `GENERATE`, чтобы получить его.
+
+3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden.
+
+4. `CW_CLIENT_KEY_NAME` и `CW_CLIENT_KEY_APIKEY` это название и API-ключ из раздела `Private Keys`.
+
+5. `CW_CLIENT_CERT_NAME` и `CW_CLIENT_CERT_APIKEY` это название и API-ключ из раздела `Certificates`.
+
+6. Запускаем клиент:
+
+    ```bash
+    cd /opt/certwardenclient && docker compose up -d && docker compose logs -f
+    ```
+
+7. В папке `/opt/certwardenclient/certs` должны появиться файлы `fullchain.pem` и `privkey.pem`.
+
+8. Монтируем их в `docker-compose.yml` ноды (её веб-сервер тоже называется `remnawave-nginx`):
+
+    ```bash
+    cd /opt/remnanode && nano docker-compose.yml
+    ```
+
+    ```yaml title="docker-compose.yml" "yourdomain.com"
+    volumes:
+      - /opt/certwardenclient/certs/fullchain.pem:/etc/nginx/ssl/yourdomain.com/fullchain.pem
+      - /opt/certwardenclient/certs/privkey.pem:/etc/nginx/ssl/yourdomain.com/privkey.pem
+    ```
+
+9. Перезапускаем nginx ноды:
+
+    ```bash
+    cd /opt/remnanode && docker compose down remnawave-nginx && docker compose up -d remnawave-nginx
+    ```
+
+</Steps>
+
+</TabItem>
+<TabItem label="Форк">
 
 <Steps>
 
@@ -573,6 +830,9 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
     ```
 
 </Steps>
+
+</TabItem>
+</Tabs>
 
 ## Закрываем доступ к Cert Warden с помощью NetBird
 
