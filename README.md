@@ -62,7 +62,7 @@ Prepare three domains or subdomains before installation:
 ## Documentation
 
 > [!TIP]
-> All documentation lives in the wiki in two languages: step-by-step installation with sample output, a dedicated page for every module, and troubleshooting.
+> All documentation lives in the wiki in two languages: step-by-step installation with sample output, module configuration pages, and troubleshooting.
 
 <p align="center">
   <a href="https://wiki.egam.es/"><strong>Full wiki</strong></a> ·
@@ -97,9 +97,9 @@ bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@ma
 
 | Module | What it does |
 |---|---|
-| Install components | Five installation modes plus connecting a new node to a running panel |
+| [Install components](https://wiki.egam.es/installation/requirements) | Five installation modes plus connecting a new node to a running panel |
 | Panel management | Service status, start and stop, updates, logs, Remnawave CLI, panel access |
-| Backup and restore | PostgreSQL database and panel configuration backup, restore on the same or a new server, delivery to Telegram, Google Drive and S3, scheduled copies |
+| [Backup and restore](https://wiki.egam.es/configuration/backup-restore) | PostgreSQL database and panel configuration backup, restore on the same or a new server, delivery to Telegram, Google Drive and S3, scheduled copies |
 | Script updates | Update check and installation, runs as the short `rr` command |
 
 ### Node extensions
@@ -107,25 +107,25 @@ bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@ma
 | Module | What it does |
 |---|---|
 | SelfSteal template | Disguises the node as a regular website, with a set of templates to choose from |
-| Node Plugins | Node plugins through the panel, for example Torrent Blocker |
+| [Node Plugins](https://wiki.egam.es/configuration/node-plugins) | Node plugins through the panel, for example Torrent Blocker |
 | Xray core | A fresh Xray core instead of the stock one |
-| SSH access to remote machines | A list of saved servers and running commands on them |
-| Server routing | Selected domains go through the exit server, the rest of the traffic goes directly |
-| Client balancer | One subscription entry instead of a host list, the client switches to a working host automatically |
+| [SSH access to remote machines](https://wiki.egam.es/configuration/ssh-remote-access) | A list of saved servers and running commands on them |
+| [Server routing](https://wiki.egam.es/configuration/server-routing) | Selected domains go through the exit server, the rest of the traffic goes directly |
+| [Client balancer](https://wiki.egam.es/configuration/client-balancer) | One subscription entry instead of a host list, the client switches to a working host automatically |
 
 ### Subscriptions
 
 | Module | What it does |
 |---|---|
-| Subscription and response rules | Panel rule presets: which clients receive which configs, the device limit, JSON and extra paths |
-| Subscription page | The Orion template instead of the stock page, and switching back |
+| [Subscription and response rules](https://wiki.egam.es/configuration/subscription-rules) | Panel rule presets: which clients receive which configs, the device limit, JSON and extra paths |
+| [Subscription page](https://wiki.egam.es/configuration/subscription-rules) | The Orion template instead of the stock page, and switching back |
 
 ### Networking and certificates
 
 | Module | What it does |
 |---|---|
-| WARP Native | A WARP connection on the selected node |
-| NetBird | A WireGuard overlay for panel-to-node traffic, with one-off setup keys and a public fallback path |
+| [WARP Native](https://wiki.egam.es/configuration/warp-native) | A WARP connection on the selected node |
+| [NetBird](https://wiki.egam.es/configuration/netbird-module) | A WireGuard overlay for panel-to-node traffic, with one-off setup keys and a public fallback path |
 | IPv6 management | Enable and disable IPv6 on the server |
 | Certificate management | Reissue domain certificates and switch the issuing method |
 
@@ -133,7 +133,7 @@ bash <(curl -Ls https://cdn.jsdelivr.net/gh/eGamesAPI/remnawave-reverse-proxy@ma
 
 | Module | What it does |
 |---|---|
-| Xray Checker | Proxy availability checks, a results dashboard and Telegram notifications |
+| [Xray Checker](https://wiki.egam.es/configuration/xray-checker) | Proxy availability checks, a results dashboard and Telegram notifications |
 
 ---
 
