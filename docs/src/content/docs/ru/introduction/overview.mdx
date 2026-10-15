@@ -16,81 +16,309 @@ import lightBanner from '../../../../assets/banner-black.webp';
 ЭТОТ РЕПОЗИТОРИЙ - УЧЕБНЫЙ ПРИМЕР ДЛЯ ИЗУЧЕНИЯ NGINX, РЕВЕРС-ПРОКСИ И ОСНОВ СЕТЕВОЙ БЕЗОПАСНОСТИ. ЭТОТ СКРИПТ ДЕМОНСТРИРУЕТ НАСТРОЙКУ NGINX КАК REVERSE PROXY. НЕ ДЛЯ ПРОДА И НЕ ДЛЯ ПРОДАКШН-ИСПОЛЬЗОВАНИЯ! ЕСЛИ ВЫ НЕ ПОНИМАЕТЕ КАК РАБОТАЕТ ПАНЕЛЬ УПРАВЛЕНИЯ - ЭТО ВАШИ ПРОБЛЕМЫ, А НЕ АВТОРА СКРИПТА. ИСПОЛЬЗУЙТЕ НА СВОЙ СТРАХ И РИСК!
 :::
 
-Этот скрипт предназначен для упрощения настройки сервера обратного прокси с использованием NGINX и Xray, а также для автоматизации установки панели управления Remnawave и узла. В этой конфигурации Xray работает напрямую на порту 443, перенаправляя трафик через сокет, к которому подключается NGINX. Этот подход минимизирует ненужные накладные расходы TCP, обеспечивая улучшенную производительность и надежность соединения.
+Скрипт ставит панель Remnawave, ноду и обратный прокси на NGINX и Xray одной командой. Xray работает прямо на порту 443 и передаёт трафик NGINX через Unix-сокет: без лишних TCP-звеньев соединения получаются быстрее и надёжнее.
 
 :::note[Важно]
-Поддерживает Debian и Ubuntu. Скрипт был протестирован в среде виртуализации KVM. Для правильной работы вам потребуется собственный домен. Рекомендуется запускать его с правами root на только что установленной системе.
+Скрипт работает на Debian и Ubuntu, протестирован на виртуализации KVM. Нужны собственный домен и root на свежеустановленной системе. Подробности собраны на странице [Обязательные требования](/ru/installation/requirements/).
 :::
 
-## Режимы развертывания
+## Режимы развёртывания
 
-Скрипт поддерживает гибкие конфигурации развертывания:
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Один сервер
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Панель и нода Xray живут на одной машине. Подходит для компактных установок с умеренным трафиком: один сервер закрывает всё.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Распределённый
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Сервер панели без ноды и отдельный сервер ноды с заглушкой SelfSteal для VLESS Reality. Нод может быть сколько угодно, панель одна.
+      </div>
+    </div>
+  </div>
+</div>
 
-**1. Режим одного сервера**
-- Панель управления и XRAY нода установлены на одном сервере
-- Подходит для компактных установок с умеренным трафиком
+## Защита доступа к панели
 
-**2. Распределенный режим**
-- **Сервер панели**: Центр управления без XRAY ноды
-- **Сервер ноды**: Размещает XRAY ноду с заглушкой SelfSteal для VLESS REALITY
+При установке скрипт спрашивает, как защитить панель. По умолчанию это секретная ссылка:
 
-## Функции безопасности
-
-### Защита доступа к панели
-
-Конфигурация NGINX реализует аутентификацию на основе URL-параметра для защиты от несанкционированного обнаружения:
-
-**Метод доступа**
-```
+```text "https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>"
 https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>
 ```
 
-**Как это работает**
+Ссылка ставит в браузере cookie, и без правильной пары панель выглядит пустой страницей. Два других варианта закрывают панель отдельной страницей входа:
 
-1. URL-параметр автоматически устанавливает cookie в браузере
-   - Имя cookie: `<SECRET_KEY>`
-   - Значение cookie: `<SECRET_KEY>`
-
-2. Требования доступа:
-   - Должна присутствовать действительная cookie
-   - URL должен содержать правильный параметр
-
-3. Поведение при неудачном доступе:
-   - Отсутствие cookie: Пустая страница или ошибка 404
-   - Неверный параметр: Пустая страница или ошибка 404
-
-Этот уровень защиты предотвращает:
-- Обнаружение сканированием хоста
-- Атаки перебора путей
-- Попытки брутфорс доступа
-
-Панель остается невидимой без правильного параметра аутентификации.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Cookie-защита
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Имя и значение cookie совпадают с секретным ключом. Сканеры не обнаруживают панель, перебор путей упирается в пустую страницу.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Режим</span><span>по умолчанию</span>
+        <span style="opacity:.6;white-space:nowrap">Веб-сервер</span><span>NGINX или Caddy</span>
+        <span style="opacity:.6;white-space:nowrap">Без ключа</span><span>пустая страница или 404</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        TinyAuth
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Перед панелью поднимается страница входа на отдельном поддомене: логин и пароль задаёт скрипт при установке.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Веб-сервер</span><span>NGINX</span>
+        <span style="opacity:.6;white-space:nowrap">Страница входа</span><span><code style="font-family:var(--sl-font-mono)">auth.ваш-домен</code></span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Caddy с MFA
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Панель прячется за страницей входа с двухфакторной аутентификацией: MFA включается после первого входа.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Веб-сервер</span><span>Caddy</span>
+        <span style="opacity:.6;white-space:nowrap">Образ</span><span><code style="font-family:var(--sl-font-mono)">caddy-with-auth</code></span>
+        <span style="opacity:.6;white-space:nowrap">Вход</span><span>логин, пароль и код MFA</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Возможности
 
-### Конфигурация прокси-сервера
-- Автоматическое обновление конфигураций через подписку
-- Поддержка JSON-подписки с конвертацией форматов для популярных клиентов
-- Совместимость с основными прокси-клиентами
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Подписки
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Конфигурации клиентов обновляются через подписку: добавили хост в панели, клиент получил его сам.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">JSON</span><span>с конвертацией под популярные клиенты</span>
+        <span style="opacity:.6;white-space:nowrap">Страница подписки</span><span>своя, с вашим доменом</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        NGINX и сокет
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray занимает порт 443 и общается с NGINX через Unix-сокет, а не через петлю TCP.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Порт 443</span><span>Xray напрямую</span>
+        <span style="opacity:.6;white-space:nowrap">Связка</span><span>Unix-сокет</span>
+        <span style="opacity:.6;white-space:nowrap">Эффект</span><span>меньше накладных расходов TCP</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Безопасность
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        База скрипта: файрвол, сертификаты и маскировка настраиваются при установке.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Файрвол</span><span>UFW</span>
+        <span style="opacity:.6;white-space:nowrap">Сертификаты</span><span>Cloudflare или ACME, автопродление</span>
+        <span style="opacity:.6;white-space:nowrap">IPv6</span><span>защита от утечек</span>
+        <span style="opacity:.6;white-space:nowrap">TCP</span><span>алгоритм BBR</span>
+        <span style="opacity:.6;white-space:nowrap">Маскировка</span><span>случайный шаблон сайта</span>
+      </div>
+    </div>
+  </div>
+</div>
 
-### Интеграция с NGINX
-- Оптимизированная настройка обратного прокси с XRAY
-- Коммуникация через Unix-сокет для снижения накладных расходов
+## Модули
 
-### Реализация безопасности
-- **Брандмауэр**: Конфигурация UFW для контроля доступа
-- **SSL-сертификаты**: Cloudflare или ACME с автоматическим продлением
-- **Управление IPv6**: Меры предотвращения уязвимостей
-- **TCP оптимизация**: Алгоритм контроля перегрузки BBR
-- **Маскировка**: Выбор случайного шаблона веб-сайта
+Всё перечисленное выше скрипт делает при установке. Дальше начинаются модули: каждый открывается из главного меню и подробно разобран на своей странице вики.
 
-## Вопросы
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        <a href="/ru/configuration/warp-native/" style="color:inherit;text-decoration:none">Warp Native</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Исходящий трафик ноды через WARP от Cloudflare.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        <a href="/ru/configuration/node-plugins/" style="color:inherit;text-decoration:none">Плагины ноды</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Torrent Blocker и фильтры входящего и исходящего трафика.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        <a href="/ru/configuration/xray-checker/" style="color:inherit;text-decoration:none">Xray Checker</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Проверка прокси-хостов и публичная статус-страница.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        <a href="/ru/configuration/ssh-remote-access/" style="color:inherit;text-decoration:none">SSH-доступ к серверам</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Управление всеми серверами флота из одного меню.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        <a href="/ru/configuration/server-routing/" style="color:inherit;text-decoration:none">Серверный роутинг</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Трафик нод через мост к отдельному серверу выхода.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        <a href="/ru/configuration/client-balancer/" style="color:inherit;text-decoration:none">Клиентский балансировщик</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Группы хостов с автопереключением в подписке Mihomo.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        <a href="/ru/configuration/subscription-rules/" style="color:inherit;text-decoration:none">Подписки и правила</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Строгие правила ответа: браузеры, вебвью и известные клиенты.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        <a href="/ru/configuration/netbird-module/" style="color:inherit;text-decoration:none">Модуль NetBird</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Приватная сеть для панели и нод без публичных портов.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        <a href="/ru/configuration/backup-restore/" style="color:inherit;text-decoration:none">Бэкап и восстановление</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Резервные копии панели и переезд на новый сервер.
+      </div>
+    </div>
+  </div>
+</div>
 
-Нашли проблему? Сообщите нам, [создав issue](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose) на странице [репозитория](https://github.com/eGamesAPI/remnawave-reverse-proxy/) или обсудите это в [Telegram чате](https://t.me/remnawave_reverse).
+## Вопросы и поддержка
 
-## Пожертвования
-
-Если вам нравится этот проект и вы хотите поддержать его дальнейшую разработку, пожалуйста, рассмотрите возможность пожертвования. Ваш вклад поможет финансировать будущие обновления и улучшения!
-
-**Способы пожертвования:**
-- TON USDT: `UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS`
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Нашли проблему
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Заведите issue в репозитории или обсудите вопрос в Telegram-чате сообщества.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.7rem">
+        <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose" style="display:inline-flex;align-items:center;gap:.45rem;padding:.22rem .6rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">GitHub Issues</a>
+        <a href="https://t.me/remnawave_reverse" style="display:inline-flex;align-items:center;gap:.45rem;padding:.22rem .6rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">Telegram</a>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        Поддержать проект
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Проект бесплатный и развивается в свободное время. Донат поддержит будущие обновления и улучшения.
+      </div>
+      <div style="font-size:.85em;margin-top:0.7rem;display:flex;flex-direction:column;gap:.4rem">
+        <span style="opacity:.6">TON USDT</span>
+        <button type="button" class="rr-copy" data-copy="UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS" data-done="Скопировано" style="display:inline-flex;align-items:center;gap:.5rem;max-width:100%;padding:.32rem .65rem;border-radius:8px;border:1px solid rgba(255,180,84,.35);background:rgba(255,180,84,.07);font-family:var(--sl-font-mono);font-size:.92em;color:inherit;cursor:pointer;text-align:left"><span style="overflow-wrap:anywhere">UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>

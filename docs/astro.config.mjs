@@ -92,6 +92,13 @@ export default defineConfig({
 				// collapse toggle for the left sidebar (desktop): icon-only button
 				// pinned to the bottom of the pane (after the scrolling
 				// content), the class on <html> is restored before first paint
+				// click-to-copy for elements with class "rr-copy" (data-copy = text,
+				// data-done = localized "copied" label); delegated, works everywhere
+				{
+					tag: 'script',
+					content:
+						'(function(){document.addEventListener("click",function(e){var b=e.target.closest(".rr-copy");if(!b)return;e.preventDefault();var t=b.getAttribute("data-copy")||"";var done=b.getAttribute("data-done")||"copied";var old=b.innerHTML;function ok(){b.innerHTML=done;b.style.opacity=".75";setTimeout(function(){b.innerHTML=old;b.style.opacity=""},1300)}function fb(){var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");ok()}catch(x){}ta.remove()}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb)}else{fb()}})})();',
+				},
 				{
 					tag: 'script',
 					content:

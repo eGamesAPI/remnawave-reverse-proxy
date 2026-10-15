@@ -4,39 +4,83 @@ description: 'Getting things ready before installing Remnawave components: serve
 ---
 
 import { LinkCard } from '@astrojs/starlight/components';
+import { APP_VERSION } from '../../../components/version';
 
 Before installing, prepare the server and the domains. Everything else the script does itself: Docker, certificates, the firewall and the panel setup.
 
 ## Version support
 
-| Remnawave | Script |
-|-----------|--------|
-| 3.0.0+    | 3.1.3  |
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Remnawave panel
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Any 3.x branch fits: if the script meets an old panel, it warns at startup.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Minimum</span><span><code style="font-family:var(--sl-font-mono)">3.0.0</code></span>
+        <span style="opacity:.6;white-space:nowrap">Old panel</span><span>warning at startup</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Script
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The script checks for updates itself and shows a notice when a new release is out.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Current version</span><span><code style="font-family:var(--sl-font-mono)">{APP_VERSION}</code></span>
+        <span style="opacity:.6;white-space:nowrap">Update check</span><span>item <code style="font-family:var(--sl-font-mono)">12</code> of the main menu</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## System requirements
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Remnawave Panel
-    </div>
-    <div style="font-size:.9em;line-height:1.8;display:grid;grid-template-columns:auto 1fr;gap:0 0.9rem;align-items:baseline">
-      <span style="opacity:.65">OS</span><span>Ubuntu or Debian</span>
-      <span style="opacity:.65">RAM</span><span>2 GB min, 4 GB recommended</span>
-      <span style="opacity:.65">CPU</span><span>2 cores min, 4 cores recommended</span>
-      <span style="opacity:.65">Disk</span><span>20 GB</span>
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Remnawave Panel
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The panel server: web interface, database and background jobs.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">OS</span><span>Ubuntu or Debian</span>
+        <span style="opacity:.6;white-space:nowrap">RAM</span><span>2 GB min, 4 GB recommended</span>
+        <span style="opacity:.6;white-space:nowrap">CPU</span><span>2 cores min, 4 cores recommended</span>
+        <span style="opacity:.6;white-space:nowrap">Disk</span><span>20 GB</span>
+      </div>
     </div>
   </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Remnawave Node
-    </div>
-    <div style="font-size:.9em;line-height:1.8;display:grid;grid-template-columns:auto 1fr;gap:0 0.9rem;align-items:baseline">
-      <span style="opacity:.65">OS</span><span>Ubuntu or Debian</span>
-      <span style="opacity:.65">RAM</span><span>1 GB min</span>
-      <span style="opacity:.65">CPU</span><span>1 core min</span>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Remnawave Node
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The node runs Xray-core, so the requirements are lower than for the panel.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">OS</span><span>Ubuntu or Debian</span>
+        <span style="opacity:.6;white-space:nowrap">RAM</span><span>1 GB min</span>
+        <span style="opacity:.6;white-space:nowrap">CPU</span><span>1 core min</span>
+      </div>
     </div>
   </div>
 </div>
@@ -47,16 +91,94 @@ Before installing, prepare the server and the domains. Everything else the scrip
 
 ## What to prepare
 
-- **Root access** on the server and a fresh OS install: tested on KVM virtualization.
-- **Ports 80 and 443 free**: the web server and Xray take them. The node's port 2222 is opened in the firewall by the script itself, for the panel only.
-- **Three domains or subdomains**: the panel, the subscription page and the camouflage site (selfsteal). The A record for a new node can be created by the script itself via the Cloudflare, Gcore or Bunny.net API.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Root access
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The installer runs as root.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">System</span><span>fresh install</span>
+        <span style="opacity:.6;white-space:nowrap">Virtualization</span><span>tested on KVM</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Free ports
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The web server and Xray take ports 80 and 443.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">80, 443</span><span>must stay free</span>
+        <span style="opacity:.6;white-space:nowrap">2222</span><span>opened by the script, panel access only</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        Three domains or subdomains
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The panel, the subscription page and the camouflage site (selfsteal).
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Node A record</span><span>created by the script via API</span>
+        <span style="opacity:.6;white-space:nowrap">DNS providers</span><span>Cloudflare, Gcore, Bunny.net</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Domain setup
 
 The script issues SSL certificates in two ways:
 
-- **Cloudflare**: DNS managed through the API, records are created automatically with a token;
-- **ACME**: direct integration with the hosting provider, no API key.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Cloudflare
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The script manages DNS through the Cloudflare API.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Token</span><span>a Cloudflare API token</span>
+        <span style="opacity:.6;white-space:nowrap">Records</span><span>created automatically with the token</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        ACME
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Direct integration with the DNS provider, without a separate API key.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Key</span><span>not needed</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ### DNS configuration examples
 

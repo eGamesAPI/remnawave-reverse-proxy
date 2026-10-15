@@ -16,81 +16,309 @@ import lightBanner from '../../../assets/banner-black.webp';
 THIS REPOSITORY IS AN EDUCATIONAL EXAMPLE FOR LEARNING NGINX, REVERSE PROXY AND NETWORK SECURITY BASICS. THIS SCRIPT DEMONSTRATES NGINX CONFIGURATION AS A REVERSE PROXY. NOT FOR PRODUCTION USE! IF YOU DON'T UNDERSTAND HOW THE CONTROL PANEL WORKS - THAT'S YOUR PROBLEM, NOT THE SCRIPT AUTHOR'S. USE AT YOUR OWN RISK!
 :::
 
-This script is designed to streamline the setup of a reverse proxy server using NGINX and Xray, as well as to automate the installation of the Remnawave control panel and node. In this configuration, Xray operates directly on port 443, forwarding traffic through a socket that NGINX listens to. This approach minimizes unnecessary TCP overhead, delivering improved performance and connection reliability.
+The script installs the Remnawave panel, a node and a reverse proxy on NGINX and Xray in one command. Xray runs directly on port 443 and hands traffic to NGINX through a Unix socket: with no extra TCP hops, connections come out faster and more reliable.
 
 :::note[Important]
-Supports Debian and Ubuntu. The script has been tested in a KVM virtualization environment. For proper operation, you will need your own domain. It is recommended to run it with root privileges on a freshly installed system.
+The script works on Debian and Ubuntu and has been tested on KVM virtualization. You need your own domain and root on a freshly installed system. The details are collected on the [Requirements](/installation/requirements/) page.
 :::
 
-## Deployment Modes
+## Deployment modes
 
-The script supports flexible deployment configurations:
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Single server
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The panel and the Xray node live on one machine. Suits compact installations with moderate traffic: a single server covers everything.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Distributed
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        A panel server without a node and a separate node server with a SelfSteal stub for VLESS Reality. There can be as many nodes as you need, the panel is one.
+      </div>
+    </div>
+  </div>
+</div>
 
-**1. Single Server Mode**
-- Control panel and XRAY node installed on one machine
-- Suitable for compact installations with moderate traffic
+## Panel access protection
 
-**2. Distributed Mode**
-- **Panel Server**: Management center without XRAY node
-- **Node Server**: Hosts XRAY node with SelfSteal stub for VLESS REALITY
+At installation the script asks how to protect the panel. The default is a secret link:
 
-## Security Features
-
-### Panel Access Protection
-
-NGINX configuration implements URL parameter-based authentication to protect against unauthorized discovery:
-
-**Access Method**
-```
+```text "https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>"
 https://panel.example.com/auth/login?<SECRET_KEY>=<SECRET_KEY>
 ```
 
-**How It Works**
+The link sets a cookie in the browser, and without the correct pair the panel looks like a blank page. The two other options put a login page in front of the panel:
 
-1. URL parameter automatically sets a cookie in the browser
-   - Cookie name: `<SECRET_KEY>`
-   - Cookie value: `<SECRET_KEY>`
-
-2. Access requirements:
-   - Valid cookie must be present
-   - URL must contain correct parameter
-
-3. Failed access behavior:
-   - Missing cookie: Blank page or 404 error
-   - Incorrect parameter: Blank page or 404 error
-
-This protection level prevents:
-- Host scanning discovery
-- Path brute-force attacks
-- Brute-force access attempts
-
-The panel remains invisible without the correct authentication parameter.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Cookie protection
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The cookie name and value equal the secret key. Scanners do not detect the panel, path brute-forcing runs into a blank page.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Mode</span><span>default</span>
+        <span style="opacity:.6;white-space:nowrap">Web server</span><span>NGINX or Caddy</span>
+        <span style="opacity:.6;white-space:nowrap">Without the key</span><span>blank page or 404</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        TinyAuth
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        A login page comes up on a separate subdomain in front of the panel: the script sets its login and password during installation.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Web server</span><span>NGINX</span>
+        <span style="opacity:.6;white-space:nowrap">Login page</span><span><code style="font-family:var(--sl-font-mono)">auth.your-domain</code></span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Caddy with MFA
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The panel hides behind a login page with two-factor authentication: MFA is enabled after the first login.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Web server</span><span>Caddy</span>
+        <span style="opacity:.6;white-space:nowrap">Image</span><span><code style="font-family:var(--sl-font-mono)">caddy-with-auth</code></span>
+        <span style="opacity:.6;white-space:nowrap">Login</span><span>username, password and an MFA code</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Features
 
-### Proxy Server Configuration
-- Automatic configuration updates via subscription
-- JSON subscription support with format conversion for popular clients
-- Compatibility with major proxy clients
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Subscriptions
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Client configurations update through the subscription: add a host in the panel, the client picks it up on its own.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">JSON</span><span>with format conversion for popular clients</span>
+        <span style="opacity:.6;white-space:nowrap">Subscription page</span><span>your own, on your domain</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        NGINX and the socket
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Xray takes port 443 and talks to NGINX through a Unix socket instead of a TCP loop.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Port 443</span><span>Xray directly</span>
+        <span style="opacity:.6;white-space:nowrap">Link</span><span>Unix socket</span>
+        <span style="opacity:.6;white-space:nowrap">Effect</span><span>less TCP overhead</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Security
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The script's base: the firewall, certificates and masking are configured at installation.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Firewall</span><span>UFW</span>
+        <span style="opacity:.6;white-space:nowrap">Certificates</span><span>Cloudflare or ACME, auto-renewal</span>
+        <span style="opacity:.6;white-space:nowrap">IPv6</span><span>leak protection</span>
+        <span style="opacity:.6;white-space:nowrap">TCP</span><span>BBR algorithm</span>
+        <span style="opacity:.6;white-space:nowrap">Masking</span><span>a random site template</span>
+      </div>
+    </div>
+  </div>
+</div>
 
-### NGINX Integration
-- Optimized reverse proxy setup with XRAY
-- Unix socket communication for reduced overhead
+## Modules
 
-### Security Implementation
-- **Firewall**: UFW configuration for access control
-- **SSL Certificates**: Cloudflare or ACME with automatic renewal
-- **IPv6 Management**: Vulnerability prevention measures
-- **TCP Optimization**: BBR congestion control algorithm
-- **Masking**: Random website template selection
+Everything above is what the script does at installation. Then come the modules: each opens from the main menu and is covered in detail on its own wiki page.
 
-## Issues
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        <a href="/configuration/warp-native/" style="color:inherit;text-decoration:none">Warp Native</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Node outbound traffic through Cloudflare WARP.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        <a href="/configuration/node-plugins/" style="color:inherit;text-decoration:none">Node plugins</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Torrent Blocker plus ingress and egress traffic filters.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        <a href="/configuration/xray-checker/" style="color:inherit;text-decoration:none">Xray Checker</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Proxy host checks and a public status page.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        <a href="/configuration/ssh-remote-access/" style="color:inherit;text-decoration:none">SSH access to servers</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Manage the whole fleet from one menu.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        <a href="/configuration/server-routing/" style="color:inherit;text-decoration:none">Server routing</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Node traffic through a bridge to a separate exit server.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        <a href="/configuration/client-balancer/" style="color:inherit;text-decoration:none">Client balancer</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Host groups with automatic switching in the Mihomo subscription.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        <a href="/configuration/subscription-rules/" style="color:inherit;text-decoration:none">Subscriptions and rules</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Strict response rules: browsers, webviews and known clients.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        <a href="/configuration/netbird-module/" style="color:inherit;text-decoration:none">NetBird module</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        A private network for the panel and nodes without public ports.
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:.85rem 1.1rem .95rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:.98em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        <a href="/configuration/backup-restore/" style="color:inherit;text-decoration:none">Backup and restore</a>
+      </div>
+      <div style="font-size:.84em;line-height:1.55;opacity:.85;margin-top:.4rem">
+        Panel backups and migration to a new server.
+      </div>
+    </div>
+  </div>
+</div>
 
-Found an issue? Let us know by [creating an issue](https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose) on [repository](https://github.com/eGamesAPI/remnawave-reverse-proxy/) page or discuss it in [Telegram chat](https://t.me/remnawave_reverse).
+## Questions and support
 
-## Donations
-
-If you enjoy this project and want to support its ongoing development, please consider making a donation. Your contribution helps fund future updates and enhancements!
-
-**Donation Methods:**
-- TON USDT: `UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS`
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Found a problem
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Open an issue in the repository or discuss it in the community Telegram chat.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.7rem">
+        <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy/issues/new/choose" style="display:inline-flex;align-items:center;gap:.45rem;padding:.22rem .6rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">GitHub Issues</a>
+        <a href="https://t.me/remnawave_reverse" style="display:inline-flex;align-items:center;gap:.45rem;padding:.22rem .6rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">Telegram</a>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        Support the project
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        The project is free and developed in spare time. A donation funds future updates and improvements.
+      </div>
+      <div style="font-size:.85em;margin-top:0.7rem;display:flex;flex-direction:column;gap:.4rem">
+        <span style="opacity:.6">TON USDT</span>
+        <button type="button" class="rr-copy" data-copy="UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS" data-done="Copied" style="display:inline-flex;align-items:center;gap:.5rem;max-width:100%;padding:.32rem .65rem;border-radius:8px;border:1px solid rgba(255,180,84,.35);background:rgba(255,180,84,.07);font-family:var(--sl-font-mono);font-size:.92em;color:inherit;cursor:pointer;text-align:left"><span style="overflow-wrap:anywhere">UQAxyZDwKUPQ5Bp09JOFcaDVakjYQT46rf3iP3lnl_qc9xVS</span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>

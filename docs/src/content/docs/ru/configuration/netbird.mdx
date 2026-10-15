@@ -11,6 +11,80 @@ import ManualNetbirdDiagram from '../../../../components/ManualNetbirdDiagram.as
 
 Netbird — это open-source платформа на базе WireGuard, которая позволяет легко создавать защищённые частные сети. В этом руководстве мы разберём, как установить и настроить Netbird для связывания вашей панели Remnawave и последующих нод, чтобы они могли безопасно взаимодействовать друг с другом.
 
+
+## Авторы и проекты
+
+Проект, на котором построено руководство, и автор самой страницы.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        NetBird
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Сеть из руководства: защищённые туннели на WireGuard связывают серверы в частную сеть без публичных портов.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(255,180,84,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Основа</span><span style="opacity:.92">WireGuard</span>
+          <span style="opacity:.55;white-space:nowrap">Сети</span><span style="opacity:.92">частные, между серверами</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(255,180,84,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(255,180,84,.95), rgba(255,180,84,.12) 55%, rgba(255,180,84,.55));box-shadow:0 0 14px rgba(255,180,84,.3);flex:none;display:inline-block">
+          <img src="https://github.com/netbirdio.png" alt="netbirdio" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/netbirdio" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">netbirdio</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@netbirdio</span>
+          </div>
+          <a href="https://github.com/netbirdio/netbird" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(255,180,84,.35);background:rgba(255,180,84,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(255,180,84,.16);flex:none">&#8599;</span>
+            netbird
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Руководство
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Гайд написан и поддерживается автором скрипта remnawave-reverse-proxy.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Скрипт</span><span style="opacity:.92">remnawave-reverse-proxy</span>
+          <span style="opacity:.55;white-space:nowrap">Telegram</span><span style="opacity:.92">t.me/remnawave_reverse</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(88,166,255,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(88,166,255,.95), rgba(88,166,255,.12) 55%, rgba(88,166,255,.55));box-shadow:0 0 14px rgba(88,166,255,.3);flex:none;display:inline-block">
+          <img src="https://github.com/eGamesAPI.png" alt="eGamesAPI" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/eGamesAPI" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">eGamesAPI</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@eGamesAPI</span>
+          </div>
+          <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(88,166,255,.35);background:rgba(88,166,255,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(88,166,255,.16);flex:none">&#8599;</span>
+            remnawave-reverse-proxy
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 ## Как это устроено
 
 <ManualNetbirdDiagram lang="ru" />

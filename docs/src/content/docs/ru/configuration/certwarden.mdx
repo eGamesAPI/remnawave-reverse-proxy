@@ -47,6 +47,96 @@ import CertwardenDiagram from '../../../../components/CertwardenDiagram.astro';
   </div>
 </div>
 
+## Авторы и проекты
+
+Два проекта, на которых стоит это руководство, и человек, помогший собрать саму страницу.
+
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Cert Warden
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Сервер сертификатов из руководства: получает и продлевает их по ACME, проверяет домен через DNS-01 и раздаёт клиентам по API-ключам.
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(0,229,160,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(0,229,160,.95), rgba(0,229,160,.12) 55%, rgba(0,229,160,.55));box-shadow:0 0 14px rgba(0,229,160,.3);flex:none;display:inline-block">
+          <img src="https://github.com/gregtwallace.png" alt="gregtwallace" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/gregtwallace" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">gregtwallace</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@gregtwallace</span>
+          </div>
+          <a href="https://github.com/gregtwallace/certwarden" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(0,229,160,.35);background:rgba(0,229,160,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(0,229,160,.16);flex:none">↗</span>
+            certwarden
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Форк клиента
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Клиент со вкладки «Форк»: сам опрашивает сервер по расписанию, не открывает портов и обходится без AES-ключа.
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(57,197,207,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(57,197,207,.95), rgba(57,197,207,.12) 55%, rgba(57,197,207,.55));box-shadow:0 0 14px rgba(57,197,207,.3);flex:none;display:inline-block">
+          <img src="https://github.com/mishkatik.png" alt="mishkatik" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/mishkatik" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">mishkatik</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@mishkatik</span>
+          </div>
+          <a href="https://github.com/mishkatik/certwarden-client" style="display:inline-flex;align-items:center;gap:.45rem;margin-top:.32rem;padding:.22rem .6rem .22rem .26rem;border-radius:8px;border:1px solid rgba(57,197,207,.35);background:rgba(57,197,207,.07);font-family:var(--sl-font-mono);font-size:.75em;color:inherit;text-decoration:none;white-space:nowrap">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:rgba(57,197,207,.16);flex:none">↗</span>
+            certwarden-client
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="display:flex;flex-direction:column;flex:1;padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Помощь по гайду
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Руководство по Cert Warden построено в соавторстве: структура, шаги и формулировки этой страницы выверены вместе с maposia.
+      </div>
+      <div style="margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(188,140,255,.16)">
+        <div style="font-size:.8em;display:grid;grid-template-columns:auto 1fr;gap:.22rem .9rem;align-items:baseline">
+          <span style="opacity:.55;white-space:nowrap">Роль</span><span style="opacity:.92">соавтор руководства</span>
+          <span style="opacity:.55;white-space:nowrap">Помог</span><span style="opacity:.92">собрать структуру, шаги и текст</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.7rem;margin-top:auto;padding-top:.75rem;border-top:1px solid rgba(188,140,255,.16)">
+        <span style="width:38px;height:38px;padding:2.5px;box-sizing:border-box;border-radius:50%;background:linear-gradient(135deg, rgba(188,140,255,.95), rgba(188,140,255,.12) 55%, rgba(188,140,255,.55));box-shadow:0 0 14px rgba(188,140,255,.3);flex:none;display:inline-block">
+          <img src="https://github.com/maposia.png" alt="maposia" width="33" height="33" loading="lazy" style="width:100%;height:100%;border-radius:50%;display:block;background:#0e1a14" />
+        </span>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap">
+            <a href="https://github.com/maposia" style="color:inherit;font-weight:650;font-size:.95em;text-decoration:none">maposia</a>
+            <span style="font-size:.75em;opacity:.55;font-family:var(--sl-font-mono)">@maposia</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 ## Как это работает
 
 <CertwardenDiagram lang="ru" />
@@ -613,6 +703,10 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 
     В `CW_CLIENT_0_RESTART_DOCKER_CONTAINER0` указан `remnawave-nginx`. Для панели за Caddy это `remnawave-caddy`.
 
+    :::note[Фиксация версии образа]
+    Тег `latest` со временем начинает указывать на новый образ. Текущий дайджест показывает команда `docker buildx imagetools inspect ghcr.io/mishkatik/certwarden-client:latest` (в выводе также видны аттестаты сборки: образ собирается CI из репозитория форка). Чтобы версия не менялась без вашего участия, подставьте дайджест вместо тега: `ghcr.io/mishkatik/certwarden-client@sha256:<дайджест>`. Дайджест неизменяем: обновление произойдёт только когда вы сами замените его в компоузах.
+    :::
+
 3. `CW_CLIENT_SERVER_ADDRESS` это адрес сервера Cert Warden, например `https://certwarden.example.com`. Адрес должен начинаться с `https://`, иначе клиент не запустится.
 
 4. `CW_CLIENT_POLL_INTERVAL` задаёт, как часто опрашивать сервер: `30m`, `6h`, `12h` и т. п., но не чаще раза в минуту. Сервер пишет в лог каждый запрос, поэтому слишком короткий интервал его засоряет.
@@ -855,3 +949,4 @@ Cert Warden заказывает сертификаты у Let's Encrypt и до
 :::caution[Клиенты тоже должны быть в сети NetBird]
 Клиент Cert Warden сам обращается к серверу по домену `certwarden.yourdomain.com`. Когда домен указывает на IP в сети NetBird, каждый сервер с клиентом тоже должен быть подключён к NetBird, иначе клиент не сможет забрать сертификат.
 :::
+

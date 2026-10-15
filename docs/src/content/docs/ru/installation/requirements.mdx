@@ -4,39 +4,83 @@ description: 'Подготовка к установке компонентов 
 ---
 
 import { LinkCard } from '@astrojs/starlight/components';
+import { APP_VERSION } from '../../../../components/version';
 
 Перед установкой подготовьте сервер и домены. Всё остальное скрипт сделает сам: Docker, сертификаты, файрвол и настройку панели.
 
 ## Поддержка версий
 
-| Remnawave | Скрипт |
-|-----------|--------|
-| 3.0.0+    | 3.1.3  |
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Панель Remnawave
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Подходит любая ветка 3.x: если скрипт встретит старую панель, он предупредит при запуске.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Минимальная</span><span><code style="font-family:var(--sl-font-mono)">3.0.0</code></span>
+        <span style="opacity:.6;white-space:nowrap">Старая панель</span><span>предупреждение при запуске</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Скрипт
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Скрипт сам проверяет обновления и показывает уведомление, когда выходит новый релиз.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Текущая версия</span><span><code style="font-family:var(--sl-font-mono)">{APP_VERSION}</code></span>
+        <span style="opacity:.6;white-space:nowrap">Проверка обновлений</span><span>пункт <code style="font-family:var(--sl-font-mono)">12</code> главного меню</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Системные требования
 
-<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0">
-  <div style="border:1px solid rgba(0,229,160,.35);border-left:3px solid #00e5a0;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 6px rgba(0,229,160,.6);flex:none"></span>
-      Remnawave Panel
-    </div>
-    <div style="font-size:.9em;line-height:1.8;display:grid;grid-template-columns:auto 1fr;gap:0 0.9rem;align-items:baseline">
-      <span style="opacity:.65">ОС</span><span>Ubuntu или Debian</span>
-      <span style="opacity:.65">RAM</span><span>2 ГБ минимум, 4 ГБ лучше</span>
-      <span style="opacity:.65">CPU</span><span>2 ядра минимум, 4 ядра лучше</span>
-      <span style="opacity:.65">Диск</span><span>20 ГБ</span>
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Remnawave Panel
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Сервер панели: веб-интерфейс, база данных и фоновые задачи.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">ОС</span><span>Ubuntu или Debian</span>
+        <span style="opacity:.6;white-space:nowrap">RAM</span><span>2 ГБ минимум, 4 ГБ лучше</span>
+        <span style="opacity:.6;white-space:nowrap">CPU</span><span>2 ядра минимум, 4 ядра лучше</span>
+        <span style="opacity:.6;white-space:nowrap">Диск</span><span>20 ГБ</span>
+      </div>
     </div>
   </div>
-  <div style="border:1px solid rgba(188,140,255,.35);border-left:3px solid #bc8cff;border-radius:0 12px 12px 0;padding:1rem 1.25rem">
-    <div style="display:flex;align-items:center;gap:0.5rem;font-weight:650;margin-bottom:0.6rem">
-      <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 6px rgba(188,140,255,.6);flex:none"></span>
-      Remnawave Node
-    </div>
-    <div style="font-size:.9em;line-height:1.8;display:grid;grid-template-columns:auto 1fr;gap:0 0.9rem;align-items:baseline">
-      <span style="opacity:.65">ОС</span><span>Ubuntu или Debian</span>
-      <span style="opacity:.65">RAM</span><span>1 ГБ минимум</span>
-      <span style="opacity:.65">CPU</span><span>1 ядро минимум</span>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(188,140,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(188,140,255,.14), transparent 55%), rgba(188,140,255,.04);box-shadow:0 12px 32px -20px rgba(188,140,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(188,140,255,.9), rgba(188,140,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#bc8cff;box-shadow:0 0 8px rgba(188,140,255,.7);flex:none"></span>
+        Remnawave Node
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        На ноде живёт Xray-core, поэтому требования ниже, чем у панели.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">ОС</span><span>Ubuntu или Debian</span>
+        <span style="opacity:.6;white-space:nowrap">RAM</span><span>1 ГБ минимум</span>
+        <span style="opacity:.6;white-space:nowrap">CPU</span><span>1 ядро минимум</span>
+      </div>
     </div>
   </div>
 </div>
@@ -47,16 +91,94 @@ import { LinkCard } from '@astrojs/starlight/components';
 
 ## Что нужно подготовить
 
-- **Права root** на сервере и свежая установка системы: протестировано на виртуализации KVM.
-- **Свободные порты 80 и 443**: их займут веб-сервер и Xray. Порт 2222 для ноды скрипт откроет в файрволе сам, только для панели.
-- **Три домена или поддомена**: панель, страница подписки и маскировочный сайт (selfsteal). A-запись новой ноды скрипт умеет создавать сам через API Cloudflare, Gcore или Bunny.net.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(57,197,207,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(57,197,207,.14), transparent 55%), rgba(57,197,207,.04);box-shadow:0 12px 32px -20px rgba(57,197,207,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(57,197,207,.9), rgba(57,197,207,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#39c5cf;box-shadow:0 0 8px rgba(57,197,207,.7);flex:none"></span>
+        Права root
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Установка запускается от root.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Система</span><span>свежая установка</span>
+        <span style="opacity:.6;white-space:nowrap">Виртуализация</span><span>протестировано на KVM</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        Свободные порты
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Порты 80 и 443 займут веб-сервер и Xray.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">80, 443</span><span>должны быть свободны</span>
+        <span style="opacity:.6;white-space:nowrap">2222</span><span>скрипт откроет сам, доступ только с панели</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,180,84,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(255,180,84,.14), transparent 55%), rgba(255,180,84,.04);box-shadow:0 12px 32px -20px rgba(255,180,84,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(255,180,84,.9), rgba(255,180,84,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#ffb454;box-shadow:0 0 8px rgba(255,180,84,.7);flex:none"></span>
+        Три домена или поддомена
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Панель, страница подписки и маскировочный сайт (selfsteal).
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">A-запись ноды</span><span>создаётся скриптом через API</span>
+        <span style="opacity:.6;white-space:nowrap">DNS-провайдеры</span><span>Cloudflare, Gcore, Bunny.net</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ## Настройка доменов
 
 Скрипт выпускает SSL-сертификаты двумя способами:
 
-- **Cloudflare**: управление DNS через API, записи создаются сами по токену
-- **ACME**: прямая интеграция с хостинг-провайдером, без API-ключа.
+<div class="not-content" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.1rem;margin:1.2rem 0">
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,229,160,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(0,229,160,.14), transparent 55%), rgba(0,229,160,.04);box-shadow:0 12px 32px -20px rgba(0,229,160,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(0,229,160,.9), rgba(0,229,160,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#00e5a0;box-shadow:0 0 8px rgba(0,229,160,.7);flex:none"></span>
+        Cloudflare
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Скрипт управляет DNS через API Cloudflare.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Токен</span><span>API-токен Cloudflare</span>
+        <span style="opacity:.6;white-space:nowrap">Записи</span><span>создаются автоматически по токену</span>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(88,166,255,.3);border-radius:16px;background:radial-gradient(130% 150% at 0% 0%, rgba(88,166,255,.14), transparent 55%), rgba(88,166,255,.04);box-shadow:0 12px 32px -20px rgba(88,166,255,.5)">
+    <div style="height:3px;background:linear-gradient(90deg, rgba(88,166,255,.9), rgba(88,166,255,0) 75%)"></div>
+    <div style="padding:1rem 1.2rem 1.15rem">
+      <div style="display:flex;align-items:center;gap:.55rem;font-weight:700;font-size:1.04em">
+        <span style="width:9px;height:9px;border-radius:50%;background:#58a6ff;box-shadow:0 0 8px rgba(88,166,255,.7);flex:none"></span>
+        ACME
+      </div>
+      <div style="font-size:.87em;line-height:1.62;opacity:.88;margin-top:.55rem">
+        Прямая интеграция с DNS-провайдером, без отдельного API-ключа.
+      </div>
+      <div style="font-size:.85em;display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.9rem;align-items:baseline;margin-top:0.65rem">
+        <span style="opacity:.6;white-space:nowrap">Ключ</span><span>не нужен</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 ### Примеры конфигурации DNS
 
