@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/eGamesAPI/remnawave-reverse-proxy/releases"><img src="https://img.shields.io/github/v/release/eGamesAPI/remnawave-reverse-proxy?style=for-the-badge" alt="Release" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/eGamesAPI/remnawave-reverse-proxy?style=for-the-badge" alt="License MIT" /></a>
-  <a href="https://wiki.egam.es/"><img src="https://img.shields.io/badge/docs-wiki.egam.es-00f0b0?style=for-the-badge" alt="Documentation" /></a>
+  <a href="https://wiki.egam.es/"><img src="https://img.shields.io/badge/docs-wiki.egam.es-009170?style=for-the-badge" alt="Documentation" /></a>
   <a href="https://t.me/remnawave_reverse"><img src="https://img.shields.io/badge/Telegram-remnawave__reverse-26A5E4?style=for-the-badge" alt="Telegram" /></a>
 </p>
 
