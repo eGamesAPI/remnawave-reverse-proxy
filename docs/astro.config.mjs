@@ -10,6 +10,27 @@ import autoImport from 'astro-auto-import';
 import starlightGitHubAlerts from 'starlight-github-alerts';
 import starlightThemeGalaxy from 'starlight-theme-galaxy';
 
+// Caddyfile не входит в бандл shiki: без этой грамматики блоки ```caddyfile
+// рендерятся как txt и сборка сыплет предупреждениями
+const caddyfile = {
+	name: 'caddyfile',
+	scopeName: 'source.caddyfile',
+	patterns: [
+		{ match: /#.*/, name: 'comment.line.number-sign.caddyfile' },
+		{ match: /"[^"\n]*"/, name: 'string.quoted.double.caddyfile' },
+		{ match: /\{\$[A-Za-z_][\w]*(:[^}]*)?\}/, name: 'variable.other.environment.caddyfile' },
+		{ match: /@[A-Za-z_][\w.-]*/, name: 'entity.name.tag.matcher.caddyfile' },
+		{ match: /\([A-Za-z_][\w.-]*\)/, name: 'entity.name.tag.snippet.caddyfile' },
+		{
+			match: /^[ \t]*(reverse_proxy|tls|encode|header|redir|respond|file_server|handle|handle_path|handle_errors|root|route|rewrite|uri|import|log|error|abort|bind|basic_auth|forward_auth|php_fastcgi|try_files|request_body|vars|map|metrics|templates|push|traverse|acme_server|tls_connection_policy|layer4|proxy)\b/,
+			name: 'keyword.control.directive.caddyfile',
+		},
+		{ match: /^[ \t]*[^\s#{][^\s{]*(?=[ \t]*\{)/, name: 'entity.name.function.site.caddyfile' },
+		{ match: /\{|\}/, name: 'punctuation.section.block.caddyfile' },
+		{ match: /\b\d+\b/, name: 'constant.numeric.caddyfile' },
+	],
+};
+
 // https://astro.build/config
 export default defineConfig({
 	site: 'https://wiki.egam.es',
@@ -29,6 +50,9 @@ export default defineConfig({
 			// они остаются «экранами», как и окна Terminal.astro
 			expressiveCode: {
 				themes: ['github-dark-high-contrast'],
+				shiki: {
+					langs: [caddyfile],
+				},
 			},
 			components: {
 				SiteTitle: './src/components/SiteTitle.astro',
