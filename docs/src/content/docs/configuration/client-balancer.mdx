@@ -172,16 +172,16 @@ The wizard enables the "Serve JSON at the base subscription path" panel setting 
       { kind: 'input', text: 'Select action (0-2):', answer: '1' },
     ]} />
 
-5. Pick the main hosts. Hosts of any inbound and profile fit, hidden entries and server-routing bridges included: the list marks them, and the copy in the config keeps its own transport and keys. Numbers are entered comma separated:
+5. Pick the main hosts. Hosts of any inbound and profile fit, hidden entries, server-routing bridges and hosts with their own Xray JSON template (a CDN entry, for example) included: the list marks them, and the copy in the config keeps its own transport, keys and host settings. Numbers are entered comma separated:
 
     <Terminal title="root@server: ~" lines={[
       { kind: 'title', text: 'Main hosts:' },
-      { kind: 'dim', text: ' the selection order is kept in the client config. Hosts of any inbound fit, hidden and bridge ones too' },
+      { kind: 'dim', text: ' the pick order stays in the client config; hosts of any inbound fit: hidden, bridge and Xray JSON template ones' },
       { kind: 'plain' },
       { kind: 'item', num: '1.', text: 'Germany (de-1.example.com) — Germany / VLESS', pick: true },
       { kind: 'item', num: '2.', text: 'Estonia (ee-1.example.com) — Estonia / VLESS', pick: true },
       { kind: 'item', num: '3.', text: 'RU→EU bridge (ru-1.example.com) — RU entry / VLESS [bridge]' },
-      { kind: 'item', num: '4.', text: 'CDN entry (cdn-1.example.com) — Germany / VLESS XHTTP [hidden]' },
+      { kind: 'item', num: '4.', text: 'CDN entry (cdn-1.example.com) — Germany / VLESS XHTTP [hidden, template]' },
       { kind: 'plain' },
       { kind: 'input', text: 'Host numbers, comma separated (1-4):', answer: '1,2' },
     ]} />
