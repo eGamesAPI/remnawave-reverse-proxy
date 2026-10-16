@@ -1003,14 +1003,15 @@ cb_pick_name() {
     CB_VHOST_REMARK="${input:-${LANG[CB_DEFAULT_NAME]}}"
     CB_SLUG=$(cb_slug "$CB_VHOST_REMARK")
     [ -n "$CB_SLUG" ] || CB_SLUG="$default_slug"
-    if [ -z "$CB_CURRENT" ]; then
-        fslug="$CB_SLUG"
-        while [ -e "${CB_CONF_DIR}/${fslug}.bal" ]; do
-            n=$((n + 1))
-            fslug="${CB_SLUG}-${n}"
-        done
-        CB_CURRENT="$fslug"
-    fi
+    # A NEW balancer always gets a FRESH state file: a CB_CURRENT leaked from
+    # an earlier selection or menu render must never redirect the state
+    # writes into an existing balancer's file.
+    fslug="$CB_SLUG"
+    while [ -e "${CB_CONF_DIR}/${fslug}.bal" ]; do
+        n=$((n + 1))
+        fslug="${CB_SLUG}-${n}"
+    done
+    CB_CURRENT="$fslug"
 }
 
 # The mihomo wizard: pick hosts of ANY inbound (the group just names them),
@@ -1662,6 +1663,10 @@ show_client_balancer_menu() {
 
     echo -e " ${COLOR_GRAY}$(printf "${LANG[CB_COUNT]}" "${#names[@]}")${COLOR_RESET}"
     echo -e ""
+    # The render loop borrows CB_CURRENT to read each balancer's state; it
+    # must not leak past the loop — a leftover value would make "create"
+    # write the new balancer's state into the LAST rendered balancer's file.
+    local render_prev_current="${CB_CURRENT}"
     i=1
     for name in "${names[@]}"; do
         CB_CURRENT="$name"
@@ -1676,6 +1681,7 @@ show_client_balancer_menu() {
         echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}$(cb_cap_first "$label")${COLOR_RESET} ${COLOR_GRAY}${preset}${COLOR_RESET}"
         i=$((i + 1))
     done
+    CB_CURRENT="$render_prev_current"
     local new=$i
     echo -e "${COLOR_YELLOW}${new}. ${LANG[CB_MENU_NEW]}${COLOR_RESET}"
     echo -e ""
