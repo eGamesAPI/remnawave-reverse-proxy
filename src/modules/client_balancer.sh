@@ -116,11 +116,14 @@ cb_mh_build_block() {
 
 # Replace (or insert) our block in CB_MH_YAML. Line surgery only: the old
 # copy spans from its "# cb:<slug>" marker line to the next group or
-# top-level key; the fresh block lands right after "proxy-groups:".
+# top-level key; the fresh block lands right after "proxy-groups:". The
+# marker match is anchored to the line end: slugs may be prefixes of each
+# other ("name" and "name-1" after a same-name rerun), and a bare substring
+# match would eat the sibling's group too.
 cb_mh_apply_block() {
     CB_MH_YAML=$(printf '%s\n' "$CB_MH_YAML" | awk -v block="$CB_MH_BLOCK" -v slug="$CB_CURRENT" '
         BEGIN { split(block, bl, "\n") }
-        index($0, " # cb:" slug) > 0 { skip = 1; next }
+        $0 ~ (" # cb:" slug "$") { skip = 1; next }
         skip {
             if ($0 ~ /^  - / || $0 ~ /^[A-Za-z][A-Za-z0-9-]*:/) { skip = 0 } else { next }
         }
@@ -141,13 +144,15 @@ cb_mh_patch() {
     enc=$(printf '%s' "$CB_MH_YAML" | base64 -w0)
     response=$(cb_api "PATCH" "/api/subscription-templates" \
         "$(jq -nc --arg uuid "$CB_MH_TEMPLATE_UUID" --arg yaml "$enc" '{uuid: $uuid, encodedTemplateYaml: $yaml}')")
-    # The panel echoes the stored template: verify the marker made it.
+    # The panel echoes the stored template: verify the marker made it. The
+    # pattern is end-anchored so a slug that prefixes another slug ("name"
+    # vs "name-1") cannot verify against the sibling's marker.
     stored=$(echo "$response" | jq -r '.response.encodedTemplateYaml // empty' | base64 -d 2>/dev/null)
     if [ "${1:-present}" = "absent" ]; then
-        grep -q " # cb:$CB_CURRENT" <<< "$stored" && return 1
+        grep -q " # cb:${CB_CURRENT}\$" <<< "$stored" && return 1
         return 0
     fi
-    grep -q " # cb:$CB_CURRENT" <<< "$stored"
+    grep -q " # cb:${CB_CURRENT}\$" <<< "$stored"
 }
 
 # Mihomo groups address hosts by NAME, and the panel renames duplicates
@@ -171,10 +176,11 @@ cb_mh_dup_check() { # $1 = space-separated picked uuids
     return 1
 }
 
-# Strip our block without inserting a fresh one (teardown).
+# Strip our block without inserting a fresh one (teardown). Marker match
+# end-anchored, same reason as cb_mh_apply_block.
 cb_mh_remove_block() {
     CB_MH_YAML=$(printf '%s\n' "$CB_MH_YAML" | awk -v slug="$CB_CURRENT" '
-        index($0, " # cb:" slug) > 0 { skip = 1; next }
+        $0 ~ (" # cb:" slug "$") { skip = 1; next }
         skip {
             if ($0 ~ /^  - / || $0 ~ /^[A-Za-z][A-Za-z0-9-]*:/) { skip = 0 } else { next }
         }
@@ -1602,7 +1608,7 @@ cb_status_live() {
         name="$CB_CURRENT"
         template_uuid=$(cb_state_get template_uuid)
         tpl=$(cb_api "GET" "/api/subscription-templates/$template_uuid" 2>/dev/null)
-        if echo "$tpl" | jq -r '.response.encodedTemplateYaml // empty' | base64 -d 2>/dev/null | grep -q " # cb:$name"; then
+        if echo "$tpl" | jq -r '.response.encodedTemplateYaml // empty' | base64 -d 2>/dev/null | grep -q " # cb:${name}\$"; then
             echo -e " ${COLOR_GRAY}${LANG[CB_MH_GROUP_OK]}${COLOR_RESET}"
         else
             echo -e " ${COLOR_RED}${LANG[CB_MH_GROUP_GONE]}${COLOR_RESET}"
