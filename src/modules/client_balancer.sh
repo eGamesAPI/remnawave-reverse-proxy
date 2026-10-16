@@ -360,21 +360,27 @@ cb_unhide_originals() {
     return 0
 }
 
-# Full host list (the panel endpoint takes no filters).
+# Full host list (the panel endpoint takes no filters). Wrapper hosts of
+# every balancer (ours) are collected here too: their vhost_uuid state lines
+# feed the eligibility filter, because a wrapper is a clone of a member and
+# must never become a member itself.
 cb_fetch_hosts() {
     local response
     response=$(cb_api "GET" "/api/hosts?_=$(date +%s)")
-    if [ -z "$response" ] || ! echo "$response" | jq -e '.response' >/dev/null 2>&1; then
+    # Type check, not truthiness: jq -e treats [] as false, and an empty
+    # host list is a valid state (a fresh panel), not an API failure.
+    if [ -z "$response" ] || ! echo "$response" | jq -e '(.response | type) == "array"' >/dev/null 2>&1; then
         err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
         return 1
     fi
     CB_HOSTS_JSON=$(echo "$response" | jq -c '.response')
+    CB_WRAPPER_UUIDS=$(awk -F= '/^vhost_uuid=/{printf "%s ", $2}' "$CB_CONF_DIR"/*.bal 2>/dev/null | sed 's/ $//')
 }
 
 cb_fetch_profiles() {
     local response
     response=$(cb_api "GET" "/api/config-profiles?_=$(date +%s)")
-    if [ -z "$response" ] || ! echo "$response" | jq -e '.response.configProfiles' >/dev/null 2>&1; then
+    if [ -z "$response" ] || ! echo "$response" | jq -e '(.response.configProfiles | type) == "array"' >/dev/null 2>&1; then
         err_msg "$(printf "${LANG[CB_API_FAIL]}" "$response")"
         return 1
     fi
@@ -385,32 +391,36 @@ cb_fetch_profiles() {
 #
 # Members are HIDDEN CLONES of existing hosts — the originals stay visible
 # in every subscription and untouched. Which hosts may become members:
-#   enabled, no XRAY_JSON template of their own (another balancer's wrapper)
-#   and not a clone of an earlier balancer (marked with the "CB:CLONE" tag;
-#   legacy pre-3.9 clones live on the dedicated "Balancer" profiles and are
-#   filtered by profile name). Hidden hosts ARE offered for Xray JSON (the
-#   clone stays hidden and hidden is exactly what injectHosts selects from)
-#   and so are vlessRoute bridge hosts: the clone keeps its own inbound and
-#   the route marker, so bridges keep routing through their exit. Mihomo
-#   groups name VISIBLE hosts only — hidden entries never render there, so
-#   the mihomo pickers keep hidden hosts out.
+#   enabled, no "CB:CLONE" tag (ours: clones of any balancer and the wrapper
+#   host cloned from a member both carry it) and not on a legacy pre-3.9
+#   "Balancer" profile. A host with its OWN XRAY_JSON template IS offered:
+#   hand-tuned hosts behind a CDN ride their client settings exactly there,
+#   and the clone keeps the template along (the "template" marker flags it
+#   in the picker). Hidden hosts ARE offered for Xray JSON (the clone stays
+#   hidden and hidden is exactly what injectHosts selects from) and so are
+#   vlessRoute bridge hosts: the clone keeps its own inbound and the route
+#   marker, so bridges keep routing through their exit. Mihomo groups name
+#   VISIBLE hosts only — hidden entries never render there, so the mihomo
+#   pickers keep hidden hosts out.
 # $1 = inbound uuid filter ("" = no filter), $2 = "hidden" to include
 # hidden hosts. Lines: uuid \t remark \t address \t sni \t inbound \t
-# profile \t inbound label \t hidden flag \t route flag.
+# profile \t inbound label \t hidden flag \t route flag \t template flag.
 cb_eligible_lines() {
-    jq -nr --argjson hosts "$CB_HOSTS_JSON" --argjson profiles "$CB_PROFILES_JSON" --arg iu "${1:-}" --arg ih "${2:-}" '
+    jq -nr --argjson hosts "$CB_HOSTS_JSON" --argjson profiles "$CB_PROFILES_JSON" --arg iu "${1:-}" --arg ih "${2:-}" --arg wr "${CB_WRAPPER_UUIDS:-}" '
         (($profiles | map(. as $p | .inbounds[]? | {key: (.uuid // ""), value: "\($p.name) / \(.tag // .uuid)"})) | from_entries) as $labels
         | ($profiles | map(select(.name == "Balancer" or ((.name // "") | startswith("Balancer ")))
                            | .inbounds[]?.uuid) | map(select(. != null))) as $legacy
+        | ($wr | split(" ") | map(select(length > 0))) as $wrappers
         | $hosts[]
         | select(.isDisabled != true)
-        | select(.xrayJsonTemplateUuid == null)
+        | . as $h
         | (.inbound.configProfileInboundUuid // "") as $ib
         | select(($legacy | index($ib)) == null)
         | select((.tags // []) | index("CB:CLONE") == null)
         | select($ih == "hidden" or .isHidden != true)
         | select($iu == "" or $ib == $iu)
-        | "\(.uuid)\t\(.remark)\t\(.address // "")\t\(.sni // "")\t\($ib)\t\(.inbound.configProfileUuid // "")\t\($labels[$ib] // $ib)\t\(if .isHidden then "hidden" else "" end)\t\(if .vlessRouteId != null then "route" else "" end)"'
+        | select($wrappers | index($h.uuid) == null)
+        | "\(.uuid)\t\(.remark)\t\(.address // "")\t\(.sni // "")\t\($ib)\t\(.inbound.configProfileUuid // "")\t\($labels[$ib] // $ib)\t\(if .isHidden then "hidden" else "" end)\t\(if .vlessRouteId != null then "route" else "" end)\t\(if .xrayJsonTemplateUuid != null then "tpl" else "" end)"'
 }
 
 # --- pickers -----------------------------------------------------------------------
@@ -479,6 +489,7 @@ cb_pick_members() {
         markers=""
         [ "$(echo "$entry" | cut -f8)" = "hidden" ] && markers="${LANG[CB_FLAG_HIDDEN]}"
         [ "$(echo "$entry" | cut -f9)" = "route" ] && markers="${markers:+$markers, }${LANG[CB_FLAG_ROUTE]}"
+        [ "$(echo "$entry" | cut -f10)" = "tpl" ] && markers="${markers:+$markers, }${LANG[CB_FLAG_TEMPLATE]}"
         [ -n "$markers" ] && markers=" ${COLOR_GRAY}[${markers}]${COLOR_RESET}"
         echo -e "${COLOR_YELLOW}${i}. ${COLOR_WHITE}${remark}${COLOR_RESET} ${COLOR_GRAY}(${addr}) — ${label}${COLOR_RESET}${markers}"
         i=$((i + 1))
